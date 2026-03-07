@@ -1,0 +1,86 @@
+import { contextBridge, ipcRenderer } from 'electron'
+
+contextBridge.exposeInMainWorld('electron', {
+  on(...args: Parameters<typeof ipcRenderer.on>) {
+    const [channel, listener] = args
+    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
+  },
+  off(...args: Parameters<typeof ipcRenderer.off>) {
+    const [channel, ...omit] = args
+    return ipcRenderer.off(channel, ...omit)
+  },
+  send(...args: Parameters<typeof ipcRenderer.send>) {
+    const [channel, ...omit] = args
+    return ipcRenderer.send(channel, ...omit)
+  },
+  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
+    const [channel, ...omit] = args
+    return ipcRenderer.invoke(channel, ...omit)
+  },
+
+  db: {
+    getAllHymns: (categoryId?: number) => ipcRenderer.invoke('db:get-all-hymns', categoryId),
+    getHymn: (number: string) => ipcRenderer.invoke('db:get-hymn', number),
+    searchHymns: (query: string, categoryId?: number) => ipcRenderer.invoke('db:search-hymns', query, categoryId),
+    getHymnWithSections: (id: number) => ipcRenderer.invoke('db:get-hymn-with-sections', id),
+    importPPTX: (dirPath: string, categoryId?: number) => ipcRenderer.invoke('db:import-pptx', dirPath, categoryId),
+    importPPTXFiles: (filePaths: string[], categoryId?: number) => ipcRenderer.invoke('db:import-pptx-files', filePaths, categoryId),
+    clearAll: () => ipcRenderer.invoke('db:clear-all'),
+    getCategories: () => ipcRenderer.invoke('db:get-categories'),
+    createCategory: (name: string) => ipcRenderer.invoke('db:create-category', name),
+    updateCategory: (id: number, name: string) => ipcRenderer.invoke('db:update-category', id, name),
+    deleteCategory: (id: number) => ipcRenderer.invoke('db:delete-category', id),
+    exportDb: (destPath: string) => ipcRenderer.invoke('db:export', destPath),
+  },
+
+  hymn: {
+    update: (id: number, number: string, title: string) =>
+      ipcRenderer.invoke('hymn:update', id, number, title),
+    delete: (id: number) => ipcRenderer.invoke('hymn:delete', id),
+  },
+
+  section: {
+    add: (hymnId: number, type: 'strofa' | 'refren', text: string) =>
+      ipcRenderer.invoke('section:add', hymnId, type, text),
+    update: (id: number, type: 'strofa' | 'refren', text: string) =>
+      ipcRenderer.invoke('section:update', id, type, text),
+    delete: (id: number) => ipcRenderer.invoke('section:delete', id),
+    reorder: (sections: { id: number; order_index: number }[]) =>
+      ipcRenderer.invoke('section:reorder', sections),
+  },
+
+  dialog: {
+    selectFolder: () => ipcRenderer.invoke('dialog:select-folder'),
+    selectPPTXFiles: () => ipcRenderer.invoke('dialog:select-pptx-files'),
+    saveFile: (defaultName: string) => ipcRenderer.invoke('dialog:save-file', defaultName),
+    pickMedia: (mediaType: 'image' | 'video') => ipcRenderer.invoke('dialog:pick-media', mediaType),
+  },
+
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    set: (patch: Record<string, unknown>) => ipcRenderer.invoke('settings:set', patch),
+  },
+
+  screen: {
+    getDisplays: () => ipcRenderer.invoke('screen:get-displays'),
+  },
+
+  projection: {
+    open: (sections: any[], hymnTitle: string, hymnNumber: string) =>
+      ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber),
+    navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string) =>
+      ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber),
+    close: () => ipcRenderer.invoke('projection:close'),
+    sendKeyRequest: (action: 'prev' | 'next' | 'close') =>
+      ipcRenderer.invoke('projection:key-request', action),
+    onSlide: (cb: (data: any) => void) =>
+      ipcRenderer.on('projection:slide', (_e, data) => cb(data)),
+    offSlide: () => ipcRenderer.removeAllListeners('projection:slide'),
+    onControllerSync: (cb: (data: { currentIndex: number }) => void) =>
+      ipcRenderer.on('projection:controller-sync', (_e, data) => cb(data)),
+    offControllerSync: () => ipcRenderer.removeAllListeners('projection:controller-sync'),
+    onClosed: (cb: () => void) =>
+      ipcRenderer.on('projection:closed', () => cb()),
+    offClosed: () => ipcRenderer.removeAllListeners('projection:closed'),
+  },
+})
