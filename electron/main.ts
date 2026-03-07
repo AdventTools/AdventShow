@@ -6,18 +6,22 @@ import {
   addSection,
   clearAllData,
   createCategory,
+  createHymnWithSections,
   deleteCategory,
   deleteHymn,
   deleteSection,
+  exportJsonBackup,
   getAllHymns,
   getCategories,
   getHymnByNumber,
   getHymnWithSections,
+  importJsonBackup,
   initDB,
   reorderSections,
   searchHymns,
   updateCategory,
   updateHymn,
+  updateHymnCategory,
   updateSection,
 } from './db'
 import { importPPTXDirectory, importPPTXFiles } from './import'
@@ -224,12 +228,39 @@ app.whenReady().then(() => {
   ipcMain.handle('db:search-hymns', (_e, query: string, categoryId?: number) =>
     searchHymns(query, categoryId))
   ipcMain.handle('db:get-hymn-with-sections', (_e, id: number) => getHymnWithSections(id))
+  ipcMain.handle('db:create-hymn-with-sections', (_e, payload: {
+    number: string;
+    title: string;
+    categoryId?: number;
+    sections: { type: 'strofa' | 'refren'; text: string }[];
+  }) => createHymnWithSections(payload))
 
   // ── Hymn CRUD ─────────────────────────────────────────────────────────────
   ipcMain.handle('hymn:update', (_e, id: number, number: string, title: string) =>
     updateHymn(id, number, title))
+  ipcMain.handle('hymn:set-category', (_e, id: number, categoryId?: number) =>
+    updateHymnCategory(id, categoryId))
   ipcMain.handle('hymn:delete', (_e, id: number) => deleteHymn(id))
   ipcMain.handle('db:clear-all', () => clearAllData())
+  ipcMain.handle('db:export-json-backup', (_e, destPath: string) => {
+    const backup = exportJsonBackup()
+    fs.writeFileSync(destPath, JSON.stringify(backup, null, 2), 'utf-8')
+    return {
+      categories: backup.categories.length,
+      hymns: backup.hymns.length,
+      sections: backup.hymn_sections.length,
+    }
+  })
+  ipcMain.handle('db:import-json-backup', (_e, filePath: string) => {
+    const raw = fs.readFileSync(filePath, 'utf-8')
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new Error('Fișier JSON invalid.')
+    }
+    return importJsonBackup(parsed)
+  })
 
   // ── Section CRUD ──────────────────────────────────────────────────────────
   ipcMain.handle('section:add', (_e, hymnId: number, type: 'strofa' | 'refren', text: string) =>
@@ -277,6 +308,24 @@ app.whenReady().then(() => {
     })
     if (result.canceled) return undefined
     return result.filePath
+  })
+
+  ipcMain.handle('dialog:save-json-file', async (_e, defaultName: string) => {
+    const result = await dialog.showSaveDialog({
+      defaultPath: defaultName,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (result.canceled) return undefined
+    return result.filePath
+  })
+
+  ipcMain.handle('dialog:select-json-file', async () => {
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (result.canceled) return undefined
+    return result.filePaths[0]
   })
 
   ipcMain.handle('dialog:pick-media', async (_e, mediaType: 'image' | 'video') => {

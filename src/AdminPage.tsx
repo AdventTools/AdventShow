@@ -4,7 +4,7 @@ import {
   Search, Trash2, X
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { AppSettings, Category, DisplayInfo, Hymn, HymnSection, HymnWithSections } from './vite-env';
+import { AppSettings, Category, DisplayInfo, Hymn, HymnSection, HymnSectionInput, HymnWithSections } from './vite-env';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Section editor row
@@ -73,17 +73,18 @@ function SectionRow({
 // Hymn editor panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HymnEditor({ hymnId, onDeleted, onClose, onSaved }: {
-  hymnId: number; onDeleted: () => void; onClose: () => void; onSaved?: () => void;
+function HymnEditor({ hymnId, categories, onDeleted, onClose, onSaved }: {
+  hymnId: number; categories: Category[]; onDeleted: () => void; onClose: () => void; onSaved?: () => void;
 }) {
   const [hymn, setHymn] = useState<HymnWithSections | null>(null);
   const [editNumber, setEditNumber] = useState('');
   const [editTitle, setEditTitle] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState<number | undefined>(undefined);
   const [savingMeta, setSavingMeta] = useState(false);
 
   const load = useCallback(async () => {
     const h = await window.electron.db.getHymnWithSections(hymnId);
-    setHymn(h); setEditNumber(h?.number ?? ''); setEditTitle(h?.title ?? '');
+    setHymn(h); setEditNumber(h?.number ?? ''); setEditTitle(h?.title ?? ''); setEditCategoryId(h?.category_id ?? undefined);
   }, [hymnId]);
 
   useEffect(() => { load(); }, [load]);
@@ -98,11 +99,19 @@ function HymnEditor({ hymnId, onDeleted, onClose, onSaved }: {
   const saveMeta = async () => {
     const nextNumber = editNumber.trim();
     const nextTitle = editTitle.trim();
+    const normalizedCurrentCategoryId = hymn.category_id ?? null;
+    const normalizedNextCategoryId = editCategoryId ?? null;
+    const categoryDirty = normalizedNextCategoryId !== normalizedCurrentCategoryId;
     if (!nextTitle) { alert('Titlul nu poate fi gol.'); return; }
-    if (nextNumber === hymn.number && nextTitle === hymn.title) return;
+    if (nextNumber === hymn.number && nextTitle === hymn.title && !categoryDirty) return;
     setSavingMeta(true);
     try {
-      await window.electron.hymn.update(hymn.id, nextNumber, nextTitle);
+      if (nextNumber !== hymn.number || nextTitle !== hymn.title) {
+        await window.electron.hymn.update(hymn.id, nextNumber, nextTitle);
+      }
+      if (categoryDirty) {
+        await window.electron.hymn.setCategory(hymn.id, editCategoryId);
+      }
       await load();
       onSaved?.();
     } catch (err: unknown) {
@@ -121,7 +130,9 @@ function HymnEditor({ hymnId, onDeleted, onClose, onSaved }: {
     [secs[index], secs[swap]] = [secs[swap], secs[index]];
     await window.electron.section.reorder(secs.map((s, i) => ({ id: s.id, order_index: i }))); await load();
   };
-  const metaDirty = editNumber.trim() !== hymn.number || editTitle.trim() !== hymn.title;
+  const metaDirty = editNumber.trim() !== hymn.number
+    || editTitle.trim() !== hymn.title
+    || (editCategoryId ?? null) !== (hymn.category_id ?? null);
 
   return (
     <div className="h-full flex flex-col bg-[#0f1117]">
@@ -138,6 +149,19 @@ function HymnEditor({ hymnId, onDeleted, onClose, onSaved }: {
             <input type="text" value={editTitle}
             onChange={e => setEditTitle(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-primary/40 transition-all" />
+          </div>
+          <div className="w-56">
+            <label className="text-[10px] text-white/25 uppercase tracking-widest font-bold block mb-1">Categorie</label>
+            <select
+              value={editCategoryId ?? ''}
+              onChange={e => setEditCategoryId(e.target.value ? Number(e.target.value) : undefined)}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/70 outline-none focus:border-primary/40 transition-all"
+            >
+              <option value="">Fără categorie</option>
+              {categories.map(category => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-2 mb-0.5">
             <button onClick={saveMeta} disabled={!metaDirty || savingMeta}
@@ -188,21 +212,132 @@ function HymnEditor({ hymnId, onDeleted, onClose, onSaved }: {
 // Import panel
 // ─────────────────────────────────────────────────────────────────────────────
 
+const REFREN_ALONE_RE = /^\s*(?:r|ref|refren)\.?\s*:?$/i;
+const REFREN_INLINE_RE = /^\s*(?:r|ref|refren)\.?\s*:?\s+(.+)$/i;
+const STROFA_HEADER_RE = /^\s*(?:strofa\s*)?\d+\s*[.)]?\s*$/i;
+const STROFA_INLINE_RE = /^\s*(?:strofa\s*)?\d+\s*[.)]\s+(.+)$/i;
+
+function normalizeInputLine(line: string): string {
+  return line.replace(/\t/g, ' ').replace(/ {2,}/g, ' ').trim();
+}
+
+function parseRawHymnSections(rawText: string): HymnSectionInput[] {
+  const lines = rawText
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n');
+
+  const sections: HymnSectionInput[] = [];
+  let mode: 'strofa' | 'refren' = 'strofa';
+  let buffer: string[] = [];
+
+  const flush = () => {
+    const text = buffer.join('\n').trim();
+    if (text) sections.push({ type: mode, text });
+    buffer = [];
+  };
+
+  for (const rawLine of [...lines, '']) {
+    const line = normalizeInputLine(rawLine);
+
+    if (!line) {
+      flush();
+      if (mode === 'refren') mode = 'strofa';
+      continue;
+    }
+
+    const refrenInline = line.match(REFREN_INLINE_RE);
+    if (refrenInline) {
+      flush();
+      mode = 'refren';
+      buffer.push(refrenInline[1].trim());
+      continue;
+    }
+
+    if (REFREN_ALONE_RE.test(line)) {
+      flush();
+      mode = 'refren';
+      continue;
+    }
+
+    const strofaInline = line.match(STROFA_INLINE_RE);
+    if (strofaInline) {
+      flush();
+      mode = 'strofa';
+      buffer.push(strofaInline[1].trim());
+      continue;
+    }
+
+    if (STROFA_HEADER_RE.test(line)) {
+      flush();
+      mode = 'strofa';
+      continue;
+    }
+
+    buffer.push(line);
+  }
+
+  const deduped: HymnSectionInput[] = [];
+  for (const section of sections) {
+    const prev = deduped[deduped.length - 1];
+    if (
+      prev
+      && prev.type === 'refren'
+      && section.type === 'refren'
+      && prev.text.trim().toLowerCase() === section.text.trim().toLowerCase()
+    ) {
+      continue;
+    }
+    deduped.push(section);
+  }
+
+  const strofe = deduped.filter(section => section.type === 'strofa');
+  const refrains = deduped.filter(section => section.type === 'refren');
+
+  // If only one refrain marker is present, treat it as the common refrain and
+  // repeat it after every strophe. If refrains are already repeated in input,
+  // keep the original structure.
+  if (refrains.length === 1 && strofe.length > 1) {
+    const refrainText = refrains[0].text;
+    const expanded: HymnSectionInput[] = [];
+    for (const section of deduped) {
+      if (section.type !== 'strofa') continue;
+      expanded.push(section);
+      expanded.push({ type: 'refren', text: refrainText });
+    }
+    return expanded;
+  }
+
+  return deduped;
+}
+
 function ImportPanel({ categories, onImportDone }: { categories: Category[]; onImportDone: () => void }) {
   const [status, setStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
   const [folderPath, setFolderPath] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState<number | undefined>(undefined);
+  const [textCategoryId, setTextCategoryId] = useState<number | undefined>(undefined);
+  const [draftNumber, setDraftNumber] = useState('');
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftText, setDraftText] = useState('');
+  const [draftSections, setDraftSections] = useState<HymnSectionInput[]>([]);
+  const [draftError, setDraftError] = useState('');
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [lastFormattedText, setLastFormattedText] = useState('');
   const [result, setResult] = useState<{ success: number; failed: number; errors: string[] } | null>(null);
   const [clearing, setClearing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [backupExporting, setBackupExporting] = useState(false);
+  const [backupImporting, setBackupImporting] = useState(false);
 
   useEffect(() => {
-    if (categories.length > 0 && categoryId === undefined) {
+    if (categories.length > 0) {
       const first = categories.find(c => !c.is_builtin) ?? categories[0];
-      setCategoryId(first?.id);
+      if (categoryId === undefined) setCategoryId(first?.id);
+      if (textCategoryId === undefined) setTextCategoryId(first?.id);
     }
-  }, [categories, categoryId]);
+  }, [categories, categoryId, textCategoryId]);
 
   const pickFolder = async () => {
     const p = await window.electron.dialog.selectFolder();
@@ -239,13 +374,164 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
     setExporting(true); await window.electron.db.exportDb(destPath); setExporting(false);
     alert(`Exportat la:\n${destPath}\n\nCopiaz-o în public/ înainte de build.`);
   };
+
+  const handleExportJsonBackup = async () => {
+    setBackupExporting(true);
+    try {
+      const electronBridge = window.electron as typeof window.electron & {
+        invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>;
+        dialog: typeof window.electron.dialog & {
+          saveJsonFile?: (defaultName: string) => Promise<string | undefined>;
+        };
+        db: typeof window.electron.db & {
+          exportJsonBackup?: (destPath: string) => Promise<{ categories: number; hymns: number; sections: number }>;
+        };
+      };
+
+      const destPath = typeof electronBridge.dialog.saveJsonFile === 'function'
+        ? await electronBridge.dialog.saveJsonFile('hymns-backup.json')
+        : typeof electronBridge.invoke === 'function'
+          ? (await electronBridge.invoke('dialog:save-json-file', 'hymns-backup.json') as string | undefined)
+          : undefined;
+      if (!destPath) return;
+
+      const summary = typeof electronBridge.db.exportJsonBackup === 'function'
+        ? await electronBridge.db.exportJsonBackup(destPath)
+        : typeof electronBridge.invoke === 'function'
+          ? (await electronBridge.invoke('db:export-json-backup', destPath) as { categories: number; hymns: number; sections: number })
+          : null;
+      if (!summary) {
+        throw new Error('Funcția de export backup JSON nu este disponibilă. Repornește aplicația.');
+      }
+
+      alert(
+        `Backup JSON exportat la:\n${destPath}\n\n` +
+        `Categorii: ${summary.categories}\n` +
+        `Imnuri: ${summary.hymns}\n` +
+        `Secțiuni: ${summary.sections}`
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Eroare necunoscută.';
+      alert(`Nu am putut exporta backup-ul JSON.\n\n${message}`);
+    } finally {
+      setBackupExporting(false);
+    }
+  };
+
+  const handleImportJsonBackup = async () => {
+    setBackupImporting(true);
+    try {
+      const electronBridge = window.electron as typeof window.electron & {
+        invoke?: (channel: string, ...args: unknown[]) => Promise<unknown>;
+        dialog: typeof window.electron.dialog & {
+          selectJsonFile?: () => Promise<string | undefined>;
+        };
+        db: typeof window.electron.db & {
+          importJsonBackup?: (filePath: string) => Promise<{ categories: number; hymns: number; sections: number }>;
+        };
+      };
+
+      const filePath = typeof electronBridge.dialog.selectJsonFile === 'function'
+        ? await electronBridge.dialog.selectJsonFile()
+        : typeof electronBridge.invoke === 'function'
+          ? (await electronBridge.invoke('dialog:select-json-file') as string | undefined)
+          : undefined;
+      if (!filePath) return;
+      if (!confirm(
+        '⚠️ Import backup JSON?\n\n' +
+        'Acțiunea va înlocui complet conținutul curent (categorii, imnuri, secțiuni).'
+      )) return;
+
+      const summary = typeof electronBridge.db.importJsonBackup === 'function'
+        ? await electronBridge.db.importJsonBackup(filePath)
+        : typeof electronBridge.invoke === 'function'
+          ? (await electronBridge.invoke('db:import-json-backup', filePath) as { categories: number; hymns: number; sections: number })
+          : null;
+      if (!summary) {
+        throw new Error('Funcția de import backup JSON nu este disponibilă. Repornește aplicația.');
+      }
+
+      onImportDone();
+      alert(
+        `Backup importat cu succes.\n\n` +
+        `Categorii: ${summary.categories}\n` +
+        `Imnuri: ${summary.hymns}\n` +
+        `Secțiuni: ${summary.sections}`
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Eroare necunoscută.';
+      alert(`Nu am putut importa backup-ul JSON.\n\n${message}`);
+    } finally {
+      setBackupImporting(false);
+    }
+  };
+
+  const formatDraftText = () => {
+    setDraftSaved(false);
+    const sections = parseRawHymnSections(draftText);
+    if (sections.length === 0) {
+      setDraftSections([]);
+      setDraftError('Nu am putut extrage secțiuni. Folosește strofe separate prin rând gol și/sau markerul "R." pentru refren.');
+      return;
+    }
+    setDraftSections(sections);
+    setDraftError('');
+    setLastFormattedText(draftText);
+  };
+
+  const saveDraftHymn = async () => {
+    const number = draftNumber.trim();
+    const title = draftTitle.trim();
+    if (!number) { alert('Numărul imnului este obligatoriu.'); return; }
+    if (!title) { alert('Titlul imnului este obligatoriu.'); return; }
+    if (draftSections.length === 0) { alert('Formatează textul înainte de salvare.'); return; }
+    if (lastFormattedText !== draftText) {
+      alert('Textul a fost modificat după previzualizare. Apasă din nou "Formatează și previzualizează".');
+      return;
+    }
+
+    setSavingDraft(true);
+    setDraftSaved(false);
+    try {
+      await window.electron.db.createHymnWithSections({
+        number,
+        title,
+        categoryId: textCategoryId,
+        sections: draftSections,
+      });
+      setDraftSaved(true);
+      setDraftNumber('');
+      setDraftTitle('');
+      setDraftText('');
+      setDraftSections([]);
+      setDraftError('');
+      setLastFormattedText('');
+      onImportDone();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Eroare necunoscută.';
+      alert(`Nu am putut adăuga imnul.\n\n${message}`);
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const hasSource = Boolean(folderPath) || selectedFiles.length > 0;
   const firstFileName = selectedFiles.length > 0
     ? selectedFiles[0].split(/[/\\]/).pop() ?? selectedFiles[0]
     : '';
 
+  let strofaCount = 0;
+  const draftPreview = draftSections.map((section, index) => {
+    if (section.type === 'strofa') strofaCount += 1;
+    return {
+      key: `${section.type}-${index}`,
+      label: section.type === 'refren' ? 'Refren' : `Strofă ${strofaCount}`,
+      ...section,
+    };
+  });
+
   return (
-    <div className="h-full overflow-y-auto px-8 py-6 max-w-xl space-y-8">
+    <div className="h-full w-full overflow-y-auto px-8 py-6 space-y-8">
       <section className="space-y-4">
         <div>
           <h2 className="text-sm font-bold text-white/80">Import fișiere PPTX</h2>
@@ -360,6 +646,125 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
         )}
       </section>
 
+      <section className="border-t border-white/5 pt-6 space-y-4">
+        <div>
+          <h2 className="text-sm font-bold text-white/80">Adaugă imn din text</h2>
+          <p className="text-xs text-white/30 mt-1">
+            Lipește textul brut, formatează automat în strofe/refren, verifică previzualizarea, apoi salvează în categorie.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] text-white/25 uppercase tracking-widest font-bold block mb-1.5">Număr</label>
+                <input
+                  value={draftNumber}
+                  onChange={e => { setDraftNumber(e.target.value); setDraftSaved(false); }}
+                  placeholder="001"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-primary/40 transition-all"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-[10px] text-white/25 uppercase tracking-widest font-bold block mb-1.5">Titlu</label>
+                <input
+                  value={draftTitle}
+                  onChange={e => { setDraftTitle(e.target.value); setDraftSaved(false); }}
+                  placeholder="Titlul imnului"
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/80 outline-none focus:border-primary/40 transition-all"
+                />
+              </div>
+            </div>
+
+            {categories.length > 0 && (
+              <div>
+                <label className="text-[10px] text-white/25 uppercase tracking-widest font-bold block mb-1.5">Categorie</label>
+                <select
+                  value={textCategoryId ?? ''}
+                  onChange={e => setTextCategoryId(Number(e.target.value))}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/70 outline-none focus:border-primary/40 transition-all"
+                >
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="text-[10px] text-white/25 uppercase tracking-widest font-bold block mb-1.5">Text brut</label>
+              <textarea
+                value={draftText}
+                onChange={e => { setDraftText(e.target.value); setDraftSaved(false); }}
+                rows={10}
+                placeholder={'1.\nDoamne, Tu ești lumina mea\n...\n\nR.\nRefrenul aici'}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white/75 leading-relaxed outline-none focus:border-primary/40 transition-all resize-y"
+              />
+              <p className="text-[11px] text-white/25 mt-1.5">
+                Tips: separă strofele cu rând gol. Pentru refren folosește o linie cu <code className="text-white/40">R.</code> sau <code className="text-white/40">Refren</code>.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={formatDraftText}
+                className="py-2.5 bg-white/5 hover:bg-white/8 border border-white/10 rounded-xl text-sm text-white/70 font-medium transition-all"
+              >
+                Formatează și previzualizează
+              </button>
+              <button
+                onClick={saveDraftHymn}
+                disabled={savingDraft || draftSections.length === 0 || !draftNumber.trim() || !draftTitle.trim()}
+                className="py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:hover:bg-primary rounded-xl text-sm font-semibold text-primary-content transition-all"
+              >
+                {savingDraft ? <span className="loading loading-spinner loading-xs" /> : 'Adaugă imnul'}
+              </button>
+            </div>
+
+            {draftError && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400">
+                {draftError}
+              </div>
+            )}
+
+            {draftSaved && (
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-sm text-green-400">
+                Imnul a fost adăugat în baza de date.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-white/45 uppercase tracking-widest">Previzualizare secțiuni</h3>
+              <span className="text-xs text-white/25">{draftPreview.length} secțiuni</span>
+            </div>
+            {draftPreview.length === 0 ? (
+              <div className="border-2 border-dashed border-white/10 rounded-xl p-8 text-center text-xs text-white/25">
+                Apasă „Formatează și previzualizează” ca să vezi secțiunile aici.
+              </div>
+            ) : (
+              <div className="max-h-[34rem] overflow-y-auto space-y-2 pr-1">
+                {draftPreview.map(section => (
+                  <div
+                    key={section.key}
+                    className={`rounded-xl border p-3 ${section.type === 'refren'
+                      ? 'border-amber-500/25 bg-amber-500/8'
+                      : 'border-white/8 bg-white/3'}`}
+                  >
+                    <div className={`text-[10px] uppercase tracking-widest font-bold mb-1.5 ${section.type === 'refren' ? 'text-amber-400/80' : 'text-white/30'}`}>
+                      {section.label}
+                    </div>
+                    <pre className="whitespace-pre-wrap break-words font-sans text-sm text-white/75 leading-relaxed">
+                      {section.text}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
       <section className="border-t border-white/5 pt-6 space-y-3">
         <div>
           <h3 className="text-sm font-bold text-white/60">Exportă DB pentru distribuire</h3>
@@ -369,6 +774,31 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
           className="w-full flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/8 border border-white/10 rounded-xl text-sm text-white/50 font-medium transition-all">
           {exporting ? <span className="loading loading-spinner loading-xs" /> : <><Database className="w-4 h-4" /> Exportă hymns.db</>}
         </button>
+      </section>
+
+      <section className="border-t border-white/5 pt-6 space-y-3">
+        <div>
+          <h3 className="text-sm font-bold text-white/60">Backup JSON complet</h3>
+          <p className="text-xs text-white/25 mt-1">
+            Exportă/importă un backup complet al bazei de date (categorii, imnuri, secțiuni).
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={handleExportJsonBackup}
+            disabled={backupExporting || backupImporting}
+            className="flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/8 border border-white/10 rounded-xl text-sm text-white/50 font-medium transition-all disabled:opacity-50"
+          >
+            {backupExporting ? <span className="loading loading-spinner loading-xs" /> : <><Download className="w-4 h-4" /> Exportă backup JSON</>}
+          </button>
+          <button
+            onClick={handleImportJsonBackup}
+            disabled={backupImporting || backupExporting}
+            className="flex items-center justify-center gap-2 py-2.5 bg-white/5 hover:bg-white/8 border border-white/10 rounded-xl text-sm text-white/50 font-medium transition-all disabled:opacity-50"
+          >
+            {backupImporting ? <span className="loading loading-spinner loading-xs" /> : <><FolderOpen className="w-4 h-4" /> Importă backup JSON</>}
+          </button>
+        </div>
       </section>
 
       <section className="border-t border-red-500/20 pt-6 space-y-3">
@@ -861,7 +1291,10 @@ function ProiectiePanel() {
 // Hymn Editor Tab — full-width 50/50 split layout
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HymnEditorTab({ onCategoriesChanged }: { onCategoriesChanged?: () => void }) {
+function HymnEditorTab({ activeCategoryId, onCategoriesChanged }: {
+  activeCategoryId?: number;
+  onCategoriesChanged?: () => void;
+}) {
   const [query, setQuery] = useState('');
   const [hymns, setHymns] = useState<Hymn[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -881,6 +1314,9 @@ function HymnEditorTab({ onCategoriesChanged }: { onCategoriesChanged?: () => vo
 
   useEffect(() => { loadCategories(); }, [loadCategories]);
   useEffect(() => { const t = setTimeout(loadHymns, 300); return () => clearTimeout(t); }, [loadHymns]);
+  useEffect(() => {
+    setFilterCategoryId(activeCategoryId);
+  }, [activeCategoryId]);
 
   const catMap = new Map(categories.map(c => [c.id, c]));
 
@@ -925,9 +1361,9 @@ function HymnEditorTab({ onCategoriesChanged }: { onCategoriesChanged?: () => vo
       {/* ── Right: editor (flex-1, same width) ── */}
       <div className="flex-1 overflow-hidden min-w-0">
         {selectedId !== null ? (
-          <HymnEditor key={selectedId} hymnId={selectedId}
-            onSaved={loadHymns}
-            onDeleted={() => { setSelectedId(null); loadHymns(); onCategoriesChanged?.(); }}
+          <HymnEditor key={selectedId} hymnId={selectedId} categories={categories}
+            onSaved={() => { loadHymns(); loadCategories(); onCategoriesChanged?.(); }}
+            onDeleted={() => { setSelectedId(null); loadHymns(); loadCategories(); onCategoriesChanged?.(); }}
             onClose={() => setSelectedId(null)} />
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-white/15">
@@ -941,9 +1377,10 @@ function HymnEditorTab({ onCategoriesChanged }: { onCategoriesChanged?: () => vo
   );
 }
 
-export function AdminPage({ activeTab: tab, onTabChange: _setTab, onCategoriesChanged }: {
+export function AdminPage({ activeTab: tab, onTabChange: _setTab, activeCategoryId, onCategoriesChanged }: {
   activeTab: 'categorii' | 'import' | 'proiectie' | 'editor';
   onTabChange: (t: 'categorii' | 'import' | 'proiectie' | 'editor') => void;
+  activeCategoryId?: number;
   onCategoriesChanged?: () => void;
 }) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -958,7 +1395,7 @@ export function AdminPage({ activeTab: tab, onTabChange: _setTab, onCategoriesCh
     <div className="flex h-full overflow-hidden bg-[#0f1117]">
       {tab === 'editor' ? (
         <div className="flex-1 overflow-hidden">
-          <HymnEditorTab onCategoriesChanged={onCategoriesChanged} />
+          <HymnEditorTab activeCategoryId={activeCategoryId} onCategoriesChanged={onCategoriesChanged} />
         </div>
       ) : tab === 'categorii' ? (
         <div className="flex-1 overflow-hidden">

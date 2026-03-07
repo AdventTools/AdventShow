@@ -105,14 +105,24 @@ function App() {
 
         {/* Add button / Admin toggle */}
         <div className="flex items-center gap-2 ml-2">
-
-          <button
-            onClick={() => setPage(page === 'admin' ? 'search' : 'admin')}
-            title={page === 'admin' ? 'Înapoi la căutare' : 'Admin'}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${page === 'admin' ? 'bg-primary/20 text-primary' : 'text-white/30 hover:text-white/60 hover:bg-white/5'}`}
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          {page === 'admin' ? (
+            <button
+              onClick={() => setPage('search')}
+              title="Închide Admin"
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-all text-xs font-semibold"
+            >
+              <X className="w-3.5 h-3.5" />
+              Închide
+            </button>
+          ) : (
+            <button
+              onClick={() => setPage('admin')}
+              title="Admin"
+              className="w-8 h-8 flex items-center justify-center rounded-lg transition-all text-white/30 hover:text-white/60 hover:bg-white/5"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </header>
 
@@ -199,7 +209,12 @@ function App() {
             />
           )}
           {page === 'admin' && (
-            <AdminPage activeTab={adminTab} onTabChange={setAdminTab} onCategoriesChanged={loadCategories} />
+            <AdminPage
+              activeTab={adminTab}
+              onTabChange={setAdminTab}
+              activeCategoryId={activeCategoryId}
+              onCategoriesChanged={loadCategories}
+            />
           )}
         </main>
       </div>

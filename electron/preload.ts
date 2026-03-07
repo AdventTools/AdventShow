@@ -23,6 +23,12 @@ contextBridge.exposeInMainWorld('electron', {
     getHymn: (number: string) => ipcRenderer.invoke('db:get-hymn', number),
     searchHymns: (query: string, categoryId?: number) => ipcRenderer.invoke('db:search-hymns', query, categoryId),
     getHymnWithSections: (id: number) => ipcRenderer.invoke('db:get-hymn-with-sections', id),
+    createHymnWithSections: (payload: {
+      number: string;
+      title: string;
+      categoryId?: number;
+      sections: { type: 'strofa' | 'refren'; text: string }[];
+    }) => ipcRenderer.invoke('db:create-hymn-with-sections', payload),
     importPPTX: (dirPath: string, categoryId?: number) => ipcRenderer.invoke('db:import-pptx', dirPath, categoryId),
     importPPTXFiles: (filePaths: string[], categoryId?: number) => ipcRenderer.invoke('db:import-pptx-files', filePaths, categoryId),
     clearAll: () => ipcRenderer.invoke('db:clear-all'),
@@ -31,11 +37,15 @@ contextBridge.exposeInMainWorld('electron', {
     updateCategory: (id: number, name: string) => ipcRenderer.invoke('db:update-category', id, name),
     deleteCategory: (id: number) => ipcRenderer.invoke('db:delete-category', id),
     exportDb: (destPath: string) => ipcRenderer.invoke('db:export', destPath),
+    exportJsonBackup: (destPath: string) => ipcRenderer.invoke('db:export-json-backup', destPath),
+    importJsonBackup: (filePath: string) => ipcRenderer.invoke('db:import-json-backup', filePath),
   },
 
   hymn: {
     update: (id: number, number: string, title: string) =>
       ipcRenderer.invoke('hymn:update', id, number, title),
+    setCategory: (id: number, categoryId?: number) =>
+      ipcRenderer.invoke('hymn:set-category', id, categoryId),
     delete: (id: number) => ipcRenderer.invoke('hymn:delete', id),
   },
 
@@ -53,6 +63,8 @@ contextBridge.exposeInMainWorld('electron', {
     selectFolder: () => ipcRenderer.invoke('dialog:select-folder'),
     selectPPTXFiles: () => ipcRenderer.invoke('dialog:select-pptx-files'),
     saveFile: (defaultName: string) => ipcRenderer.invoke('dialog:save-file', defaultName),
+    saveJsonFile: (defaultName: string) => ipcRenderer.invoke('dialog:save-json-file', defaultName),
+    selectJsonFile: () => ipcRenderer.invoke('dialog:select-json-file'),
     pickMedia: (mediaType: 'image' | 'video') => ipcRenderer.invoke('dialog:pick-media', mediaType),
   },
 

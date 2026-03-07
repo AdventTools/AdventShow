@@ -119,7 +119,11 @@ function HymnDetail({ hymnId, categories }: { hymnId: number; categories: Catego
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-bold text-white leading-tight">{hymn.title}</h2>
             <div className="flex items-center gap-3 mt-1.5">
-              {category && <span className="badge badge-xs badge-ghost text-white/40">{category.name}</span>}
+              {category && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold text-violet-300 bg-violet-500/15 border border-violet-400/25">
+                  {category.name}
+                </span>
+              )}
               <span className="text-xs text-white/25">{hymn.sections.length} secțiuni</span>
             </div>
           </div>

@@ -27,6 +27,60 @@ function normalizeHymnNumber(number: string): string {
   return trimmed;
 }
 
+function normalizeSearchText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function hasLegacyGlobalNumberUnique(db: any): boolean {
+  const indexes = db.prepare("PRAGMA index_list('hymns')").all() as {
+    name: string;
+    unique: number;
+  }[];
+
+  for (const index of indexes) {
+    if (!index.unique) continue;
+    const quotedName = index.name.replace(/'/g, "''");
+    const cols = db.prepare(`PRAGMA index_info('${quotedName}')`).all() as { name: string }[];
+    if (cols.length === 1 && cols[0]?.name === 'number') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function migrateLegacyHymnsNumberConstraint(db: any) {
+  if (!hasLegacyGlobalNumberUnique(db)) return;
+
+  db.exec('PRAGMA foreign_keys = OFF;');
+  const tx = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE hymns_migrated (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        number TEXT,
+        title TEXT,
+        search_text TEXT,
+        category_id INTEGER REFERENCES categories(id)
+      );
+
+      INSERT INTO hymns_migrated (id, number, title, search_text, category_id)
+      SELECT id, number, title, search_text, category_id
+      FROM hymns;
+
+      DROP TABLE hymns;
+      ALTER TABLE hymns_migrated RENAME TO hymns;
+    `);
+  });
+
+  try {
+    tx();
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
+}
+
 export function getDb() {
   if (!_db) {
     const dbPath = path.join(app.getPath('userData'), 'hymns.db');
@@ -82,7 +136,7 @@ export function initDB() {
 
   // Migration: drop UNIQUE on number (if present from old schema)
   // We allow duplicate numbers across categories, so only enforce uniqueness per category.
-  // (SQLite doesn't support DROP CONSTRAINT, so we handle via app logic)
+  migrateLegacyHymnsNumberConstraint(db);
 
   // Seed built-in categories
   const insertBuiltin = db.prepare(
@@ -230,8 +284,127 @@ export function updateHymn(id: number, number: string, title: string) {
     .run({ id, number: normalizeHymnNumber(number), title });
 }
 
+export function updateHymnCategory(id: number, categoryId?: number) {
+  const db = getDb();
+  const hymn = db
+    .prepare('SELECT id, number FROM hymns WHERE id = ?')
+    .get(id) as { id: number; number: string } | undefined;
+  if (!hymn) {
+    throw new Error('Imnul selectat nu mai există.');
+  }
+
+  const nextCategoryId = categoryId ?? null;
+  const duplicate = nextCategoryId == null
+    ? db
+      .prepare('SELECT id FROM hymns WHERE number = ? AND category_id IS NULL AND id <> ? LIMIT 1')
+      .get(hymn.number, id)
+    : db
+      .prepare('SELECT id FROM hymns WHERE number = ? AND category_id = ? AND id <> ? LIMIT 1')
+      .get(hymn.number, nextCategoryId, id);
+  if (duplicate) {
+    throw new Error(`Există deja un imn cu numărul ${hymn.number} în categoria selectată.`);
+  }
+
+  return db
+    .prepare('UPDATE hymns SET category_id = ? WHERE id = ?')
+    .run(nextCategoryId, id);
+}
+
 export function deleteHymn(id: number) {
   return getDb().prepare('DELETE FROM hymns WHERE id = ?').run(id);
+}
+
+export interface HymnSectionInput {
+  type: 'strofa' | 'refren';
+  text: string;
+}
+
+export interface CreateHymnInput {
+  number: string;
+  title: string;
+  categoryId?: number;
+  sections: HymnSectionInput[];
+}
+
+export interface BackupSummary {
+  categories: number;
+  hymns: number;
+  sections: number;
+}
+
+export interface HymnsDbBackup {
+  version: 1;
+  exported_at: string;
+  categories: { id: number; name: string; is_builtin: number }[];
+  hymns: {
+    id: number;
+    number: string | null;
+    title: string | null;
+    search_text: string | null;
+    category_id: number | null;
+  }[];
+  hymn_sections: {
+    id: number;
+    hymn_id: number;
+    order_index: number;
+    type: 'strofa' | 'refren';
+    text: string;
+  }[];
+}
+
+export function createHymnWithSections(input: CreateHymnInput): number {
+  const db = getDb();
+  const tx = db.transaction((payload: CreateHymnInput) => {
+    const number = normalizeHymnNumber(payload.number);
+    const title = payload.title.trim();
+    const sections = payload.sections
+      .map(section => ({ type: section.type, text: section.text.trim() }))
+      .filter(section => section.text.length > 0);
+
+    if (!number) throw new Error('Numărul imnului este obligatoriu.');
+    if (!title) throw new Error('Titlul imnului este obligatoriu.');
+    if (sections.length === 0) throw new Error('Adaugă cel puțin o secțiune cu text.');
+
+    const categoryId = payload.categoryId ?? null;
+    const duplicate = categoryId == null
+      ? db.prepare('SELECT id FROM hymns WHERE number = ? AND category_id IS NULL LIMIT 1').get(number)
+      : db.prepare('SELECT id FROM hymns WHERE number = ? AND category_id = ? LIMIT 1').get(number, categoryId);
+    if (duplicate) {
+      throw new Error(`Există deja un imn cu numărul ${number} în categoria selectată.`);
+    }
+
+    const searchText = normalizeSearchText(`${number} ${title} ${sections.map(s => s.text).join(' ')}`);
+    let hymnResult: { lastInsertRowid: number | bigint };
+    try {
+      hymnResult = db
+        .prepare('INSERT INTO hymns (number, title, search_text, category_id) VALUES (?, ?, ?, ?)')
+        .run(number, title, searchText, categoryId);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('UNIQUE constraint failed: hymns.number')) {
+        throw new Error('Schema bazei de date este veche (număr global unic). Repornește aplicația pentru migrare automată și încearcă din nou.');
+      }
+      throw err;
+    }
+
+    const hymnId = Number(hymnResult.lastInsertRowid);
+    const insertSection = db.prepare(`
+      INSERT INTO hymn_sections (hymn_id, order_index, type, text)
+      VALUES (@hymnId, @order_index, @type, @text)
+    `);
+
+    sections.forEach((section, index) => {
+      insertSection.run({
+        hymnId,
+        order_index: index,
+        type: section.type,
+        text: section.text,
+      });
+    });
+
+    return hymnId;
+  });
+
+  return tx(input);
 }
 
 export function clearAllData() {
@@ -243,6 +416,167 @@ export function clearAllData() {
     db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('hymns','hymn_sections')").run();
   });
   tx();
+}
+
+export function exportJsonBackup(): HymnsDbBackup {
+  const db = getDb();
+  return {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    categories: db
+      .prepare('SELECT id, name, is_builtin FROM categories ORDER BY id')
+      .all(),
+    hymns: db
+      .prepare('SELECT id, number, title, search_text, category_id FROM hymns ORDER BY id')
+      .all(),
+    hymn_sections: db
+      .prepare('SELECT id, hymn_id, order_index, type, text FROM hymn_sections ORDER BY hymn_id, order_index, id')
+      .all(),
+  };
+}
+
+function asObject(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} este invalid.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} trebuie să fie text.`);
+  return value;
+}
+
+function asNullableString(value: unknown, label: string): string | null {
+  if (value === null || value === undefined) return null;
+  return asString(value, label);
+}
+
+function asNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${label} trebuie să fie număr.`);
+  }
+  return Math.trunc(value);
+}
+
+function asNullableNumber(value: unknown, label: string): number | null {
+  if (value === null || value === undefined) return null;
+  return asNumber(value, label);
+}
+
+export function importJsonBackup(data: unknown): BackupSummary {
+  const root = asObject(data, 'Backup');
+  const rawCategories = root.categories;
+  const rawHymns = root.hymns;
+  const rawSections = root.hymn_sections;
+
+  if (!Array.isArray(rawCategories) || !Array.isArray(rawHymns) || !Array.isArray(rawSections)) {
+    throw new Error('Backup JSON invalid: lipsesc colecțiile categories/hymns/hymn_sections.');
+  }
+
+  const categories = rawCategories.map((item, index) => {
+    const row = asObject(item, `Categorie #${index + 1}`);
+    const isBuiltin = asNumber(row.is_builtin, `Categorie #${index + 1} is_builtin`);
+    if (isBuiltin !== 0 && isBuiltin !== 1) {
+      throw new Error(`Categorie #${index + 1} is_builtin trebuie să fie 0 sau 1.`);
+    }
+    return {
+      id: asNumber(row.id, `Categorie #${index + 1} id`),
+      name: asString(row.name, `Categorie #${index + 1} name`),
+      is_builtin: isBuiltin,
+    };
+  });
+
+  const hymns = rawHymns.map((item, index) => {
+    const row = asObject(item, `Imn #${index + 1}`);
+    return {
+      id: asNumber(row.id, `Imn #${index + 1} id`),
+      number: asNullableString(row.number, `Imn #${index + 1} number`),
+      title: asNullableString(row.title, `Imn #${index + 1} title`),
+      search_text: asNullableString(row.search_text, `Imn #${index + 1} search_text`),
+      category_id: asNullableNumber(row.category_id, `Imn #${index + 1} category_id`),
+    };
+  });
+
+  const sections = rawSections.map((item, index) => {
+    const row = asObject(item, `Secțiune #${index + 1}`);
+    const type = asString(row.type, `Secțiune #${index + 1} type`);
+    if (type !== 'strofa' && type !== 'refren') {
+      throw new Error(`Secțiune #${index + 1} type trebuie să fie "strofa" sau "refren".`);
+    }
+    return {
+      id: asNumber(row.id, `Secțiune #${index + 1} id`),
+      hymn_id: asNumber(row.hymn_id, `Secțiune #${index + 1} hymn_id`),
+      order_index: asNumber(row.order_index, `Secțiune #${index + 1} order_index`),
+      type,
+      text: asString(row.text, `Secțiune #${index + 1} text`),
+    };
+  });
+
+  const categoryIds = new Set(categories.map(row => row.id));
+  for (const hymn of hymns) {
+    if (hymn.category_id != null && !categoryIds.has(hymn.category_id)) {
+      throw new Error(`Imnul ${hymn.id} referă o categorie inexistentă (${hymn.category_id}).`);
+    }
+  }
+
+  const hymnIds = new Set(hymns.map(row => row.id));
+  for (const section of sections) {
+    if (!hymnIds.has(section.hymn_id)) {
+      throw new Error(`Secțiunea ${section.id} referă un imn inexistent (${section.hymn_id}).`);
+    }
+  }
+
+  const db = getDb();
+  db.exec('PRAGMA foreign_keys = ON;');
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM hymn_sections').run();
+    db.prepare('DELETE FROM hymns').run();
+    db.prepare('DELETE FROM categories').run();
+    db.prepare("DELETE FROM sqlite_sequence WHERE name IN ('categories','hymns','hymn_sections')").run();
+
+    const insertCategory = db.prepare(`
+      INSERT INTO categories (id, name, is_builtin)
+      VALUES (@id, @name, @is_builtin)
+    `);
+    for (const category of categories) {
+      insertCategory.run(category);
+    }
+
+    const insertHymn = db.prepare(`
+      INSERT INTO hymns (id, number, title, search_text, category_id)
+      VALUES (@id, @number, @title, @search_text, @category_id)
+    `);
+    for (const hymn of hymns) {
+      insertHymn.run({
+        id: hymn.id,
+        number: hymn.number == null ? null : normalizeHymnNumber(hymn.number),
+        title: hymn.title,
+        search_text: hymn.search_text,
+        category_id: hymn.category_id,
+      });
+    }
+
+    const insertSection = db.prepare(`
+      INSERT INTO hymn_sections (id, hymn_id, order_index, type, text)
+      VALUES (@id, @hymn_id, @order_index, @type, @text)
+    `);
+    for (const section of sections) {
+      insertSection.run(section);
+    }
+
+    const insertSeq = db.prepare('INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)');
+    if (categories.length > 0) insertSeq.run('categories', Math.max(...categories.map(row => row.id)));
+    if (hymns.length > 0) insertSeq.run('hymns', Math.max(...hymns.map(row => row.id)));
+    if (sections.length > 0) insertSeq.run('hymn_sections', Math.max(...sections.map(row => row.id)));
+  });
+
+  tx();
+  return {
+    categories: categories.length,
+    hymns: hymns.length,
+    sections: sections.length,
+  };
 }
 
 // ── Section queries ───────────────────────────────────────────────────────────

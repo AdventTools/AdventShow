@@ -3,8 +3,10 @@
   "appId": "com.proiectieimnuri.app",
   "asar": true,
   "productName": "Proiectie Imnuri",
+  "icon": "build/icon.png",
   "directories": {
-    "output": "release/${version}"
+    "output": "release/${version}",
+    "buildResources": "build"
   },
   "files": [
     "dist",
@@ -18,6 +20,7 @@
     }
   ],
   "mac": {
+    "icon": "build/icons/mac/icon.icns",
     "target": [
       "dmg",
       "zip"
@@ -25,6 +28,7 @@
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
+    "icon": "build/icons/win/icon.ico",
     "target": [
       {
         "target": "nsis",
@@ -51,6 +55,7 @@
     "shortcutName": "Proiectie Imnuri"
   },
   "linux": {
+    "icon": "build/icons/png",
     "target": [
       "AppImage"
     ],

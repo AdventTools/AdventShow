@@ -33,6 +33,24 @@ export interface ImportResult {
   errors: string[];
 }
 
+export interface HymnSectionInput {
+  type: 'strofa' | 'refren';
+  text: string;
+}
+
+export interface CreateHymnInput {
+  number: string;
+  title: string;
+  categoryId?: number;
+  sections: HymnSectionInput[];
+}
+
+export interface BackupSummary {
+  categories: number;
+  hymns: number;
+  sections: number;
+}
+
 export interface ProjectionSlideData {
   sections: HymnSection[];
   currentIndex: number;
@@ -68,6 +86,7 @@ export interface IElectronAPI {
     getHymn: (number: string) => Promise<Hymn | undefined>;
     searchHymns: (query: string, categoryId?: number) => Promise<Hymn[]>;
     getHymnWithSections: (id: number) => Promise<HymnWithSections | null>;
+    createHymnWithSections: (payload: CreateHymnInput) => Promise<number>;
     importPPTX: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
     importPPTXFiles: (filePaths: string[], categoryId?: number) => Promise<ImportResult>;
     clearAll: () => Promise<void>;
@@ -76,9 +95,12 @@ export interface IElectronAPI {
     updateCategory: (id: number, name: string) => Promise<void>;
     deleteCategory: (id: number) => Promise<void>;
     exportDb: (destPath: string) => Promise<void>;
+    exportJsonBackup: (destPath: string) => Promise<BackupSummary>;
+    importJsonBackup: (filePath: string) => Promise<BackupSummary>;
   };
   hymn: {
     update: (id: number, number: string, title: string) => Promise<void>;
+    setCategory: (id: number, categoryId?: number) => Promise<void>;
     delete: (id: number) => Promise<void>;
   };
   section: {
@@ -91,6 +113,8 @@ export interface IElectronAPI {
     selectFolder: () => Promise<string | undefined>;
     selectPPTXFiles: () => Promise<string[] | undefined>;
     saveFile: (defaultName: string) => Promise<string | undefined>;
+    saveJsonFile: (defaultName: string) => Promise<string | undefined>;
+    selectJsonFile: () => Promise<string | undefined>;
     pickMedia: (mediaType: 'image' | 'video') => Promise<string | undefined>;
   };
   settings: {

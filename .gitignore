@@ -9,7 +9,13 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-electron
 dist-ssr
+release/
+/hymns.db
+*.db-shm
+*.db-wal
+build/icons/icons/
 *.local
 
 # Editor directories and files
