@@ -49,6 +49,9 @@ interface AppSettings {
   bgColor?: string
   bgImagePath?: string
   bgVideoPath?: string
+  bgOpacity?: number
+  hymnNumberColor?: string
+  contentTextColor?: string
 }
 
 function getSettingsPath() {

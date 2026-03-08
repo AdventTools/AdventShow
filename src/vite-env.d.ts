@@ -78,6 +78,8 @@ export interface AppSettings {
   bgImagePath?: string;    // absolute path on disk
   bgVideoPath?: string;    // absolute path on disk
   bgOpacity?: number;      // 0–1, opacity of the media layer (default 1)
+  hymnNumberColor?: string; // hex, e.g. '#9fb3ff'
+  contentTextColor?: string; // hex, e.g. '#ffffff'
 }
 
 export interface IElectronAPI {

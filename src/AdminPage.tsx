@@ -972,6 +972,8 @@ function ProiectiePanel() {
     ?? displays[0]?.id;
 
   const bgType = settings.bgType ?? 'color';
+  const hymnNumberColor = settings.hymnNumberColor ?? '#9fb3ff';
+  const contentTextColor = settings.contentTextColor ?? '#ffffff';
 
   const pickImage = async () => {
     const p = await window.electron.dialog.pickMedia('image');
@@ -990,9 +992,56 @@ function ProiectiePanel() {
     </div>
   );
 
+  const ColorRow = ({
+    title,
+    value,
+    onChange,
+    presets,
+  }: {
+    title: string;
+    value: string;
+    onChange: (next: string) => void;
+    presets: string[];
+  }) => (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-white/60">{title}</p>
+      <div className="flex items-center gap-4">
+        <div
+          className="relative w-12 h-12 rounded-xl border border-white/10 overflow-hidden cursor-pointer flex-shrink-0"
+          style={{ background: value }}
+        >
+          <input
+            type="color"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white/70">{value.toUpperCase()}</p>
+          <p className="text-xs text-white/25">Click pe pătrat pentru a alege culoarea</p>
+        </div>
+        <div className="ml-auto flex gap-2 flex-wrap justify-end">
+          {presets.map(c => (
+            <button
+              key={c}
+              onClick={() => onChange(c)}
+              title={c}
+              className={`w-7 h-7 rounded-lg border-2 transition-all ${value.toLowerCase() === c.toLowerCase() ? 'border-primary scale-110' : 'border-transparent hover:border-white/30'}`}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const bgColor = settings.bgColor ?? '#000000';
+  const bgOpacity = settings.bgOpacity ?? 1;
+
   return (
     <div className="flex-1 overflow-y-auto p-8">
-      <div className="max-w-xl">
+      <div className="max-w-7xl">
 
         {/* Saved indicator */}
         <div className="flex items-center justify-between mb-6">
@@ -1004,58 +1053,73 @@ function ProiectiePanel() {
           )}
         </div>
 
-        {/* ── Screen selection ── */}
         <Section title="Ecran de proiecție">
-          <div className="space-y-2">
-            {displays.length === 0 && (
-              <p className="text-white/20 text-sm py-4 text-center">Se detectează ecranele...</p>
-            )}
-            {displays.map(d => {
-              const isSelected = d.id === effectiveId;
-              return (
-                <button key={d.id} onClick={() => save({ projectionDisplayId: d.id })}
-                  className={`w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all
-                    ${isSelected
-                      ? 'bg-primary/10 border-primary/40 ring-1 ring-primary/30'
-                      : 'bg-white/3 border-white/8 hover:bg-white/5'}`}
-                >
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0
-                    ${isSelected ? 'bg-primary/20' : 'bg-white/5'}`}>
-                    {isSelected
-                      ? <MonitorCheck className="w-5 h-5 text-primary" />
-                      : <Monitor className="w-5 h-5 text-white/30" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${isSelected ? 'text-primary' : 'text-white/80'}`}>
-                        {d.label}
-                      </span>
-                      {d.isPrimary && (
-                        <span className="text-[10px] bg-white/8 text-white/30 px-2 py-0.5 rounded-full">Principal</span>
-                      )}
+          {displays.length === 0 ? (
+            <p className="text-white/20 text-sm py-4 text-center">Se detectează ecranele...</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {displays.map(d => {
+                const isSelected = d.id === effectiveId;
+                return (
+                  <button key={d.id} onClick={() => save({ projectionDisplayId: d.id })}
+                    className={`w-full flex items-center gap-4 p-4 rounded-xl border text-left transition-all
+                      ${isSelected
+                        ? 'bg-primary/10 border-primary/40 ring-1 ring-primary/30'
+                        : 'bg-white/3 border-white/8 hover:bg-white/5'}`}
+                  >
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0
+                      ${isSelected ? 'bg-primary/20' : 'bg-white/5'}`}>
+                      {isSelected
+                        ? <MonitorCheck className="w-5 h-5 text-primary" />
+                        : <Monitor className="w-5 h-5 text-white/30" />}
                     </div>
-                    <div className="text-xs text-white/25 mt-0.5">
-                      {d.width} × {d.height}px{d.scaleFactor !== 1 ? ` · ${d.scaleFactor}×` : ''}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-semibold ${isSelected ? 'text-primary' : 'text-white/80'}`}>
+                          {d.label}
+                        </span>
+                        {d.isPrimary && (
+                          <span className="text-[10px] bg-white/8 text-white/30 px-2 py-0.5 rounded-full">Principal</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-white/25 mt-0.5">
+                        {d.width} × {d.height}px{d.scaleFactor !== 1 ? ` · ${d.scaleFactor}×` : ''}
+                      </div>
                     </div>
-                  </div>
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all
-                    ${isSelected ? 'border-primary bg-primary' : 'border-white/20'}`}>
-                    {isSelected && <Check className="w-2.5 h-2.5 text-primary-content" />}
-                  </div>
-                </button>
-              );
-            })}
-            {displays.length === 1 && (
-              <p className="text-xs text-white/20 text-center pt-1">
-                Conectează un monitor extern pentru proiecție pe ecran separat.
-              </p>
-            )}
+                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all
+                      ${isSelected ? 'border-primary bg-primary' : 'border-white/20'}`}>
+                      {isSelected && <Check className="w-2.5 h-2.5 text-primary-content" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {displays.length === 1 && (
+            <p className="text-xs text-white/20 text-center pt-3">
+              Conectează un monitor extern pentru proiecție pe ecran separat.
+            </p>
+          )}
+        </Section>
+
+        <Section title="Text proiecție">
+          <div className="space-y-4">
+            <ColorRow
+              title="Culoare număr imn"
+              value={hymnNumberColor}
+              onChange={next => save({ hymnNumberColor: next })}
+              presets={['#9fb3ff', '#facc15', '#22d3ee', '#86efac', '#fda4af', '#ffffff']}
+            />
+            <ColorRow
+              title="Culoare text conținut"
+              value={contentTextColor}
+              onChange={next => save({ contentTextColor: next })}
+              presets={['#ffffff', '#fef3c7', '#cffafe', '#dcfce7', '#fde68a', '#fbcfe8']}
+            />
           </div>
         </Section>
 
-        {/* ── Background type selector ── */}
         <Section title="Fundal proiecție">
-          {/* Mode tabs */}
           <div className="flex gap-1 p-1 bg-white/5 rounded-xl mb-5">
             {([
               { id: 'color', label: '🎨 Culoare' },
@@ -1075,53 +1139,39 @@ function ProiectiePanel() {
             ))}
           </div>
 
-          {/* Color picker */}
           {bgType === 'color' && (
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <div
                   className="relative w-12 h-12 rounded-xl border border-white/10 overflow-hidden cursor-pointer flex-shrink-0"
-                  style={{ background: settings.bgColor ?? '#000000' }}
+                  style={{ background: bgColor }}
                 >
                   <input
                     type="color"
-                    value={settings.bgColor ?? '#000000'}
+                    value={bgColor}
                     onChange={e => save({ bgColor: e.target.value })}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white/70">{(settings.bgColor ?? '#000000').toUpperCase()}</p>
+                  <p className="text-sm font-semibold text-white/70">{bgColor.toUpperCase()}</p>
                   <p className="text-xs text-white/25">Click pe pătrat pentru a alege culoarea</p>
                 </div>
-                {/* Quick presets */}
                 <div className="ml-auto flex gap-2 flex-wrap">
                   {['#000000', '#0a0a1f', '#0f1830', '#1a0a2e', '#0a1a0a'].map(c => (
                     <button
                       key={c}
                       onClick={() => save({ bgColor: c })}
                       title={c}
-                      className={`w-7 h-7 rounded-lg border-2 transition-all ${settings.bgColor === c ? 'border-primary scale-110' : 'border-transparent hover:border-white/30'}`}
+                      className={`w-7 h-7 rounded-lg border-2 transition-all ${bgColor.toLowerCase() === c.toLowerCase() ? 'border-primary scale-110' : 'border-transparent hover:border-white/30'}`}
                       style={{ background: c }}
                     />
                   ))}
                 </div>
               </div>
-              {/* 16:9 color preview */}
-              <div className="relative rounded-xl overflow-hidden border border-white/8"
-                style={{ aspectRatio: '16/9', background: settings.bgColor ?? '#000000' }}>
-                <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-                  <span className="text-white/30 text-[10px] uppercase tracking-widest mb-2">Previzualizare fundal</span>
-                  <p className="text-white font-bold leading-snug"
-                    style={{ fontSize: 'clamp(0.8rem, 2.5vw, 1.1rem)', textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}>
-                    Doamne, Tu ești lumina mea,<br />și mântuirea mea.
-                  </p>
-                </div>
-              </div>
             </div>
           )}
 
-          {/* Image picker */}
           {bgType === 'image' && (
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -1146,61 +1196,30 @@ function ProiectiePanel() {
                   </button>
                 )}
               </div>
-
-              {settings.bgImagePath && (
-                <>
-                  {/* 16:9 mini-projection preview */}
-                  <div className="relative rounded-xl overflow-hidden border border-white/8 bg-black"
-                    style={{ aspectRatio: '16/9' }}>
-                    <img
-                      src={`localfile://${settings.bgImagePath.replace(/\\/g, '/')}`}
-                      className="absolute inset-0 w-full h-full object-cover"
-                      style={{ opacity: settings.bgOpacity ?? 1 }}
-                      alt="preview"
-                    />
-                    {/* scrim */}
-                    <div className="absolute inset-0 bg-black/40" />
-                    {/* sample text */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-                      <span className="text-white/30 text-[10px] uppercase tracking-widest mb-2">Previzualizare fundal</span>
-                      <p className="text-white font-bold leading-snug drop-shadow-xl"
-                        style={{ fontSize: 'clamp(0.8rem, 2.5vw, 1.1rem)', textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}>
-                        Doamne, Tu ești lumina mea,<br />și mântuirea mea.
-                      </p>
-                    </div>
-                    {/* remove button */}
-                    <button
-                      onClick={() => save({ bgImagePath: undefined })}
-                      className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white/60 hover:text-white z-10"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+              {settings.bgImagePath ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-white/40 font-medium">Opacitate fundal</label>
+                    <span className="text-xs font-bold text-white/60 tabular-nums">
+                      {Math.round(bgOpacity * 100)}%
+                    </span>
                   </div>
-
-                  {/* Opacity slider */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs text-white/40 font-medium">Opacitate fundal</label>
-                      <span className="text-xs font-bold text-white/60 tabular-nums">
-                        {Math.round((settings.bgOpacity ?? 1) * 100)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range" min={0} max={1} step={0.01}
-                      value={settings.bgOpacity ?? 1}
-                      onChange={e => save({ bgOpacity: Number(e.target.value) })}
-                      className="w-full accent-primary h-1.5 rounded-full cursor-pointer"
-                    />
-                    <div className="flex justify-between text-[10px] text-white/20">
-                      <span>Transparent</span><span>Complet vizibil</span>
-                    </div>
+                  <input
+                    type="range" min={0} max={1} step={0.01}
+                    value={bgOpacity}
+                    onChange={e => save({ bgOpacity: Number(e.target.value) })}
+                    className="w-full accent-primary h-1.5 rounded-full cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-white/20">
+                    <span>Transparent</span><span>Complet vizibil</span>
                   </div>
-                </>
+                </div>
+              ) : (
+                <p className="text-xs text-white/25">Selectează o imagine ca să apară în previzualizare.</p>
               )}
             </div>
           )}
 
-          {/* Video picker */}
           {bgType === 'video' && (
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -1225,48 +1244,18 @@ function ProiectiePanel() {
                   </button>
                 )}
               </div>
-
-              {settings.bgVideoPath && (
+              {settings.bgVideoPath ? (
                 <>
-                  {/* 16:9 mini-projection preview */}
-                  <div className="relative rounded-xl overflow-hidden border border-white/8 bg-black"
-                    style={{ aspectRatio: '16/9' }}>
-                    <video
-                      src={`localfile://${settings.bgVideoPath.replace(/\\/g, '/')}`}
-                      className="absolute inset-0 w-full h-full object-cover"
-                      style={{ opacity: settings.bgOpacity ?? 1 }}
-                      muted autoPlay loop playsInline
-                    />
-                    {/* scrim */}
-                    <div className="absolute inset-0 bg-black/40" />
-                    {/* sample text */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-                      <span className="text-white/30 text-[10px] uppercase tracking-widest mb-2">Previzualizare fundal</span>
-                      <p className="text-white font-bold leading-snug drop-shadow-xl"
-                        style={{ fontSize: 'clamp(0.8rem, 2.5vw, 1.1rem)', textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}>
-                        Doamne, Tu ești lumina mea,<br />și mântuirea mea.
-                      </p>
-                    </div>
-                    {/* remove button */}
-                    <button
-                      onClick={() => save({ bgVideoPath: undefined })}
-                      className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white/60 hover:text-white z-10"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  {/* Opacity slider */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs text-white/40 font-medium">Opacitate fundal</label>
                       <span className="text-xs font-bold text-white/60 tabular-nums">
-                        {Math.round((settings.bgOpacity ?? 1) * 100)}%
+                        {Math.round(bgOpacity * 100)}%
                       </span>
                     </div>
                     <input
                       type="range" min={0} max={1} step={0.01}
-                      value={settings.bgOpacity ?? 1}
+                      value={bgOpacity}
                       onChange={e => save({ bgOpacity: Number(e.target.value) })}
                       className="w-full accent-primary h-1.5 rounded-full cursor-pointer"
                     />
@@ -1276,9 +1265,75 @@ function ProiectiePanel() {
                   </div>
                   <p className="text-[10px] text-white/20">Videoclipul va fi redat în buclă fără sunet.</p>
                 </>
+              ) : (
+                <p className="text-xs text-white/25">Selectează un videoclip ca să apară în previzualizare.</p>
               )}
             </div>
           )}
+        </Section>
+
+        <Section title="Previzualizare">
+          <div
+            className="relative rounded-xl overflow-hidden border border-white/8 bg-black"
+            style={{ aspectRatio: '16/9' }}
+          >
+            {bgType === 'color' && <div className="absolute inset-0" style={{ background: bgColor }} />}
+
+            {bgType === 'image' && settings.bgImagePath && (
+              <>
+                <img
+                  src={`localfile://${settings.bgImagePath.replace(/\\/g, '/')}`}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ opacity: bgOpacity }}
+                  alt="Preview fundal"
+                />
+                <div className="absolute inset-0 bg-black/40" />
+              </>
+            )}
+
+            {bgType === 'video' && settings.bgVideoPath && (
+              <>
+                <video
+                  src={`localfile://${settings.bgVideoPath.replace(/\\/g, '/')}`}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ opacity: bgOpacity }}
+                  muted autoPlay loop playsInline
+                />
+                <div className="absolute inset-0 bg-black/40" />
+              </>
+            )}
+
+            {((bgType === 'image' && !settings.bgImagePath) || (bgType === 'video' && !settings.bgVideoPath)) && (
+              <div className="absolute inset-0 flex items-center justify-center text-center px-4">
+                <p className="text-xs text-white/35">
+                  Selectează {bgType === 'image' ? 'o imagine' : 'un videoclip'} pentru fundal.
+                </p>
+              </div>
+            )}
+
+            <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+              <span
+                className="font-black tabular-nums"
+                style={{
+                  color: hymnNumberColor,
+                  fontSize: 'clamp(1.2rem, 4vw, 2rem)',
+                  textShadow: '0 2px 10px rgba(0,0,0,0.8)',
+                }}
+              >
+                321.
+              </span>
+              <p
+                className="font-bold leading-snug mt-2"
+                style={{
+                  color: contentTextColor,
+                  fontSize: 'clamp(0.85rem, 2.7vw, 1.15rem)',
+                  textShadow: '0 2px 12px rgba(0,0,0,0.9)',
+                }}
+              >
+                Mare e credincioșia Ta,<br />în orice dimineață.
+              </p>
+            </div>
+          </div>
         </Section>
 
       </div>

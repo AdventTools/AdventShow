@@ -47,6 +47,8 @@ export function ProjectionPage() {
   // Resolve background styles
   const bgType = bg.bgType ?? 'color';
   const bgColor = bg.bgColor ?? '#000000';
+  const hymnNumberColor = bg.hymnNumberColor ?? '#9fb3ff';
+  const contentTextColor = bg.contentTextColor ?? '#ffffff';
   const bgStyle: React.CSSProperties =
     bgType === 'color' ? { background: bgColor } : { background: '#000000' };
 
@@ -91,14 +93,14 @@ export function ProjectionPage() {
           style={{ opacity: visible ? 0.3 : 0, transition: 'opacity 0.4s' }}
         >
           <span
-            className="text-white font-black tabular-nums"
-            style={{ fontSize: 'clamp(1rem, 2vw, 1.5rem)' }}
+            className="font-black tabular-nums"
+            style={{ color: hymnNumberColor, fontSize: 'clamp(1rem, 2vw, 1.5rem)' }}
           >
             {data.hymnNumber}.
           </span>
           <span
-            className="text-white font-semibold uppercase tracking-widest truncate"
-            style={{ fontSize: 'clamp(0.75rem, 1.5vw, 1.1rem)', letterSpacing: '0.2em' }}
+            className="font-semibold uppercase tracking-widest truncate"
+            style={{ color: contentTextColor, fontSize: 'clamp(0.75rem, 1.5vw, 1.1rem)', letterSpacing: '0.2em' }}
           >
             {data.hymnTitle}
           </span>
@@ -131,7 +133,7 @@ export function ProjectionPage() {
 
       {/* Main content — title slide or lyrics */}
       <div
-        className="relative z-10 px-16 text-center max-w-5xl"
+        className="relative z-10 px-16 text-center max-w-5xl w-full"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0)' : 'translateY(12px)',
@@ -142,8 +144,9 @@ export function ProjectionPage() {
           /* ── Title slide ── */
           <div className="flex flex-col items-center gap-6">
             <span
-              className="text-primary font-black tabular-nums"
+              className="font-black tabular-nums"
               style={{
+                color: hymnNumberColor,
                 fontSize: 'clamp(3rem, 10vw, 8rem)',
                 lineHeight: 1,
                 textShadow: '0 4px 48px rgba(0,0,0,0.9)',
@@ -152,8 +155,9 @@ export function ProjectionPage() {
               {data.hymnNumber}.
             </span>
             <p
-              className="text-white font-bold uppercase tracking-widest"
+              className="font-bold uppercase tracking-widest"
               style={{
+                color: contentTextColor,
                 fontSize: 'clamp(1.2rem, 3.5vw, 3.5rem)',
                 letterSpacing: '0.12em',
                 textShadow: '0 2px 32px rgba(0,0,0,0.9)',
@@ -170,18 +174,22 @@ export function ProjectionPage() {
           </div>
         ) : section ? (
           /* ── Lyrics slide ── */
-          <p
-            className="text-white leading-relaxed"
-            style={{
-              fontSize: 'clamp(2rem, 4.5vw, 5.5rem)',
-              fontWeight: 700,
-              lineHeight: 1.45,
-              textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
-              whiteSpace: 'pre-line',
-            }}
-          >
-            {section.text}
-          </p>
+          <div className="max-h-[72vh] overflow-y-auto px-3">
+            <p
+              className="leading-relaxed"
+              style={{
+                color: contentTextColor,
+                fontSize: 'clamp(2rem, 4.5vw, 5.5rem)',
+                fontWeight: 700,
+                lineHeight: 1.45,
+                textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
+                whiteSpace: 'pre-line',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {section.text}
+            </p>
+          </div>
         ) : (
           <p className="text-white/10 text-4xl font-thin">Se încarcă...</p>
         )}
