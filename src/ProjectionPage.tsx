@@ -10,6 +10,7 @@ export function ProjectionPage() {
   const [urgentTicker, setUrgentTicker] = useState<UrgentTickerData | null>(null);
   const [visible, setVisible] = useState(false);
   const [bg, setBg] = useState<AppSettings>({});
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   // Load background settings once on mount
   useEffect(() => {
@@ -49,6 +50,12 @@ export function ProjectionPage() {
       } else if (e.key === 'Escape') {
         e.preventDefault();
         window.electron.projection.sendKeyRequest('close');
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setZoomLevel(z => Math.min(z + 0.1, 2.5));
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setZoomLevel(z => Math.max(z - 0.1, 0.5));
       }
     };
     window.addEventListener('keydown', handler);
@@ -56,6 +63,21 @@ export function ProjectionPage() {
   }, []);
 
   const section: HymnSection | undefined = data?.sections[data.currentIndex];
+
+  // Dynamic font size calculation based on lines and character count
+  let dynamicFontSize = `calc(clamp(2rem, 4.5vw, 5.5rem) * ${zoomLevel})`;
+  if (section) {
+    const lines = section.text.split('\n');
+    const lineCount = Math.max(1, lines.length);
+    const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
+    
+    // Character width is roughly 0.55em. Max width ~ 90vw
+    const maxVw = Math.min(8, 140 / maxLineCharCount).toFixed(2);
+    // Line height is 1.45. Max height ~ 70vh
+    const maxVh = Math.min(12, 65 / (lineCount * 1.45)).toFixed(2);
+    
+    dynamicFontSize = `calc(clamp(1.5rem, min(${maxVw}vw, ${maxVh}vh), 6.5rem) * ${zoomLevel})`;
+  }
 
   // Resolve background styles
   const bgType = bg.bgType ?? 'color';
@@ -163,7 +185,7 @@ export function ProjectionPage() {
               className="font-black tabular-nums"
               style={{
                 color: hymnNumberColor,
-                fontSize: 'clamp(3rem, 10vw, 8rem)',
+                fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${zoomLevel})`,
                 lineHeight: 1,
                 textShadow: '0 4px 48px rgba(0,0,0,0.9)',
               }}
@@ -174,7 +196,7 @@ export function ProjectionPage() {
               className="font-bold uppercase tracking-widest"
               style={{
                 color: contentTextColor,
-                fontSize: 'clamp(1.2rem, 3.5vw, 3.5rem)',
+                fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${zoomLevel})`,
                 letterSpacing: '0.12em',
                 textShadow: '0 2px 32px rgba(0,0,0,0.9)',
               }}
@@ -195,7 +217,7 @@ export function ProjectionPage() {
               className="leading-relaxed"
               style={{
                 color: contentTextColor,
-                fontSize: 'clamp(2rem, 4.5vw, 5.5rem)',
+                fontSize: dynamicFontSize,
                 fontWeight: 700,
                 lineHeight: 1.45,
                 textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
