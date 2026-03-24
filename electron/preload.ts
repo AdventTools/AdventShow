@@ -82,12 +82,23 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber),
     navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string) =>
       ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber),
+    showUrgentTicker: (payload: {
+      message: string;
+      backgroundColor: string;
+      textColor: string;
+      fontSize: number;
+      speed: number;
+    }) => ipcRenderer.invoke('projection:show-urgent-ticker', payload),
+    hideUrgentTicker: () => ipcRenderer.invoke('projection:hide-urgent-ticker'),
     close: () => ipcRenderer.invoke('projection:close'),
     sendKeyRequest: (action: 'prev' | 'next' | 'close') =>
       ipcRenderer.invoke('projection:key-request', action),
     onSlide: (cb: (data: any) => void) =>
       ipcRenderer.on('projection:slide', (_e, data) => cb(data)),
     offSlide: () => ipcRenderer.removeAllListeners('projection:slide'),
+    onUrgentTicker: (cb: (data: any) => void) =>
+      ipcRenderer.on('projection:urgent-ticker', (_e, data) => cb(data)),
+    offUrgentTicker: () => ipcRenderer.removeAllListeners('projection:urgent-ticker'),
     onControllerSync: (cb: (data: { currentIndex: number }) => void) =>
       ipcRenderer.on('projection:controller-sync', (_e, data) => cb(data)),
     offControllerSync: () => ipcRenderer.removeAllListeners('projection:controller-sync'),

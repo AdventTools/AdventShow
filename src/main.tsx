@@ -7,6 +7,11 @@ import './index.css'
 // Check if we're in projection mode (opened by Electron's createProjectionWindow)
 const isProjection = new URLSearchParams(window.location.search).get('mode') === 'projection'
 
+if (isProjection) {
+  document.documentElement.classList.add('projection-mode')
+  document.body.classList.add('projection-mode')
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     {isProjection ? <ProjectionPage /> : <App />}

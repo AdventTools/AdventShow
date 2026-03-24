@@ -58,6 +58,14 @@ export interface ProjectionSlideData {
   hymnNumber: string;
 }
 
+export interface UrgentTickerData {
+  message: string;
+  backgroundColor: string;
+  textColor: string;
+  fontSize: number;
+  speed: number; // px/sec
+}
+
 export interface DisplayInfo {
   id: number;
   label: string;
@@ -129,10 +137,14 @@ export interface IElectronAPI {
   projection: {
     open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string) => Promise<void>;
     navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string) => Promise<void>;
+    showUrgentTicker: (payload: UrgentTickerData) => Promise<void>;
+    hideUrgentTicker: () => Promise<void>;
     close: () => Promise<void>;
     sendKeyRequest: (action: 'prev' | 'next' | 'close') => Promise<void>;
     onSlide: (cb: (data: ProjectionSlideData) => void) => void;
     offSlide: () => void;
+    onUrgentTicker: (cb: (data: UrgentTickerData | null) => void) => void;
+    offUrgentTicker: () => void;
     onControllerSync: (cb: (data: { currentIndex: number }) => void) => void;
     offControllerSync: () => void;
     onClosed: (cb: () => void) => void;

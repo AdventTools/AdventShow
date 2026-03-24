@@ -77,6 +77,15 @@ interface ProjState {
 }
 let projState: ProjState | null = null
 
+interface UrgentTickerPayload {
+  message: string
+  backgroundColor: string
+  textColor: string
+  fontSize: number
+  speed: number
+}
+let urgentTicker: UrgentTickerPayload | null = null
+
 function sendSlideToProjection(index: number) {
   if (!projState || !projectionWin) return
   projState.currentIndex = index
@@ -87,6 +96,11 @@ function sendSlideToProjection(index: number) {
     hymnNumber: projState.hymnNumber,
   })
   win?.webContents.send('projection:controller-sync', { currentIndex: index })
+}
+
+function sendUrgentTickerToProjection(payload: UrgentTickerPayload | null) {
+  if (!projectionWin) return
+  projectionWin.webContents.send('projection:urgent-ticker', payload)
 }
 
 // ── Projection window ─────────────────────────────────────────────────────────
@@ -109,7 +123,8 @@ function createProjectionWindow() {
     x, y, width, height,
     fullscreen: true,
     frame: false,
-    backgroundColor: '#000000',
+    transparent: true,
+    backgroundColor: '#00000000',
     show: false,
     alwaysOnTop: targetDisplay.id === primary.id,
     webPreferences: {
@@ -133,6 +148,7 @@ function createProjectionWindow() {
   projectionWin.on('closed', () => {
     projectionWin = null
     projState = null
+    urgentTicker = null
     win?.webContents.send('projection:closed')
   })
 
@@ -357,11 +373,50 @@ app.whenReady().then(() => {
     } else {
       createProjectionWindow()
     }
-    const sendInitial = () => sendSlideToProjection(-1)
+    const sendInitial = () => {
+      sendUrgentTickerToProjection(urgentTicker)
+      sendSlideToProjection(-1)
+    }
     if (projectionWin?.webContents.isLoading()) {
       projectionWin.webContents.once('did-finish-load', sendInitial)
     } else {
       setTimeout(sendInitial, 300)
+    }
+  })
+
+  ipcMain.handle('projection:show-urgent-ticker', (_e, payload: UrgentTickerPayload) => {
+    const message = payload.message.trim()
+    if (!message) return
+
+    urgentTicker = {
+      message,
+      backgroundColor: payload.backgroundColor,
+      textColor: payload.textColor,
+      fontSize: payload.fontSize,
+      speed: payload.speed,
+    }
+
+    if (projectionWin) {
+      projectionWin.focus()
+    } else {
+      createProjectionWindow()
+    }
+
+    const sendUrgent = () => sendUrgentTickerToProjection(urgentTicker)
+    if (projectionWin?.webContents.isLoading()) {
+      projectionWin.webContents.once('did-finish-load', sendUrgent)
+    } else {
+      setTimeout(sendUrgent, 120)
+    }
+  })
+
+  ipcMain.handle('projection:hide-urgent-ticker', () => {
+    urgentTicker = null
+    if (!projectionWin) return
+    sendUrgentTickerToProjection(null)
+    if (!projState) {
+      projectionWin.close()
+      projectionWin = null
     }
   })
 
@@ -384,6 +439,7 @@ app.whenReady().then(() => {
     projectionWin?.close()
     projectionWin = null
     projState = null
+    urgentTicker = null
   })
 
   createWindow()

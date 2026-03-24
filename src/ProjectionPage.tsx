@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { AppSettings, HymnSection, ProjectionSlideData } from './vite-env';
+import { useEffect, useRef, useState } from 'react';
+import { AppSettings, HymnSection, ProjectionSlideData, UrgentTickerData } from './vite-env';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Projection Page — renders in the fullscreen secondary window
@@ -7,6 +7,7 @@ import { AppSettings, HymnSection, ProjectionSlideData } from './vite-env';
 
 export function ProjectionPage() {
   const [data, setData] = useState<ProjectionSlideData | null>(null);
+  const [urgentTicker, setUrgentTicker] = useState<UrgentTickerData | null>(null);
   const [visible, setVisible] = useState(false);
   const [bg, setBg] = useState<AppSettings>({});
 
@@ -19,9 +20,21 @@ export function ProjectionPage() {
   useEffect(() => {
     window.electron.projection.onSlide((incoming) => {
       setData(incoming);
+      setUrgentTicker(null);
       setVisible(true);
     });
     return () => { window.electron.projection.offSlide(); };
+  }, []);
+
+  useEffect(() => {
+    window.electron.projection.onUrgentTicker((incoming) => {
+      setUrgentTicker(incoming);
+      if (incoming) {
+        setData(null);
+        setVisible(true);
+      }
+    });
+    return () => { window.electron.projection.offUrgentTicker(); };
   }, []);
 
   // Keyboard control: arrows navigate, Escape closes — all via main process
@@ -55,11 +68,14 @@ export function ProjectionPage() {
   return (
     <div
       className="fixed inset-0 flex flex-col items-center justify-center select-none overflow-hidden"
-      style={{ fontFamily: "'Inter', 'Segoe UI', sans-serif", ...bgStyle }}
+      style={{
+        fontFamily: "'Inter', 'Segoe UI', sans-serif",
+        ...(data ? bgStyle : urgentTicker ? { background: 'transparent' } : bgStyle),
+      }}
     >
       {/* ── Background layers ── */}
 
-      {bgType === 'image' && bg.bgImagePath && (
+      {data && bgType === 'image' && bg.bgImagePath && (
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{
@@ -72,7 +88,7 @@ export function ProjectionPage() {
         </div>
       )}
 
-      {bgType === 'video' && bg.bgVideoPath && (
+      {data && bgType === 'video' && bg.bgVideoPath && (
         <>
           <video
             src={`file://${bg.bgVideoPath.replace(/\\/g, '/')}`}
@@ -133,7 +149,7 @@ export function ProjectionPage() {
 
       {/* Main content — title slide or lyrics */}
       <div
-        className="relative z-10 px-16 text-center max-w-5xl w-full"
+        className="relative z-10 px-16 text-center w-full max-w-full"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateY(0)' : 'translateY(12px)',
@@ -190,7 +206,7 @@ export function ProjectionPage() {
               {section.text}
             </p>
           </div>
-        ) : (
+        ) : urgentTicker ? null : (
           <p className="text-white/10 text-4xl font-thin">Se încarcă...</p>
         )}
       </div>
@@ -216,8 +232,65 @@ export function ProjectionPage() {
         </div>
       )}
 
+      {urgentTicker && <UrgentTickerOverlay ticker={urgentTicker} />}
+
       {/* Keyboard hint — fades in, then out after a few seconds */}
-      <KeyboardHint />
+      {!urgentTicker && <KeyboardHint />}
+    </div>
+  );
+}
+
+function UrgentTickerOverlay({ ticker }: { ticker: UrgentTickerData }) {
+  const textRef = useRef<HTMLDivElement>(null);
+  const [durationSec, setDurationSec] = useState(20);
+
+  useEffect(() => {
+    const updateDuration = () => {
+      const textWidth = textRef.current?.scrollWidth ?? 0;
+      const viewportWidth = window.innerWidth;
+      const speed = Math.max(20, ticker.speed);
+      const dist = viewportWidth + textWidth;
+      setDurationSec(Math.max(3, dist / speed));
+    };
+
+    updateDuration();
+    window.addEventListener('resize', updateDuration);
+    return () => window.removeEventListener('resize', updateDuration);
+  }, [ticker.message, ticker.fontSize, ticker.speed]);
+
+  const verticalPadding = Math.max(6, Math.round(ticker.fontSize * 0.3));
+
+  return (
+    <div
+      className="absolute inset-0 select-none overflow-hidden pointer-events-none z-30"
+    >
+      <div
+        className="absolute bottom-0 left-0 right-0 overflow-hidden"
+        style={{
+          background: ticker.backgroundColor,
+          paddingTop: `${verticalPadding}px`,
+          paddingBottom: `${verticalPadding}px`,
+        }}
+      >
+        <div className="relative overflow-hidden w-full">
+          <div
+            ref={textRef}
+            className="inline-block whitespace-nowrap"
+            style={{
+              color: ticker.textColor,
+              fontSize: `${ticker.fontSize}px`,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              animationName: 'urgent-ticker-scroll',
+              animationDuration: `${durationSec}s`,
+              animationTimingFunction: 'linear',
+              animationIterationCount: 'infinite',
+            }}
+          >
+            {ticker.message}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

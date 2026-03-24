@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Check,
   FolderOpen,
   Monitor,
@@ -11,9 +12,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminPage } from './AdminPage';
 import './App.css';
 import { SearchPage } from './SearchPage';
+import { UrgentMessagePage } from './UrgentMessagePage';
 import { Category } from './vite-env';
 
-type Page = 'search' | 'admin';
+type Page = 'search' | 'admin' | 'urgent';
 
 function App() {
   const [page, setPage] = useState<Page>('search');
@@ -63,22 +65,36 @@ function App() {
 
         {/* Search input — only on search page */}
         {page === 'search' && (
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-white/30 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') searchEnterRef.current(); }}
-              placeholder="Caută imn..."
-              className="bg-white/5 border border-white/10 rounded-lg pl-8 pr-8 py-1.5 text-sm text-white/80 placeholder-white/20 outline-none focus:border-primary/50 transition-all w-56"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
-                <X className="w-3 h-3" />
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-white/30 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') searchEnterRef.current(); }}
+                placeholder="Caută imn..."
+                className="bg-white/5 border border-white/10 rounded-lg pl-8 pr-8 py-1.5 text-sm text-white/80 placeholder-white/20 outline-none focus:border-primary/50 transition-all w-56"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <button
+              onClick={() => setPage('urgent')}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-300 transition-all text-xs font-semibold"
+              title="Anunțuri urgente"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Anunț urgent
+            </button>
           </div>
+        )}
+
+        {page === 'urgent' && (
+          <span className="text-xs text-white/50 uppercase tracking-widest font-semibold">Anunțuri Urgente</span>
         )}
 
         {/* Admin tab buttons — only on admin page */}
@@ -105,10 +121,10 @@ function App() {
 
         {/* Add button / Admin toggle */}
         <div className="flex items-center gap-2 ml-2">
-          {page === 'admin' ? (
+          {(page === 'admin' || page === 'urgent') ? (
             <button
               onClick={() => setPage('search')}
-              title="Închide Admin"
+              title="Înapoi la Căutare"
               className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-all text-xs font-semibold"
             >
               <X className="w-3.5 h-3.5" />
@@ -130,7 +146,8 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* Left sidebar — categories */}
-        <aside className="w-48 flex flex-col bg-[#151822] border-r border-white/5 flex-shrink-0">
+        {page !== 'urgent' && (
+          <aside className="w-48 flex flex-col bg-[#151822] border-r border-white/5 flex-shrink-0">
           <div className="flex items-center justify-between px-4 pt-4 pb-2">
             <span className="text-[10px] font-bold text-white/25 tracking-widest uppercase">Categorii</span>
             <button
@@ -195,7 +212,8 @@ function App() {
           <div className="px-4 py-3 text-[10px] text-white/15 border-t border-white/5">
             v{version}
           </div>
-        </aside>
+          </aside>
+        )}
 
         {/* Main content */}
         <main className="flex-1 overflow-hidden">
@@ -215,6 +233,9 @@ function App() {
               activeCategoryId={activeCategoryId}
               onCategoriesChanged={loadCategories}
             />
+          )}
+          {page === 'urgent' && (
+            <UrgentMessagePage />
           )}
         </main>
       </div>
