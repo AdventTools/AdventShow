@@ -97,8 +97,8 @@ export interface IElectronAPI {
     searchHymns: (query: string, categoryId?: number) => Promise<Hymn[]>;
     getHymnWithSections: (id: number) => Promise<HymnWithSections | null>;
     createHymnWithSections: (payload: CreateHymnInput) => Promise<number>;
-    importPPTX: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
-    importPPTXFiles: (filePaths: string[], categoryId?: number) => Promise<ImportResult>;
+    importPresentations: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
+    importPresentationFiles: (filePaths: string[], categoryId?: number) => Promise<ImportResult>;
     clearAll: () => Promise<void>;
     getCategories: () => Promise<Category[]>;
     createCategory: (name: string) => Promise<Category>;
@@ -121,7 +121,7 @@ export interface IElectronAPI {
   };
   dialog: {
     selectFolder: () => Promise<string | undefined>;
-    selectPPTXFiles: () => Promise<string[] | undefined>;
+    selectPresentationFiles: () => Promise<string[] | undefined>;
     saveFile: (defaultName: string) => Promise<string | undefined>;
     saveJsonFile: (defaultName: string) => Promise<string | undefined>;
     selectJsonFile: () => Promise<string | undefined>;

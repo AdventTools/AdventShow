@@ -24,7 +24,7 @@ import {
   updateHymnCategory,
   updateSection,
 } from './db'
-import { importPPTXDirectory, importPPTXFiles } from './import'
+import { importPresentationDirectory, importPresentationFiles } from './import'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -291,14 +291,14 @@ app.whenReady().then(() => {
     (_e, sections: { id: number; order_index: number }[]) => reorderSections(sections))
 
   // ── Import ────────────────────────────────────────────────────────────────
-  ipcMain.handle('db:import-pptx', async (_e, dirPath: string, categoryId?: number) => {
-    try { return await importPPTXDirectory(dirPath, categoryId) }
+  ipcMain.handle('db:import-presentations', async (_e, dirPath: string, categoryId?: number) => {
+    try { return await importPresentationDirectory(dirPath, categoryId) }
     catch (err: any) {
       return { success: 0, failed: 0, errors: [err?.message ?? 'Unknown error'] }
     }
   })
-  ipcMain.handle('db:import-pptx-files', async (_e, filePaths: string[], categoryId?: number) => {
-    try { return await importPPTXFiles(filePaths, categoryId) }
+  ipcMain.handle('db:import-presentation-files', async (_e, filePaths: string[], categoryId?: number) => {
+    try { return await importPresentationFiles(filePaths, categoryId) }
     catch (err: any) {
       return { success: 0, failed: 0, errors: [err?.message ?? 'Unknown error'] }
     }
@@ -311,10 +311,10 @@ app.whenReady().then(() => {
     return result.filePaths[0]
   })
 
-  ipcMain.handle('dialog:select-pptx-files', async () => {
+  ipcMain.handle('dialog:select-presentation-files', async () => {
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'PowerPoint', extensions: ['pptx'] }],
+      filters: [{ name: 'PowerPoint', extensions: ['ppt', 'pptx'] }],
     })
     if (result.canceled) return undefined
     return result.filePaths

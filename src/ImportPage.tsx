@@ -21,7 +21,7 @@ export function ImportPage() {
     if (!folderPath) return;
     setStatus('importing');
     try {
-      const res = await window.electron.db.importPPTX(folderPath);
+      const res = await window.electron.db.importPresentations(folderPath);
       setResult(res);
       setStatus('completed');
     } catch (err) {
@@ -37,7 +37,7 @@ export function ImportPage() {
       <div className="bg-white p-6 rounded-lg shadow-md">
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select PPTX Folder
+            Select PowerPoint Folder
           </label>
           <div className="flex gap-4">
             <button

@@ -346,7 +346,7 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
     setSelectedFiles([]);
   };
   const pickFiles = async () => {
-    const files = await window.electron.dialog.selectPPTXFiles();
+    const files = await window.electron.dialog.selectPresentationFiles();
     if (!files || files.length === 0) return;
     setSelectedFiles(files);
     setFolderPath('');
@@ -357,8 +357,8 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
     setStatus('importing'); setResult(null);
     try {
       const res = selectedFiles.length > 0
-        ? await window.electron.db.importPPTXFiles(selectedFiles, categoryId)
-        : await window.electron.db.importPPTX(folderPath, categoryId);
+        ? await window.electron.db.importPresentationFiles(selectedFiles, categoryId)
+        : await window.electron.db.importPresentations(folderPath, categoryId);
       setResult(res); setStatus('done'); onImportDone();
     } catch { setStatus('error'); }
   };
@@ -534,8 +534,8 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
     <div className="h-full w-full overflow-y-auto px-8 py-6 space-y-8">
       <section className="space-y-4">
         <div>
-          <h2 className="text-sm font-bold text-white/80">Import fișiere PPTX</h2>
-          <p className="text-xs text-white/30 mt-1">Selectează un folder sau unul/mai multe fișiere .pptx — fiecare slide devine o secțiune.</p>
+          <h2 className="text-sm font-bold text-white/80">Import fișiere PowerPoint</h2>
+          <p className="text-xs text-white/30 mt-1">Selectează un folder sau unul/mai multe fișiere .ppt/.pptx. Fiecare slide devine o secțiune, iar fișierele legacy `.ppt` sunt citite direct în aplicație.</p>
         </div>
 
         {categories.length > 0 && (
@@ -596,7 +596,7 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
             )}
             {!hasSource && (
               <>
-                <div className="text-sm text-white/40">Selectează folderul sau fișierele PPTX</div>
+                <div className="text-sm text-white/40">Selectează folderul sau fișierele PowerPoint</div>
                 <div className="text-xs text-white/20 mt-0.5">Click pentru a naviga</div>
               </>
             )}
@@ -612,7 +612,7 @@ function ImportPanel({ categories, onImportDone }: { categories: Category[]; onI
         {status === 'importing' && (
           <div className="flex flex-col items-center py-8 gap-3">
             <span className="loading loading-spinner text-primary loading-lg" />
-            <p className="text-sm text-white/30">Se procesează fișierele PPTX...</p>
+            <p className="text-sm text-white/30">Se procesează fișierele PowerPoint...</p>
           </div>
         )}
         {status === 'done' && result && (
@@ -1040,7 +1040,7 @@ function ProiectiePanel() {
   const bgOpacity = settings.bgOpacity ?? 1;
 
   return (
-    <div className="flex-1 overflow-y-auto p-8">
+    <div className="h-full overflow-y-auto p-8">
       <div className="max-w-7xl">
 
         {/* Saved indicator */}
