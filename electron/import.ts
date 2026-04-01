@@ -1,6 +1,7 @@
-import fs from 'fs/promises';
+import fs from 'node:fs/promises';
 import JSZip from 'jszip';
-import path from 'path';
+import path from 'node:path';
+import * as CFB from 'cfb';
 import { parseStringPromise } from 'xml2js';
 import { bulkInsertHymns, HymnImportData } from './db';
 
@@ -12,6 +13,307 @@ interface Shape {
   paragraphs: string[];  // one entry per <a:p>, joined runs
   area: number;          // cx * cy in EMU² — used to pick the "largest" shape
   yOffset: number;       // top-left Y in EMU
+}
+
+interface PptRecordHeader {
+  recVer: number;
+  recInstance: number;
+  recType: number;
+  recLen: number;
+  contentStart: number;
+  contentEnd: number;
+}
+
+interface LegacyPptTextBlock {
+  textType: number;
+  text: string;
+}
+
+interface LegacyPptSlide {
+  textBlocks: LegacyPptTextBlock[];
+}
+
+const SUPPORTED_POWERPOINT_EXTENSIONS = new Set(['.ppt', '.pptx']);
+const PPT_RECORD_TYPE_SLIDE_PERSIST_ATOM = 1011;
+const PPT_RECORD_TYPE_TEXT_HEADER_ATOM = 3999;
+const PPT_RECORD_TYPE_TEXT_CHARS_ATOM = 4000;
+const PPT_RECORD_TYPE_TEXT_BYTES_ATOM = 4008;
+const PPT_RECORD_TYPE_SLIDE_LIST_WITH_TEXT = 4080;
+const PPT_TEXT_TYPE_TITLE = 0;
+const PPT_TEXT_TYPE_BODY = 1;
+const PPT_TEXT_TYPE_CENTER_BODY = 5;
+const PPT_TEXT_TYPE_CENTER_TITLE = 6;
+const PPT_TEXT_TYPE_HALF_BODY = 7;
+const PPT_TEXT_TYPE_QUARTER_BODY = 8;
+const LEGACY_PPT_TITLE_TYPES = new Set([PPT_TEXT_TYPE_TITLE, PPT_TEXT_TYPE_CENTER_TITLE]);
+const LEGACY_PPT_BODY_TYPES = new Set([
+  PPT_TEXT_TYPE_BODY,
+  PPT_TEXT_TYPE_CENTER_BODY,
+  PPT_TEXT_TYPE_HALF_BODY,
+  PPT_TEXT_TYPE_QUARTER_BODY,
+]);
+
+function isPowerPointFile(filePath: string): boolean {
+  return SUPPORTED_POWERPOINT_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+function getPowerPointFiles(filePaths: string[]): string[] {
+  return filePaths.filter(isPowerPointFile);
+}
+
+function readPptRecordHeader(data: Buffer, offset: number): PptRecordHeader | null {
+  if (offset + 8 > data.length) return null;
+  const rec = data.readUInt16LE(offset);
+  const recVer = rec & 0x000f;
+  const recInstance = rec >>> 4;
+  const recType = data.readUInt16LE(offset + 2);
+  const recLen = data.readUInt32LE(offset + 4);
+  const contentStart = offset + 8;
+  const contentEnd = contentStart + recLen;
+  if (contentEnd > data.length) return null;
+  return { recVer, recInstance, recType, recLen, contentStart, contentEnd };
+}
+
+function walkPptRecords(
+  data: Buffer,
+  start: number,
+  end: number,
+  visitor: (record: PptRecordHeader) => void,
+) {
+  let offset = start;
+  while (offset + 8 <= end) {
+    const record = readPptRecordHeader(data, offset);
+    if (!record || record.contentEnd > end) break;
+    visitor(record);
+    if (record.recVer === 0x0f) {
+      walkPptRecords(data, record.contentStart, record.contentEnd, visitor);
+    }
+    offset = record.contentEnd;
+  }
+}
+
+function normalizeLegacyPptText(text: string): string {
+  return text
+    .replace(/\u0000/g, '')
+    .replace(/\u000b/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => normalize(line))
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function isLikelyFooterText(text: string): boolean {
+  return FOOTER_PATTERNS.some(pattern => pattern.test(text));
+}
+
+function dedupeSections(sections: { type: 'strofa' | 'refren'; text: string }[]) {
+  const deduped: typeof sections = [];
+  for (const section of sections) {
+    const prev = deduped[deduped.length - 1];
+    if (prev && prev.type === section.type && prev.text.trim() === section.text.trim()) continue;
+    deduped.push(section);
+  }
+  return deduped;
+}
+
+function buildImportData(
+  info: { number: string; title: string },
+  sections: { type: 'strofa' | 'refren'; text: string }[],
+  categoryId?: number,
+): HymnImportData {
+  if (!info.number) {
+    throw new Error('Nu am putut determina numărul imnului din slide-ul de titlu sau din numele fișierului.');
+  }
+  if (!info.title) {
+    throw new Error('Nu am putut determina titlul imnului.');
+  }
+  if (sections.length === 0) {
+    throw new Error('Nu am putut extrage secțiuni din slide-urile prezentării.');
+  }
+
+  const allText = sections.map(section => section.text).join(' ');
+  const searchText = `${info.number} ${info.title} ${allText}`
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  return {
+    number: info.number,
+    title: info.title,
+    searchText,
+    categoryId,
+    sections,
+  };
+}
+
+function getLegacyPptSlideListContent(data: Buffer): Buffer | null {
+  let match: Buffer | null = null;
+  walkPptRecords(data, 0, data.length, record => {
+    if (record.recType === PPT_RECORD_TYPE_SLIDE_LIST_WITH_TEXT && record.recInstance === 0 && record.recVer === 0x0f) {
+      match = data.subarray(record.contentStart, record.contentEnd);
+    }
+  });
+  return match;
+}
+
+function extractLegacyPptSlides(data: Buffer): LegacyPptSlide[] {
+  const slideListContent = getLegacyPptSlideListContent(data);
+  if (!slideListContent) {
+    throw new Error('Nu am găsit lista de slide-uri în fișierul .ppt.');
+  }
+
+  const slides: LegacyPptSlide[] = [];
+  let currentSlide: LegacyPptSlide | null = null;
+  let currentTextType: number | null = null;
+  let currentTextChunks: string[] = [];
+
+  const flushCurrentText = () => {
+    if (!currentSlide || currentTextType == null || currentTextChunks.length === 0) {
+      currentTextChunks = [];
+      return;
+    }
+
+    const text = normalizeLegacyPptText(currentTextChunks.join(''));
+    if (text) {
+      currentSlide.textBlocks.push({ textType: currentTextType, text });
+    }
+    currentTextChunks = [];
+  };
+
+  let offset = 0;
+  while (offset + 8 <= slideListContent.length) {
+    const record = readPptRecordHeader(slideListContent, offset);
+    if (!record) break;
+
+    switch (record.recType) {
+      case PPT_RECORD_TYPE_SLIDE_PERSIST_ATOM:
+        flushCurrentText();
+        currentTextType = null;
+        currentSlide = { textBlocks: [] };
+        slides.push(currentSlide);
+        break;
+      case PPT_RECORD_TYPE_TEXT_HEADER_ATOM:
+        flushCurrentText();
+        currentTextType = currentSlide && record.recLen >= 4
+          ? slideListContent.readUInt32LE(record.contentStart)
+          : null;
+        break;
+      case PPT_RECORD_TYPE_TEXT_CHARS_ATOM:
+        if (currentSlide && currentTextType != null) {
+          currentTextChunks.push(slideListContent.toString('utf16le', record.contentStart, record.contentEnd));
+        }
+        break;
+      case PPT_RECORD_TYPE_TEXT_BYTES_ATOM:
+        if (currentSlide && currentTextType != null) {
+          currentTextChunks.push(slideListContent.toString('latin1', record.contentStart, record.contentEnd));
+        }
+        break;
+      default:
+        break;
+    }
+
+    offset = record.contentEnd;
+  }
+
+  flushCurrentText();
+
+  return slides.filter(slide =>
+    slide.textBlocks.some(block => block.text.length > 0 && !isLikelyFooterText(block.text)),
+  );
+}
+
+function inferTitleFromLegacyPpt(slide: LegacyPptSlide, file: string) {
+  const blocks = slide.textBlocks
+    .map(block => ({ ...block, text: normalizeLegacyPptText(block.text) }))
+    .filter(block => block.text && !isLikelyFooterText(block.text));
+
+  let number = '';
+  let title = '';
+
+  for (const block of blocks) {
+    if (/imnul/i.test(block.text)) {
+      const digits = block.text.match(/\d+/g);
+      if (digits) number = digits.join('');
+      continue;
+    }
+
+    if (!number && /\d/.test(block.text) && block.text.length <= 24) {
+      const digits = block.text.match(/\d+/g);
+      if (digits) number = digits.join('');
+    }
+  }
+
+  const preferredTitleBlocks = blocks.filter(block => LEGACY_PPT_TITLE_TYPES.has(block.textType));
+  const titleCandidates = (preferredTitleBlocks.length > 0 ? preferredTitleBlocks : blocks)
+    .map(block => block.text)
+    .filter(text => !/^imnul\b/i.test(text) && !/^\d+$/.test(text));
+
+  for (const candidate of titleCandidates) {
+    if (candidate.length > title.length) title = candidate;
+  }
+
+  if (!number) {
+    const match = file.match(/^(\d+)/);
+    if (match) number = match[1];
+  }
+  if (!title) {
+    title = path.basename(file, path.extname(file));
+  }
+
+  return { number, title };
+}
+
+function getLegacyPptLinesForSlide(slide: LegacyPptSlide): string[] {
+  const blocks = slide.textBlocks
+    .map(block => ({ ...block, text: normalizeLegacyPptText(block.text) }))
+    .filter(block => block.text && !isLikelyFooterText(block.text));
+
+  const preferred = blocks.filter(block => LEGACY_PPT_BODY_TYPES.has(block.textType));
+  const candidates = preferred.length > 0 ? preferred : blocks;
+  const lines: string[] = [];
+
+  for (const block of candidates) {
+    for (const rawLine of block.text.split('\n')) {
+      const line = normalize(rawLine);
+      if (line) lines.push(line);
+    }
+  }
+
+  return lines;
+}
+
+async function extractLegacyPptImportData(
+  pptPath: string,
+  sourcePath: string,
+  categoryId?: number,
+): Promise<HymnImportData> {
+  const file = path.basename(sourcePath);
+  const buffer = await fs.readFile(pptPath);
+  const cfb = CFB.read(buffer, { type: 'buffer' });
+  const documentStream = CFB.find(cfb, 'PowerPoint Document');
+  if (!documentStream?.content) {
+    throw new Error('Nu am găsit fluxul "PowerPoint Document" în fișierul .ppt.');
+  }
+
+  const documentBuffer = Buffer.from(documentStream.content);
+  const slides = extractLegacyPptSlides(documentBuffer);
+  if (slides.length === 0) {
+    throw new Error('Nu am găsit slide-uri cu text în fișierul .ppt.');
+  }
+
+  const info = inferTitleFromLegacyPpt(slides[0], file);
+  const sections: { type: 'strofa' | 'refren'; text: string }[] = [];
+
+  for (let i = 1; i < slides.length; i++) {
+    const lines = getLegacyPptLinesForSlide(slides[i]);
+    if (lines.length === 0) continue;
+    sections.push(...processLines(lines));
+  }
+
+  return buildImportData(info, dedupeSections(sections), categoryId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,7 +503,65 @@ function processLines(lines: string[]): { type: 'strofa' | 'refren'; text: strin
 
 
 
-export async function importPPTXFiles(
+async function extractPptxImportData(
+  pptxPath: string,
+  sourcePath: string,
+  categoryId?: number,
+): Promise<HymnImportData> {
+  const file = path.basename(sourcePath);
+  const fileBuffer = await fs.readFile(pptxPath);
+  const zip = await JSZip.loadAsync(fileBuffer);
+
+  const slideFiles = Object.keys(zip.files)
+    .filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/slide(\d+)/)?.[1] ?? '0');
+      const nb = parseInt(b.match(/slide(\d+)/)?.[1] ?? '0');
+      return na - nb;
+    });
+
+  if (slideFiles.length === 0) {
+    throw new Error('Nu am găsit slide-uri în prezentare.');
+  }
+
+  const slide1Shapes = await parseShapes(zip, slideFiles[0]);
+  const contentShapes1 = slide1Shapes.filter(s => !isFooter(s));
+  const info = extractTitle(contentShapes1);
+
+  if (!info.number) {
+    const m = file.match(/^(\d+)/);
+    if (m) info.number = m[1];
+  }
+  if (!info.title) {
+    info.title = path.basename(file, path.extname(file));
+  }
+
+  const sections: { type: 'strofa' | 'refren'; text: string }[] = [];
+
+  for (let i = 1; i < slideFiles.length; i++) {
+    const shapes = await parseShapes(zip, slideFiles[i]);
+    const contentShapes = shapes
+      .filter(s => !isFooter(s))
+      .sort((a, b) => a.yOffset - b.yOffset);
+
+    if (contentShapes.length === 0) continue;
+
+    const allLines: string[] = [];
+    for (const shape of contentShapes) {
+      for (const paragraph of shape.paragraphs) {
+        const line = normalize(paragraph);
+        if (line.length > 0) allLines.push(line);
+      }
+    }
+
+    if (allLines.length === 0) continue;
+    sections.push(...processLines(allLines));
+  }
+
+  return buildImportData(info, dedupeSections(sections), categoryId);
+}
+
+export async function importPresentationFiles(
   filePaths: string[],
   categoryId?: number
 ): Promise<{ success: number; failed: number; errors: string[] }> {
@@ -209,102 +569,31 @@ export async function importPPTXFiles(
   let failed = 0;
   const errors: string[] = [];
   const batch: HymnImportData[] = [];
-  const pptxFiles = filePaths.filter(p => p.toLowerCase().endsWith('.pptx'));
+  const presentationFiles = getPowerPointFiles(filePaths);
+
+  if (presentationFiles.length === 0) {
+    return {
+      success: 0,
+      failed: 0,
+      errors: ['Nu au fost găsite fișiere PowerPoint compatibile. Folosește .ppt sau .pptx.'],
+    };
+  }
 
   try {
-    for (const filePath of pptxFiles) {
+    for (const filePath of presentationFiles) {
       const file = path.basename(filePath);
+
       try {
-        const fileBuffer = await fs.readFile(filePath);
-        const zip = await JSZip.loadAsync(fileBuffer);
-
-        // Sort slides by index number
-        const slideFiles = Object.keys(zip.files)
-          .filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f))
-          .sort((a, b) => {
-            const na = parseInt(a.match(/slide(\d+)/)?.[1] ?? '0');
-            const nb = parseInt(b.match(/slide(\d+)/)?.[1] ?? '0');
-            return na - nb;
-          });
-
-        if (slideFiles.length === 0) continue;
-
-        // ── SLIDE 1: Title ─────────────────────────────────────────────────
-        const slide1Shapes = await parseShapes(zip, slideFiles[0]);
-        const contentShapes1 = slide1Shapes.filter(s => !isFooter(s));
-        const info = extractTitle(contentShapes1);
-
-        // Fallback: use filename digits
-        if (!info.number) {
-          const m = file.match(/^(\d+)/);
-          if (m) info.number = m[1];
-        }
-        if (!info.title) {
-          info.title = path.basename(file, path.extname(file));
-        }
-
-        // ── SLIDES 2+: Lyrics ──────────────────────────────────────────────
-        const sections: { type: 'strofa' | 'refren'; text: string }[] = [];
-
-        for (let i = 1; i < slideFiles.length; i++) {
-          const shapes = await parseShapes(zip, slideFiles[i]);
-
-          // Keep only non-footer shapes, sorted top-to-bottom
-          const contentShapes = shapes
-            .filter(s => !isFooter(s))
-            .sort((a, b) => a.yOffset - b.yOffset);
-
-          if (contentShapes.length === 0) continue;
-
-          // Gather ALL paragraphs across ALL shapes in reading order
-          const allLines: string[] = [];
-          for (const shape of contentShapes) {
-            for (const p of shape.paragraphs) {
-              const line = normalize(p);
-              if (line.length > 0) allLines.push(line);
-            }
-          }
-
-          if (allLines.length === 0) continue;
-
-          // Run through the unified state machine
-          const slideResult = processLines(allLines);
-          sections.push(...slideResult);
-        }
-
-        // ── Deduplicate consecutive identical refrens ───────────────────────
-        const deduped: typeof sections = [];
-        for (const s of sections) {
-          const prev = deduped[deduped.length - 1];
-          if (prev && prev.type === s.type && prev.text.trim() === s.text.trim()) continue;
-          deduped.push(s);
-        }
-
-        if (!info.number || !info.title || deduped.length === 0) {
-          errors.push(`Skipped ${file}: missing number, title, or sections`);
-          failed++;
-          continue;
-        }
-
-        const allText = deduped.map(s => s.text).join(' ');
-        const searchText = `${info.number} ${info.title} ${allText}`
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '');
-
-        batch.push({
-          number: info.number,
-          title: info.title,
-          searchText,
-          categoryId,
-          sections: deduped,
-        });
+        const ext = path.extname(filePath).toLowerCase();
+        const hymn = ext === '.ppt'
+          ? await extractLegacyPptImportData(filePath, filePath, categoryId)
+          : await extractPptxImportData(filePath, filePath, categoryId);
+        batch.push(hymn);
         success++;
-
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(`Error processing ${file}:`, err);
         failed++;
-        errors.push(`${file}: ${err?.message ?? 'Unknown error'}`);
+        errors.push(`${file}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
 
@@ -312,23 +601,23 @@ export async function importPPTXFiles(
       bulkInsertHymns(batch);
     }
   } catch (err: any) {
-    console.error('Error importing PPTX files:', err);
+    console.error('Error importing PowerPoint files:', err);
     throw err;
   }
 
   return { success, failed, errors };
 }
 
-export async function importPPTXDirectory(
+export async function importPresentationDirectory(
   dirPath: string,
   categoryId?: number
 ): Promise<{ success: number; failed: number; errors: string[] }> {
   try {
     const files = await fs.readdir(dirPath);
     const filePaths = files
-      .filter(f => f.toLowerCase().endsWith('.pptx'))
+      .filter(file => isPowerPointFile(file))
       .map(f => path.join(dirPath, f));
-    return await importPPTXFiles(filePaths, categoryId);
+    return await importPresentationFiles(filePaths, categoryId);
   } catch (err: any) {
     console.error('Error reading directory:', err);
     throw err;

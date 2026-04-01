@@ -29,8 +29,8 @@ contextBridge.exposeInMainWorld('electron', {
       categoryId?: number;
       sections: { type: 'strofa' | 'refren'; text: string }[];
     }) => ipcRenderer.invoke('db:create-hymn-with-sections', payload),
-    importPPTX: (dirPath: string, categoryId?: number) => ipcRenderer.invoke('db:import-pptx', dirPath, categoryId),
-    importPPTXFiles: (filePaths: string[], categoryId?: number) => ipcRenderer.invoke('db:import-pptx-files', filePaths, categoryId),
+    importPresentations: (dirPath: string, categoryId?: number) => ipcRenderer.invoke('db:import-presentations', dirPath, categoryId),
+    importPresentationFiles: (filePaths: string[], categoryId?: number) => ipcRenderer.invoke('db:import-presentation-files', filePaths, categoryId),
     clearAll: () => ipcRenderer.invoke('db:clear-all'),
     getCategories: () => ipcRenderer.invoke('db:get-categories'),
     createCategory: (name: string) => ipcRenderer.invoke('db:create-category', name),
@@ -61,7 +61,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   dialog: {
     selectFolder: () => ipcRenderer.invoke('dialog:select-folder'),
-    selectPPTXFiles: () => ipcRenderer.invoke('dialog:select-pptx-files'),
+    selectPresentationFiles: () => ipcRenderer.invoke('dialog:select-presentation-files'),
     saveFile: (defaultName: string) => ipcRenderer.invoke('dialog:save-file', defaultName),
     saveJsonFile: (defaultName: string) => ipcRenderer.invoke('dialog:save-json-file', defaultName),
     selectJsonFile: () => ipcRenderer.invoke('dialog:select-json-file'),
