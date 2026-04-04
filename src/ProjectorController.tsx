@@ -42,11 +42,20 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
       const inTextField =
         e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
 
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
-        if (!inTextField) e.preventDefault();
+      // When in a text field, only handle Escape
+      if (inTextField) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+        }
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown') {
+        e.preventDefault();
         navigate(currentIndexRef.current + 1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        if (!inTextField) e.preventDefault();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp') {
+        e.preventDefault();
         navigate(currentIndexRef.current - 1);
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -84,7 +93,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
           {currentIndex + 1} / {sections.length}
         </span>
         <div className="ml-auto flex items-center gap-1">
-          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ Space</kbd>
+          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ ↑↓ Space</kbd>
           <span className="text-[9px] text-white/15">pentru navigare</span>
           <button
             onClick={onClose}
@@ -187,10 +196,10 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
               onClick={() => navigate(i)}
               title={sectionLabel(s, i)}
               className={`rounded-full transition-all duration-200 ${i === currentIndex
-                  ? 'w-5 h-2 bg-primary'
-                  : s.type === 'refren'
-                    ? 'w-2 h-2 bg-amber-400/40 hover:bg-amber-400/70'
-                    : 'w-2 h-2 bg-white/15 hover:bg-white/40'
+                ? 'w-5 h-2 bg-primary'
+                : s.type === 'refren'
+                  ? 'w-2 h-2 bg-amber-400/40 hover:bg-amber-400/70'
+                  : 'w-2 h-2 bg-white/15 hover:bg-white/40'
                 }`}
             />
           ))}
