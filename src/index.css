@@ -15,12 +15,3 @@ body.projection-mode,
 body.projection-mode #root {
   background: transparent !important;
 }
-
-@keyframes urgent-ticker-scroll {
-  from {
-    transform: translateX(100vw);
-  }
-  to {
-    transform: translateX(-100%);
-  }
-}
