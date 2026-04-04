@@ -118,7 +118,7 @@ export function ProjectionPage() {
       {/* ── Content (above background) ── */}
 
       {/* Header — Hymn: number + title + section label, all on one bright line */}
-      {data && !isBible && (
+      {data && !isBible && data.currentIndex >= 0 && (
         <div
           className="absolute top-0 left-0 right-0 flex items-center gap-4 px-10 py-5"
           style={{ opacity: visible ? 0.85 : 0, transition: 'opacity 0.4s' }}

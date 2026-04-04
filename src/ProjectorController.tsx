@@ -16,10 +16,10 @@ interface ProjectorControllerProps {
 }
 
 export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, onNavigate }: ProjectorControllerProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(-1);
 
   const navigate = useCallback(async (index: number) => {
-    const clamped = Math.max(0, Math.min(index, sections.length - 1));
+    const clamped = Math.max(-1, Math.min(index, sections.length - 1));
     setCurrentIndex(clamped);
     onNavigate(clamped);
   }, [sections, onNavigate]);
@@ -82,7 +82,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           <span className="text-xs text-white/60 font-semibold truncate">{hymnTitle}</span>
         </div>
         <span className="text-[10px] text-white/20 ml-1">
-          {currentIndex + 1} / {sections.length}
+          {currentIndex === -1 ? 'Titlu' : `${currentIndex + 1} / ${sections.length}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
           <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ ↑↓ Space</kbd>
@@ -103,12 +103,17 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
         {/* Prev section preview */}
         <button
           onClick={() => navigate(currentIndex - 1)}
-          disabled={currentIndex === 0}
+          disabled={currentIndex === -1}
           className="flex items-center gap-2 px-4 py-3 text-left transition-all hover:bg-white/3 disabled:opacity-20 disabled:cursor-not-allowed flex-shrink-0 w-48 border-r border-white/5"
           title="Anterior (←)"
         >
           <ChevronLeft className="w-4 h-4 text-white/20 flex-shrink-0" />
-          {prev ? (
+          {currentIndex === 0 ? (
+            <div className="min-w-0">
+              <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-primary/50">Titlu</div>
+              <div className="text-xs text-white/25 truncate leading-snug">{hymnNumber}. {hymnTitle}</div>
+            </div>
+          ) : prev ? (
             <div className="min-w-0">
               <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${prev.type === 'refren' ? 'text-amber-400/50' : 'text-white/20'}`}>
                 {sectionLabel(prev, currentIndex - 1)}
@@ -124,7 +129,14 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
 
         {/* Current section — main focus */}
         <div className="flex-1 px-6 py-3 bg-white/3 border-r border-white/5">
-          {current ? (
+          {currentIndex === -1 ? (
+            <>
+              <div className="text-[10px] font-bold uppercase tracking-widest mb-1 text-primary/70">Titlu</div>
+              <div className="text-sm text-white/80 leading-relaxed font-medium">
+                <span className="text-primary font-black">{hymnNumber}.</span>{' '}{hymnTitle}
+              </div>
+            </>
+          ) : current ? (
             <>
               <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${current.type === 'refren' ? 'text-amber-400' : 'text-primary/70'}`}>
                 {sectionLabel(current, currentIndex)}
@@ -162,7 +174,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
         <div className="flex flex-col gap-0 flex-shrink-0">
           <button
             onClick={() => navigate(currentIndex - 1)}
-            disabled={currentIndex === 0}
+            disabled={currentIndex === -1}
             className="flex-1 px-5 flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-all border-b border-white/5"
             title="←"
           >
@@ -182,6 +194,15 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
       {/* Dot navigation */}
       {sections.length > 1 && (
         <div className="flex items-center justify-center gap-1.5 py-2 border-t border-white/5">
+          {/* Title slide dot */}
+          <button
+            onClick={() => navigate(-1)}
+            title="Titlu"
+            className={`rounded-full transition-all duration-200 ${currentIndex === -1
+              ? 'w-5 h-2 bg-primary'
+              : 'w-2 h-2 bg-primary/30 hover:bg-primary/60'
+              }`}
+          />
           {sections.map((s, i) => (
             <button
               key={i}
