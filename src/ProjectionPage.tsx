@@ -117,48 +117,37 @@ export function ProjectionPage() {
 
       {/* ── Content (above background) ── */}
 
-      {/* Header — Hymn: number + title top-left / Bible: hidden (reference shown below text) */}
+      {/* Header — Hymn: number + title + section label, all on one bright line */}
       {data && !isBible && (
         <div
-          className="absolute top-0 left-0 right-0 flex items-center gap-4 px-10 py-6"
-          style={{ opacity: visible ? 0.3 : 0, transition: 'opacity 0.4s' }}
+          className="absolute top-0 left-0 right-0 flex items-center gap-4 px-10 py-5"
+          style={{ opacity: visible ? 0.85 : 0, transition: 'opacity 0.4s' }}
         >
           <span
             className="font-black tabular-nums"
-            style={{ color: hymnNumberColor, fontSize: 'clamp(1rem, 2vw, 1.5rem)' }}
+            style={{ color: hymnNumberColor, fontSize: 'clamp(1.1rem, 2.2vw, 1.7rem)', textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}
           >
             {data.hymnNumber}.
           </span>
           <span
             className="font-semibold uppercase tracking-widest truncate"
-            style={{ color: contentTextColor, fontSize: 'clamp(0.75rem, 1.5vw, 1.1rem)', letterSpacing: '0.2em' }}
+            style={{ color: contentTextColor, fontSize: 'clamp(0.85rem, 1.6vw, 1.2rem)', letterSpacing: '0.18em', textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}
           >
             {data.hymnTitle}
           </span>
-        </div>
-      )}
-
-      {/* Section type badge — Hymn: Strofă/Refren / Bible: hidden */}
-      {section && data && data.currentIndex >= 0 && !isBible && (
-        <div
-          className="absolute"
-          style={{
-            top: '13%',
-            opacity: visible ? 0.25 : 0,
-            transition: 'opacity 0.4s',
-          }}
-        >
-          <span
-            className={`uppercase tracking-widest font-bold px-4 py-1 rounded-full border text-white
-              ${section.type === 'refren'
-                ? 'border-amber-400 text-amber-400'
-                : 'border-white/30 text-white/60'}`}
-            style={{ fontSize: 'clamp(0.65rem, 1.2vw, 0.9rem)', letterSpacing: '0.25em' }}
-          >
-            {section.type === 'refren' ? 'Refren' : `Strofă ${(data?.sections
-              .slice(0, data.currentIndex + 1)
-              .filter(s => s.type === 'strofa').length) ?? ''}`}
-          </span>
+          {section && data.currentIndex >= 0 && (
+            <span
+              className={`ml-auto uppercase tracking-widest font-bold px-4 py-1 rounded-full border whitespace-nowrap
+                ${section.type === 'refren'
+                  ? 'border-amber-400/60 text-amber-300'
+                  : 'border-white/30 text-white/70'}`}
+              style={{ fontSize: 'clamp(0.7rem, 1.2vw, 0.95rem)', letterSpacing: '0.2em', textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}
+            >
+              {section.type === 'refren' ? 'Refren' : `Strofă ${(data?.sections
+                .slice(0, data.currentIndex + 1)
+                .filter(s => s.type === 'strofa').length) ?? ''}`}
+            </span>
+          )}
         </div>
       )}
 

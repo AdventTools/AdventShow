@@ -42,14 +42,8 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
       const inTextField =
         e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
 
-      // When in a text field, only handle Escape
-      if (inTextField) {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          onClose();
-        }
-        return;
-      }
+      // When in a text field, skip arrow handling (global handler manages Escape)
+      if (inTextField) return;
 
       if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown') {
         e.preventDefault();
@@ -57,16 +51,13 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp') {
         e.preventDefault();
         navigate(currentIndexRef.current - 1);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
       }
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-    // navigate and onClose are both stable useCallbacks — intentionally no currentIndex dep
+    // navigate is a stable useCallback — intentionally no currentIndex dep
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate, onClose]);
+  }, [navigate]);
 
   const current = sections[currentIndex];
   const prev = sections[currentIndex - 1];

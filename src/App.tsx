@@ -54,6 +54,10 @@ function getSnippetFirstLine(snippet?: string): string {
     return s.trim();
 }
 
+function stripStanzaNumber(text: string): string {
+    return text.replace(/^\d+\.\s*/, '');
+}
+
 function expandHymnSections(sections: HymnSection[]) {
     const refren = sections.find(s => s.type === 'refren');
     const result: { text: string; type: string; label: string }[] = [];
@@ -61,7 +65,7 @@ function expandHymnSections(sections: HymnSection[]) {
     for (const sec of sections) {
         if (sec.type === 'strofa') {
             stanzaNum++;
-            result.push({ text: sec.text, type: 'strofa', label: `Strofa ${stanzaNum}` });
+            result.push({ text: stripStanzaNumber(sec.text), type: 'strofa', label: `Strofa ${stanzaNum}` });
             if (refren) {
                 result.push({ text: refren.text, type: 'refren', label: 'Refren' });
             }
@@ -656,14 +660,14 @@ function App() {
 
             if (e.key === 'Escape') {
                 e.preventDefault();
+                e.stopImmediatePropagation();
                 if (projecting) {
                     stopProjection();
                 } else if (previewSections.length > 0) {
                     clearPreview();
-                    refSearchRef.current?.focus();
-                } else if (inInput) {
-                    (document.activeElement as HTMLElement)?.blur();
                 }
+                // Always focus search after any Escape
+                refSearchRef.current?.focus();
                 return;
             }
 
@@ -757,21 +761,6 @@ function App() {
             return;
         }
 
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            if (projecting) {
-                stopProjection();
-            } else if (previewSections.length > 0) {
-                clearPreview();
-                refSearchRef.current?.focus();
-            } else {
-                setRefSearch('');
-                setContentSearch('');
-                (document.activeElement as HTMLElement)?.blur();
-            }
-            return;
-        }
-
         if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (projecting) {
@@ -801,7 +790,7 @@ function App() {
         }
     }, [projecting, previewSections, projSlideIndex, startProjection, tab,
         selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
-        clearPreview, navigateSlide]);
+        navigateSlide]);
 
     // ── Close context menu on click elsewhere ──
     useEffect(() => {
