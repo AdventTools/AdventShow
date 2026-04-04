@@ -65,7 +65,7 @@ function expandHymnSections(sections: HymnSection[]) {
     for (const sec of sections) {
         if (sec.type === 'strofa') {
             stanzaNum++;
-            result.push({ text: stripStanzaNumber(sec.text), type: 'strofa', label: `Strofa ${stanzaNum}` });
+            result.push({ text: stripStanzaNumber(sec.text), type: 'strofa', label: `Strofă ${stanzaNum}` });
             if (refren) {
                 result.push({ text: refren.text, type: 'refren', label: 'Refren' });
             }
@@ -979,6 +979,7 @@ function App() {
                     hymnTitle={previewTitle}
                     hymnNumber={previewNumber}
                     onClose={stopProjection}
+                    onNavigate={navigateSlide}
                 />
             )}
 
@@ -1784,7 +1785,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
 }) {
-    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'admin'>('projection');
+    const [activeTab, setActiveTab] = useState<'projection' | 'import'>('projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
 
@@ -1807,13 +1808,13 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                 </div>
                 <div className="modal-body">
                     <div className="settings-tabs">
-                        {(['projection', 'import', 'admin'] as const).map(t => (
+                        {(['projection', 'import'] as const).map(t => (
                             <button
                                 key={t}
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Import / Export' : 'Admin'}
+                                {t === 'projection' ? 'Proiecție' : 'Import / Export'}
                             </button>
                         ))}
                     </div>
@@ -1979,24 +1980,6 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                         </div>
                     )}
 
-                    {activeTab === 'admin' && (
-                        <div className="settings-content">
-                            <div className="field danger">
-                                <label>Zonă Periculoasă</label>
-                                <button className="btn-danger" onClick={async () => {
-                                    if (confirm('ATENȚIE: Aceasta va șterge TOATE imnurile! Sigur?')) {
-                                        if (confirm('Ultima confirmare: TOATE datele vor fi pierdute!')) {
-                                            await window.electron.db.clearAll();
-                                            onCategoriesChanged();
-                                            onHymnsChanged();
-                                        }
-                                    }
-                                }}>
-                                    <Trash2 className="icon-xs" /> Șterge toate imnurile
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
