@@ -12,6 +12,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -44,13 +45,15 @@ jobs:
       - name: Build app
         run: npm run ${{ matrix.script }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          ELECTRON_BUILDER_PUBLISH: never
 
       - name: Upload raw build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: release/
+          if-no-files-found: error
 
   release:
     needs: build
@@ -63,49 +66,44 @@ jobs:
           path: artifacts
 
       - name: Show downloaded files
-        run: find artifacts -type f
+        run: find artifacts -type f | sort
 
       - name: Rename assets to include tag version
         shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          shopt -s globstar nullglob
 
-          find artifacts -type f -name "*.exe" -exec bash -c '
-            file="$1"
+          for file in artifacts/**/*.exe; do
             dir="$(dirname "$file")"
             base="$(basename "$file" .exe)"
             mv "$file" "$dir/${base}-${VERSION}.exe"
-          ' _ {} \;
+          done
 
-          find artifacts -type f -name "*.dmg" -exec bash -c '
-            file="$1"
+          for file in artifacts/**/*.dmg; do
             dir="$(dirname "$file")"
             base="$(basename "$file" .dmg)"
             mv "$file" "$dir/${base}-${VERSION}.dmg"
-          ' _ {} \;
+          done
 
-          find artifacts -type f -name "*.AppImage" -exec bash -c '
-            file="$1"
+          for file in artifacts/**/*.AppImage; do
             dir="$(dirname "$file")"
             base="$(basename "$file" .AppImage)"
             mv "$file" "$dir/${base}-${VERSION}.AppImage"
-          ' _ {} \;
+          done
 
-          find artifacts -type f -name "*.deb" -exec bash -c '
-            file="$1"
+          for file in artifacts/**/*.deb; do
             dir="$(dirname "$file")"
             base="$(basename "$file" .deb)"
             mv "$file" "$dir/${base}-${VERSION}.deb"
-          ' _ {} \;
+          done
 
-          find artifacts -type f -name "*.rpm" -exec bash -c '
-            file="$1"
+          for file in artifacts/**/*.rpm; do
             dir="$(dirname "$file")"
             base="$(basename "$file" .rpm)"
             mv "$file" "$dir/${base}-${VERSION}.rpm"
-          ' _ {} \;
-        env:
-          VERSION: ${{ github.ref_name }}
+          done
 
       - name: Keep only release files
         run: |
@@ -118,7 +116,7 @@ jobs:
             -delete
 
       - name: Show final release files
-        run: find artifacts -type f
+        run: find artifacts -type f | sort
 
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
