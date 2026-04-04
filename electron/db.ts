@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import { createRequire } from 'module';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -97,6 +98,7 @@ const BUILTIN_CATEGORIES = [
   'Exploratori',
   'Companioni',
   'Tineret',
+  'Imnuri Speciale',
 ];
 
 export function initDB() {
@@ -134,6 +136,13 @@ export function initDB() {
     // Column already exists — fine
   }
 
+  // Migration: add created_at column
+  try {
+    db.exec("ALTER TABLE hymns ADD COLUMN created_at TEXT DEFAULT ''");
+  } catch {
+    // Column already exists — fine
+  }
+
   // Migration: drop UNIQUE on number (if present from old schema)
   // We allow duplicate numbers across categories, so only enforce uniqueness per category.
   migrateLegacyHymnsNumberConstraint(db);
@@ -145,6 +154,9 @@ export function initDB() {
   for (const name of BUILTIN_CATEGORIES) {
     insertBuiltin.run(name);
   }
+
+  // Create Bible tables (if not present yet)
+  initBibleTables();
 
   // Normalize purely numeric hymn numbers to 3-digit format (e.g. 1 -> 001).
   db.prepare(`
@@ -239,7 +251,8 @@ export function getHymnByNumber(number: string) {
 }
 
 export function searchHymns(query: string, categoryId?: number) {
-  const searchPattern = `%${query}%`;
+  const normalizedPattern = `%${normalizeSearchText(query)}%`;
+  const originalPattern = `%${query}%`;
   if (categoryId !== undefined) {
     return getDb()
       .prepare(`
@@ -247,12 +260,12 @@ export function searchHymns(query: string, categoryId?: number) {
                COUNT(s.id) AS section_count
         FROM hymns h
         LEFT JOIN hymn_sections s ON s.hymn_id = h.id
-        WHERE h.category_id = ? AND (h.number LIKE ? OR h.title LIKE ? OR h.search_text LIKE ?)
+        WHERE h.category_id = ? AND (h.number LIKE ? OR h.title LIKE ? OR LOWER(h.title) LIKE ?)
         GROUP BY h.id
         ORDER BY CAST(h.number AS INTEGER)
         LIMIT 50
       `)
-      .all(categoryId, searchPattern, searchPattern, searchPattern);
+      .all(categoryId, originalPattern, originalPattern, normalizedPattern);
   }
   return getDb()
     .prepare(`
@@ -260,12 +273,81 @@ export function searchHymns(query: string, categoryId?: number) {
              COUNT(s.id) AS section_count
       FROM hymns h
       LEFT JOIN hymn_sections s ON s.hymn_id = h.id
-      WHERE h.number LIKE ? OR h.title LIKE ? OR h.search_text LIKE ?
+      WHERE h.number LIKE ? OR h.title LIKE ? OR LOWER(h.title) LIKE ?
       GROUP BY h.id
       ORDER BY CAST(h.number AS INTEGER)
       LIMIT 50
     `)
-    .all(searchPattern, searchPattern, searchPattern);
+    .all(originalPattern, originalPattern, normalizedPattern);
+}
+
+export function getAllHymnsWithSnippets(categoryId?: number) {
+  const snippetSubquery = `
+    (SELECT s.text FROM hymn_sections s
+     WHERE s.hymn_id = h.id AND s.type = 'strofa'
+     ORDER BY s.order_index LIMIT 1) AS snippet
+  `;
+  if (categoryId !== undefined) {
+    return getDb()
+      .prepare(`
+        SELECT h.id, h.number, h.title, h.category_id,
+               COUNT(sec.id) AS section_count,
+               ${snippetSubquery}
+        FROM hymns h
+        LEFT JOIN hymn_sections sec ON sec.hymn_id = h.id
+        WHERE h.category_id = ?
+        GROUP BY h.id
+        ORDER BY CAST(h.number AS INTEGER)
+      `)
+      .all(categoryId);
+  }
+  return getDb()
+    .prepare(`
+      SELECT h.id, h.number, h.title, h.category_id,
+             COUNT(sec.id) AS section_count,
+             ${snippetSubquery}
+      FROM hymns h
+      LEFT JOIN hymn_sections sec ON sec.hymn_id = h.id
+      GROUP BY h.id
+      ORDER BY CAST(h.number AS INTEGER)
+    `)
+    .all();
+}
+
+export function searchHymnsContent(query: string, categoryId?: number) {
+  const normalizedPattern = `%${normalizeSearchText(query)}%`;
+  const originalPattern = `%${query}%`;
+  const snippetSubquery = `
+    (SELECT s.text FROM hymn_sections s
+     WHERE s.hymn_id = h.id AND s.type = 'strofa'
+     ORDER BY s.order_index LIMIT 1) AS snippet
+  `;
+  if (categoryId !== undefined) {
+    return getDb()
+      .prepare(`
+        SELECT DISTINCT h.id, h.number, h.title, h.category_id,
+               (SELECT COUNT(*) FROM hymn_sections sec2 WHERE sec2.hymn_id = h.id) AS section_count,
+               ${snippetSubquery}
+        FROM hymns h
+        INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
+        WHERE h.category_id = ? AND (sec.text LIKE ? OR h.search_text LIKE ?)
+        ORDER BY CAST(h.number AS INTEGER)
+        LIMIT 50
+      `)
+      .all(categoryId, originalPattern, normalizedPattern);
+  }
+  return getDb()
+    .prepare(`
+      SELECT DISTINCT h.id, h.number, h.title, h.category_id,
+             (SELECT COUNT(*) FROM hymn_sections sec2 WHERE sec2.hymn_id = h.id) AS section_count,
+             ${snippetSubquery}
+      FROM hymns h
+      INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
+      WHERE sec.text LIKE ? OR h.search_text LIKE ?
+      ORDER BY CAST(h.number AS INTEGER)
+      LIMIT 50
+    `)
+    .all(originalPattern, normalizedPattern);
 }
 
 export function getHymnWithSections(hymnId: number) {
@@ -377,8 +459,8 @@ export function createHymnWithSections(input: CreateHymnInput): number {
     let hymnResult: { lastInsertRowid: number | bigint };
     try {
       hymnResult = db
-        .prepare('INSERT INTO hymns (number, title, search_text, category_id) VALUES (?, ?, ?, ?)')
-        .run(number, title, searchText, categoryId);
+        .prepare('INSERT INTO hymns (number, title, search_text, category_id, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(number, title, searchText, categoryId, new Date().toISOString());
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes('UNIQUE constraint failed: hymns.number')) {
         throw new Error('Schema bazei de date este veche (număr global unic). Repornește aplicația pentru migrare automată și încearcă din nou.');
@@ -405,6 +487,35 @@ export function createHymnWithSections(input: CreateHymnInput): number {
   });
 
   return tx(input);
+}
+
+export function updateHymnWithSections(id: number, input: { number: string; title: string; sections: HymnSectionInput[] }) {
+  const db = getDb();
+  const tx = db.transaction(() => {
+    const number = normalizeHymnNumber(input.number);
+    const title = input.title.trim();
+    const sections = input.sections
+      .map(s => ({ type: s.type, text: s.text.trim() }))
+      .filter(s => s.text.length > 0);
+
+    if (!number) throw new Error('Numărul imnului este obligatoriu.');
+    if (!title) throw new Error('Titlul imnului este obligatoriu.');
+    if (sections.length === 0) throw new Error('Adaugă cel puțin o secțiune cu text.');
+
+    const searchText = normalizeSearchText(`${number} ${title} ${sections.map(s => s.text).join(' ')}`);
+    db.prepare('UPDATE hymns SET number = ?, title = ?, search_text = ? WHERE id = ?')
+      .run(number, title, searchText, id);
+
+    db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(id);
+    const insertSection = db.prepare(`
+      INSERT INTO hymn_sections (hymn_id, order_index, type, text)
+      VALUES (@hymnId, @order_index, @type, @text)
+    `);
+    sections.forEach((section, index) => {
+      insertSection.run({ hymnId: id, order_index: index, type: section.type, text: section.text });
+    });
+  });
+  tx();
 }
 
 export function clearAllData() {
@@ -660,4 +771,197 @@ export function bulkInsertHymns(hymns: HymnImportData[]) {
   });
 
   tx(hymns);
+}
+
+// ── Bible tables ──────────────────────────────────────────────────────────────
+
+export function initBibleTables() {
+  const db = getDb();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bible_books (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      abbreviation TEXT NOT NULL,
+      testament TEXT NOT NULL CHECK(testament IN ('VT', 'NT')),
+      book_order INTEGER NOT NULL,
+      chapter_count INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS bible_verses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id INTEGER NOT NULL REFERENCES bible_books(id),
+      chapter INTEGER NOT NULL,
+      verse INTEGER NOT NULL,
+      text TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bible_verses_book_chapter
+      ON bible_verses(book_id, chapter);
+  `);
+}
+
+// ── Bible queries ─────────────────────────────────────────────────────────────
+
+export function getBibleBooks() {
+  return getDb()
+    .prepare('SELECT * FROM bible_books ORDER BY book_order')
+    .all();
+}
+
+export function getBibleChapters(bookId: number): number[] {
+  return getDb()
+    .prepare('SELECT DISTINCT chapter FROM bible_verses WHERE book_id = ? ORDER BY chapter')
+    .all(bookId)
+    .map((r: any) => r.chapter);
+}
+
+export function getBibleVerses(bookId: number, chapter: number) {
+  return getDb()
+    .prepare('SELECT verse, text FROM bible_verses WHERE book_id = ? AND chapter = ? ORDER BY verse')
+    .all(bookId, chapter);
+}
+
+export function searchBible(query: string, bookId?: number) {
+  const pattern = `%${query}%`;
+  if (bookId !== undefined) {
+    return getDb()
+      .prepare(`
+        SELECT bv.book_id, bv.chapter, bv.verse, bv.text,
+               bb.name as book_name, bb.abbreviation
+        FROM bible_verses bv
+        JOIN bible_books bb ON bb.id = bv.book_id
+        WHERE bv.book_id = ? AND bv.text LIKE ?
+        ORDER BY bv.book_id, bv.chapter, bv.verse
+        LIMIT 100
+      `)
+      .all(bookId, pattern);
+  }
+  return getDb()
+    .prepare(`
+      SELECT bv.book_id, bv.chapter, bv.verse, bv.text,
+             bb.name as book_name, bb.abbreviation
+      FROM bible_verses bv
+      JOIN bible_books bb ON bb.id = bv.book_id
+      WHERE bv.text LIKE ?
+      ORDER BY bv.book_id, bv.chapter, bv.verse
+      LIMIT 100
+    `)
+    .all(pattern);
+}
+
+export function getBibleVerseRange(bookId: number, chapter: number, startVerse: number, endVerse: number) {
+  return getDb()
+    .prepare(`
+      SELECT bv.verse, bv.text, bb.name as book_name, bb.abbreviation
+      FROM bible_verses bv
+      JOIN bible_books bb ON bb.id = bv.book_id
+      WHERE bv.book_id = ? AND bv.chapter = ? AND bv.verse >= ? AND bv.verse <= ?
+      ORDER BY bv.verse
+    `)
+    .all(bookId, chapter, startVerse, endVerse);
+}
+
+export function hasBibleData(): boolean {
+  try {
+    const row = getDb()
+      .prepare("SELECT count(*) as cnt FROM sqlite_master WHERE type='table' AND name='bible_books'")
+      .get() as { cnt: number } | undefined;
+    if (!row || row.cnt === 0) return false;
+    const verseRow = getDb()
+      .prepare('SELECT count(*) as cnt FROM bible_verses')
+      .get() as { cnt: number } | undefined;
+    return !!(verseRow && verseRow.cnt > 0);
+  } catch {
+    return false;
+  }
+}
+
+// ── Bible auto-seeding from cornilescu.json ──────────────────────────────────
+
+const ABBREVIATIONS: Record<string, string> = {
+  "Geneza": "Gen", "Exodul": "Exod", "Leviticul": "Lev",
+  "Numeri": "Num", "Deuteronomul": "Deut", "Iosua": "Ios",
+  "Judecători": "Jud", "Rut": "Rut", "1 Samuel": "1Sam",
+  "2 Samuel": "2Sam", "1 Împărați": "1Imp", "2 Împărați": "2Imp",
+  "1 Cronici": "1Cron", "2 Cronici": "2Cron", "Ezra": "Ezra",
+  "Neemia": "Neem", "Estera": "Est", "Iov": "Iov",
+  "Psalmii": "Ps", "Proverbe": "Prov", "Eclesiastul": "Ecl",
+  "Cântarea Cântărilor": "Cânt", "Isaia": "Is", "Ieremia": "Ier",
+  "Plângerile lui Ieremia": "Plâng", "Ezechiel": "Ez",
+  "Daniel": "Dan", "Osea": "Os", "Ioel": "Ioel",
+  "Amos": "Amos", "Obadia": "Ob", "Iona": "Iona",
+  "Mica": "Mica", "Naum": "Naum", "Habacuc": "Hab",
+  "Țefania": "Tef", "Hagai": "Hag", "Zaharia": "Zah",
+  "Maleahi": "Mal", "Matei": "Mat", "Marcu": "Marc",
+  "Luca": "Luca", "Ioan": "Ioan", "Faptele Apostolilor": "Fapte",
+  "Romani": "Rom", "1 Corinteni": "1Cor", "2 Corinteni": "2Cor",
+  "Galateni": "Gal", "Efeseni": "Ef", "Filipeni": "Fil",
+  "Coloseni": "Col", "1 Tesaloniceni": "1Tes", "2 Tesaloniceni": "2Tes",
+  "1 Timotei": "1Tim", "2 Timotei": "2Tim", "Titus": "Tit",
+  "Filimon": "Flm", "Evrei": "Evr", "Iacov": "Iac",
+  "1 Petru": "1Pet", "2 Petru": "2Pet", "1 Ioan": "1Ioan",
+  "2 Ioan": "2Ioan", "3 Ioan": "3Ioan", "Iuda": "Iuda",
+  "Apocalipsa": "Apoc",
+};
+
+export function seedBibleFromJson() {
+  // Check if Bible data already exists
+  if (hasBibleData()) return;
+
+  // Find cornilescu.json in various locations
+  const candidatePaths = [
+    path.join(process.resourcesPath ?? '', 'cornilescu.json'),
+    path.join(app.getAppPath(), 'scripts', 'cornilescu.json'),
+    path.join(app.getAppPath(), '..', 'scripts', 'cornilescu.json'),
+    path.join(process.env['APP_ROOT'] ?? '', 'scripts', 'cornilescu.json'),
+  ];
+
+  let jsonPath: string | null = null;
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) { jsonPath = p; break; }
+  }
+
+  if (!jsonPath) {
+    console.warn('[Bible] cornilescu.json not found, skipping seed');
+    return;
+  }
+
+  console.log('[Bible] Seeding from', jsonPath);
+  try {
+    const raw = fs.readFileSync(jsonPath, 'utf-8');
+    const data = JSON.parse(raw);
+    const books: any[] = data.books;
+    if (!books || !books.length) return;
+
+    const db = getDb();
+    const insertBook = db.prepare(
+      'INSERT OR REPLACE INTO bible_books (id, name, abbreviation, testament, book_order, chapter_count) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    const insertVerse = db.prepare(
+      'INSERT INTO bible_verses (book_id, chapter, verse, text) VALUES (?, ?, ?, ?)'
+    );
+
+    const tx = db.transaction(() => {
+      let totalVerses = 0;
+      for (const book of books) {
+        const nr = book.nr;
+        const name = book.name;
+        const abbr = ABBREVIATIONS[name] ?? name.substring(0, 4);
+        const testament = nr <= 39 ? 'VT' : 'NT';
+        const chapters = book.chapters ?? [];
+        insertBook.run(nr, name, abbr, testament, nr, chapters.length);
+
+        for (const ch of chapters) {
+          for (const v of (ch.verses ?? [])) {
+            insertVerse.run(nr, ch.chapter, v.verse, (v.text ?? '').trim());
+            totalVerses++;
+          }
+        }
+      }
+      console.log(`[Bible] Seeded ${books.length} books, ${totalVerses} verses`);
+    });
+    tx();
+  } catch (err) {
+    console.error('[Bible] Seed failed:', err);
+  }
 }

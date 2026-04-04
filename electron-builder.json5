@@ -17,6 +17,11 @@
       "from": "public/hymns.db",
       "to": "hymns.db",
       "filter": ["**/*"]
+    },
+    {
+      "from": "scripts/cornilescu.json",
+      "to": "cornilescu.json",
+      "filter": ["**/*"]
     }
   ],
   "mac": {

@@ -50,20 +50,26 @@ export function ProjectionPage() {
   }, []);
 
   const section: HymnSection | undefined = data?.sections[data.currentIndex];
+  const isBible = data?.contentType === 'bible';
+
+  // Font size setting: default 1.2 (larger than before), user-adjustable from settings
+  const fontSizeMultiplier = (bg.projectionFontSize ?? 1.2) * zoomLevel;
 
   // Dynamic font size calculation based on lines and character count
-  let dynamicFontSize = `calc(clamp(2rem, 4.5vw, 5.5rem) * ${zoomLevel})`;
+  let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier})`;
   if (section) {
     const lines = section.text.split('\n');
     const lineCount = Math.max(1, lines.length);
     const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
-    
-    // Character width is roughly 0.55em. Max width ~ 90vw
-    const maxVw = Math.min(8, 140 / maxLineCharCount).toFixed(2);
-    // Line height is 1.45. Max height ~ 70vh
-    const maxVh = Math.min(12, 65 / (lineCount * 1.45)).toFixed(2);
-    
-    dynamicFontSize = `calc(clamp(1.5rem, min(${maxVw}vw, ${maxVh}vh), 6.5rem) * ${zoomLevel})`;
+
+    // Fit-to-page: compute max font size that fits viewport width and height
+    const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
+    const maxVh = Math.min(14, 72 / (lineCount * 1.45)).toFixed(2);
+
+    // Bible gets slightly larger base clamp; hymns also increased
+    const minSize = isBible ? '2.5rem' : '2rem';
+    const maxSize = isBible ? '9rem' : '8rem';
+    dynamicFontSize = `calc(clamp(${minSize}, min(${maxVw}vw, ${maxVh}vh), ${maxSize}) * ${fontSizeMultiplier})`;
   }
 
   // Resolve background styles
@@ -111,8 +117,8 @@ export function ProjectionPage() {
 
       {/* ── Content (above background) ── */}
 
-      {/* Hymn title — top left */}
-      {data && (
+      {/* Header — Hymn: number + title top-left / Bible: hidden (reference shown below text) */}
+      {data && !isBible && (
         <div
           className="absolute top-0 left-0 right-0 flex items-center gap-4 px-10 py-6"
           style={{ opacity: visible ? 0.3 : 0, transition: 'opacity 0.4s' }}
@@ -132,8 +138,8 @@ export function ProjectionPage() {
         </div>
       )}
 
-      {/* Section type badge */}
-      {section && data && data.currentIndex >= 0 && (
+      {/* Section type badge — Hymn: Strofă/Refren / Bible: hidden */}
+      {section && data && data.currentIndex >= 0 && !isBible && (
         <div
           className="absolute"
           style={{
@@ -156,7 +162,7 @@ export function ProjectionPage() {
         </div>
       )}
 
-      {/* Main content — title slide or lyrics */}
+      {/* Main content — title slide, lyrics, or Bible verse */}
       <div
         className="relative z-10 px-16 text-center w-full max-w-full"
         style={{
@@ -165,14 +171,49 @@ export function ProjectionPage() {
           transition: 'opacity 0.35s ease, transform 0.35s ease',
         }}
       >
-        {data && data.currentIndex === -1 ? (
+        {data && isBible && section ? (
+          /* ── Bible verse slide ── */
+          <div className="flex flex-col items-center justify-center gap-8">
+            <div className="max-h-[65vh] overflow-y-auto px-3">
+              <p
+                className="leading-relaxed"
+                style={{
+                  color: contentTextColor,
+                  fontSize: dynamicFontSize,
+                  fontWeight: 700,
+                  lineHeight: 1.5,
+                  textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
+                  whiteSpace: 'pre-line',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {section.text}
+              </p>
+            </div>
+            {/* Bible reference below the text */}
+            {data.bibleRef && (
+              <p
+                className="font-semibold uppercase tracking-widest"
+                style={{
+                  color: hymnNumberColor,
+                  fontSize: 'clamp(1rem, 2.5vw, 2rem)',
+                  letterSpacing: '0.15em',
+                  textShadow: '0 2px 24px rgba(0,0,0,0.8)',
+                  opacity: 0.7,
+                }}
+              >
+                {data.bibleRef}
+              </p>
+            )}
+          </div>
+        ) : data && data.currentIndex === -1 ? (
           /* ── Title slide ── */
           <div className="flex flex-col items-center gap-6">
             <span
               className="font-black tabular-nums"
               style={{
                 color: hymnNumberColor,
-                fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${zoomLevel})`,
+                fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${fontSizeMultiplier})`,
                 lineHeight: 1,
                 textShadow: '0 4px 48px rgba(0,0,0,0.9)',
               }}
@@ -183,7 +224,7 @@ export function ProjectionPage() {
               className="font-bold uppercase tracking-widest"
               style={{
                 color: contentTextColor,
-                fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${zoomLevel})`,
+                fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${fontSizeMultiplier})`,
                 letterSpacing: '0.12em',
                 textShadow: '0 2px 32px rgba(0,0,0,0.9)',
               }}
@@ -226,18 +267,24 @@ export function ProjectionPage() {
           className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 pb-8 z-10"
           style={{ opacity: visible ? 0.4 : 0, transition: 'opacity 0.4s' }}
         >
-          {data.sections.map((s, i) => (
-            <div
-              key={i}
-              className={`rounded-full transition-all duration-300 ${
-                i === data.currentIndex
+          {isBible ? (
+            /* Bible: current verse / total */
+            <span className="text-white/50 text-sm font-mono tracking-wider">
+              {data.currentIndex + 1} / {data.sections.length}
+            </span>
+          ) : (
+            data.sections.map((s, i) => (
+              <div
+                key={i}
+                className={`rounded-full transition-all duration-300 ${i === data.currentIndex
                   ? 'w-6 h-2 bg-white'
                   : s.type === 'refren'
-                  ? 'w-2 h-2 bg-amber-400/60'
-                  : 'w-2 h-2 bg-white/30'
-              }`}
-            />
-          ))}
+                    ? 'w-2 h-2 bg-amber-400/60'
+                    : 'w-2 h-2 bg-white/30'
+                  }`}
+              />
+            ))
+          )}
         </div>
       )}
 
