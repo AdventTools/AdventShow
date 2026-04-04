@@ -21,6 +21,26 @@ export interface Hymn {
   search_text?: string;
   category_id?: number | null;
   section_count?: number;
+  snippet?: string;
+  created_at?: string;
+}
+
+export interface BibleBook {
+  id: number;
+  name: string;
+  abbreviation: string;
+  testament: 'VT' | 'NT';
+  book_order: number;
+  chapter_count: number;
+}
+
+export interface BibleVerse {
+  verse: number;
+  text: string;
+  book_id?: number;
+  chapter?: number;
+  book_name?: string;
+  abbreviation?: string;
 }
 
 export interface HymnWithSections extends Hymn {
@@ -56,6 +76,8 @@ export interface ProjectionSlideData {
   currentIndex: number;
   hymnTitle: string;
   hymnNumber: string;
+  contentType?: 'hymn' | 'bible';
+  bibleRef?: string;  // e.g. "Deuteronomul 12:5"
 }
 
 export interface DisplayInfo {
@@ -80,15 +102,21 @@ export interface AppSettings {
   bgOpacity?: number;      // 0–1, opacity of the media layer (default 1)
   hymnNumberColor?: string; // hex, e.g. '#9fb3ff'
   contentTextColor?: string; // hex, e.g. '#ffffff'
+  adminPasswordHash?: string; // bcrypt-like hash or empty
+  projectionFontSize?: number; // font size multiplier, default 1.2
+  windowBounds?: { x: number; y: number; width: number; height: number };
 }
 
 export interface IElectronAPI {
   db: {
     getAllHymns: (categoryId?: number) => Promise<Hymn[]>;
+    getAllHymnsWithSnippets: (categoryId?: number) => Promise<Hymn[]>;
     getHymn: (number: string) => Promise<Hymn | undefined>;
     searchHymns: (query: string, categoryId?: number) => Promise<Hymn[]>;
+    searchHymnsContent: (query: string, categoryId?: number) => Promise<Hymn[]>;
     getHymnWithSections: (id: number) => Promise<HymnWithSections | null>;
     createHymnWithSections: (payload: CreateHymnInput) => Promise<number>;
+    updateHymnWithSections: (id: number, payload: { number: string; title: string; sections: { type: 'strofa' | 'refren'; text: string }[] }) => Promise<void>;
     importPresentations: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
     importPresentationFiles: (filePaths: string[], categoryId?: number) => Promise<ImportResult>;
     clearAll: () => Promise<void>;
@@ -111,6 +139,14 @@ export interface IElectronAPI {
     delete: (id: number) => Promise<void>;
     reorder: (sections: { id: number; order_index: number }[]) => Promise<void>;
   };
+  bible: {
+    getBooks: () => Promise<BibleBook[]>;
+    getChapters: (bookId: number) => Promise<number[]>;
+    getVerses: (bookId: number, chapter: number) => Promise<BibleVerse[]>;
+    search: (query: string, bookId?: number) => Promise<BibleVerse[]>;
+    getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) => Promise<BibleVerse[]>;
+    hasData: () => Promise<boolean>;
+  };
   dialog: {
     selectFolder: () => Promise<string | undefined>;
     selectPresentationFiles: () => Promise<string[] | undefined>;
@@ -127,8 +163,9 @@ export interface IElectronAPI {
     getDisplays: () => Promise<DisplayInfo[]>;
   };
   projection: {
-    open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string) => Promise<void>;
-    navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string) => Promise<void>;
+    open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
+    navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
+    updateHymn: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     close: () => Promise<void>;
     sendKeyRequest: (action: 'prev' | 'next' | 'close') => Promise<void>;
     onSlide: (cb: (data: ProjectionSlideData) => void) => void;

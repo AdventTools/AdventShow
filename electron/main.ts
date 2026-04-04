@@ -12,6 +12,7 @@ import {
   deleteSection,
   exportJsonBackup,
   getAllHymns,
+  getAllHymnsWithSnippets,
   getCategories,
   getHymnByNumber,
   getHymnWithSections,
@@ -19,10 +20,19 @@ import {
   initDB,
   reorderSections,
   searchHymns,
+  searchHymnsContent,
   updateCategory,
   updateHymn,
   updateHymnCategory,
+  updateHymnWithSections,
   updateSection,
+  getBibleBooks,
+  getBibleChapters,
+  getBibleVerses,
+  searchBible,
+  getBibleVerseRange,
+  hasBibleData,
+  seedBibleFromJson,
 } from './db'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
@@ -52,6 +62,9 @@ interface AppSettings {
   bgOpacity?: number
   hymnNumberColor?: string
   contentTextColor?: string
+  adminPasswordHash?: string
+  projectionFontSize?: number
+  windowBounds?: { x: number; y: number; width: number; height: number }
 }
 
 function getSettingsPath() {
@@ -74,6 +87,8 @@ interface ProjState {
   currentIndex: number
   hymnTitle: string
   hymnNumber: string
+  contentType?: 'hymn' | 'bible'
+  bibleRef?: string
 }
 let projState: ProjState | null = null
 
@@ -85,6 +100,8 @@ function sendSlideToProjection(index: number) {
     currentIndex: index,
     hymnTitle: projState.hymnTitle,
     hymnNumber: projState.hymnNumber,
+    contentType: projState.contentType,
+    bibleRef: projState.bibleRef,
   })
   win?.webContents.send('projection:controller-sync', { currentIndex: index })
 }
@@ -141,12 +158,45 @@ function createProjectionWindow() {
 }
 
 function createWindow() {
+  const settings = readSettings()
+  const saved = settings.windowBounds
+
+  // Validate saved bounds are on a visible display
+  let bounds: Partial<Electron.BrowserWindowConstructorOptions> = {}
+  if (saved) {
+    const displays = screen.getAllDisplays()
+    const visible = displays.some(d => {
+      const db = d.bounds
+      return saved.x >= db.x - 100 && saved.x < db.x + db.width + 100
+        && saved.y >= db.y - 100 && saved.y < db.y + db.height + 100
+    })
+    if (visible) {
+      bounds = { x: saved.x, y: saved.y, width: saved.width, height: saved.height }
+    }
+  }
+
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    ...bounds,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+
+  // Save window bounds on move/resize (debounced)
+  let boundsTimer: ReturnType<typeof setTimeout> | null = null
+  const saveBounds = () => {
+    if (boundsTimer) clearTimeout(boundsTimer)
+    boundsTimer = setTimeout(() => {
+      if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+      const b = win.getBounds()
+      const s = readSettings()
+      s.windowBounds = { x: b.x, y: b.y, width: b.width, height: b.height }
+      writeSettings(s)
+    }, 500)
+  }
+  win.on('moved', saveBounds)
+  win.on('resized', saveBounds)
 
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', new Date().toLocaleString())
@@ -161,13 +211,18 @@ function createWindow() {
 
 function copySeedDbIfNeeded() {
   const userDbPath = path.join(app.getPath('userData'), 'hymns.db')
-  if (fs.existsSync(userDbPath)) return
   const seedPaths = [
     path.join(process.resourcesPath ?? '', 'hymns.db'),
     path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
   ]
-  for (const seedPath of seedPaths) {
-    if (fs.existsSync(seedPath)) { fs.copyFileSync(seedPath, userDbPath); return }
+  function copyFromSeed() {
+    for (const seedPath of seedPaths) {
+      if (fs.existsSync(seedPath)) { fs.copyFileSync(seedPath, userDbPath); return true }
+    }
+    return false
+  }
+  if (!fs.existsSync(userDbPath)) {
+    copyFromSeed()
   }
 }
 
@@ -198,6 +253,7 @@ app.whenReady().then(() => {
 
   copySeedDbIfNeeded()
   initDB()
+  seedBibleFromJson()
 
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => readSettings())
@@ -231,6 +287,10 @@ app.whenReady().then(() => {
   ipcMain.handle('db:get-hymn', (_e, number: string) => getHymnByNumber(number))
   ipcMain.handle('db:search-hymns', (_e, query: string, categoryId?: number) =>
     searchHymns(query, categoryId))
+  ipcMain.handle('db:get-all-hymns-with-snippets', (_e, categoryId?: number) =>
+    getAllHymnsWithSnippets(categoryId))
+  ipcMain.handle('db:search-hymns-content', (_e, query: string, categoryId?: number) =>
+    searchHymnsContent(query, categoryId))
   ipcMain.handle('db:get-hymn-with-sections', (_e, id: number) => getHymnWithSections(id))
   ipcMain.handle('db:create-hymn-with-sections', (_e, payload: {
     number: string;
@@ -245,6 +305,11 @@ app.whenReady().then(() => {
   ipcMain.handle('hymn:set-category', (_e, id: number, categoryId?: number) =>
     updateHymnCategory(id, categoryId))
   ipcMain.handle('hymn:delete', (_e, id: number) => deleteHymn(id))
+  ipcMain.handle('hymn:update-with-sections', (_e, id: number, payload: {
+    number: string;
+    title: string;
+    sections: { type: 'strofa' | 'refren'; text: string }[];
+  }) => updateHymnWithSections(id, payload))
   ipcMain.handle('db:clear-all', () => clearAllData())
   ipcMain.handle('db:export-json-backup', (_e, destPath: string) => {
     const backup = exportJsonBackup()
@@ -351,14 +416,15 @@ app.whenReady().then(() => {
 
   // ── Projection ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('projection:open', (_e, sections: any[], hymnTitle: string, hymnNumber: string) => {
-    projState = { sections, currentIndex: -1, hymnTitle, hymnNumber }
+  ipcMain.handle('projection:open', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
+    const idx = typeof startIndex === 'number' ? startIndex : 0
+    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
     if (projectionWin) {
       projectionWin.focus()
     } else {
       createProjectionWindow()
     }
-    const sendInitial = () => sendSlideToProjection(-1)
+    const sendInitial = () => sendSlideToProjection(idx)
     if (projectionWin?.webContents.isLoading()) {
       projectionWin.webContents.once('did-finish-load', sendInitial)
     } else {
@@ -366,18 +432,27 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('projection:navigate', (_e, _sections: any[], index: number) => {
+  ipcMain.handle('projection:navigate', (_e, _sections: any[], index: number, _hymnTitle: string, _hymnNumber: string, contentType?: string, bibleRef?: string) => {
     if (!projState) return
+    if (contentType) projState.contentType = contentType as any
+    if (bibleRef) projState.bibleRef = bibleRef
     const clamped = Math.max(0, Math.min(index, projState.sections.length - 1))
     sendSlideToProjection(clamped)
+  })
+
+  ipcMain.handle('projection:update-hymn', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
+    const idx = typeof startIndex === 'number' ? startIndex : 0
+    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
+    sendSlideToProjection(idx)
   })
 
   ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close') => {
     if (action === 'close') { projectionWin?.close(); return }
     if (!projState) return
+    const minIndex = projState.contentType === 'bible' ? 0 : -1  // Bible has no title slide
     const newIndex = action === 'next'
       ? Math.min(projState.currentIndex + 1, projState.sections.length - 1)
-      : Math.max(projState.currentIndex - 1, -1)   // -1 = title slide
+      : Math.max(projState.currentIndex - 1, minIndex)
     sendSlideToProjection(newIndex)
   })
 
@@ -386,6 +461,18 @@ app.whenReady().then(() => {
     projectionWin = null
     projState = null
   })
+
+  // ── Bible ───────────────────────────────────────────────────────────────────
+  ipcMain.handle('bible:get-books', () => getBibleBooks())
+  ipcMain.handle('bible:get-chapters', (_e, bookId: number) => getBibleChapters(bookId))
+  ipcMain.handle('bible:get-verses', (_e, bookId: number, chapter: number) =>
+    getBibleVerses(bookId, chapter))
+  ipcMain.handle('bible:search', (_e, query: string, bookId?: number) =>
+    searchBible(query, bookId))
+  ipcMain.handle('bible:get-verse-range',
+    (_e, bookId: number, chapter: number, startVerse: number, endVerse: number) =>
+      getBibleVerseRange(bookId, chapter, startVerse, endVerse))
+  ipcMain.handle('bible:has-data', () => hasBibleData())
 
   createWindow()
 })

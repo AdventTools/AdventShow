@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('electron', {
     getAllHymns: (categoryId?: number) => ipcRenderer.invoke('db:get-all-hymns', categoryId),
     getHymn: (number: string) => ipcRenderer.invoke('db:get-hymn', number),
     searchHymns: (query: string, categoryId?: number) => ipcRenderer.invoke('db:search-hymns', query, categoryId),
+    getAllHymnsWithSnippets: (categoryId?: number) => ipcRenderer.invoke('db:get-all-hymns-with-snippets', categoryId),
+    searchHymnsContent: (query: string, categoryId?: number) => ipcRenderer.invoke('db:search-hymns-content', query, categoryId),
     getHymnWithSections: (id: number) => ipcRenderer.invoke('db:get-hymn-with-sections', id),
     createHymnWithSections: (payload: {
       number: string;
@@ -29,6 +31,11 @@ contextBridge.exposeInMainWorld('electron', {
       categoryId?: number;
       sections: { type: 'strofa' | 'refren'; text: string }[];
     }) => ipcRenderer.invoke('db:create-hymn-with-sections', payload),
+    updateHymnWithSections: (id: number, payload: {
+      number: string;
+      title: string;
+      sections: { type: 'strofa' | 'refren'; text: string }[];
+    }) => ipcRenderer.invoke('hymn:update-with-sections', id, payload),
     importPresentations: (dirPath: string, categoryId?: number) => ipcRenderer.invoke('db:import-presentations', dirPath, categoryId),
     importPresentationFiles: (filePaths: string[], categoryId?: number) => ipcRenderer.invoke('db:import-presentation-files', filePaths, categoryId),
     clearAll: () => ipcRenderer.invoke('db:clear-all'),
@@ -77,11 +84,25 @@ contextBridge.exposeInMainWorld('electron', {
     getDisplays: () => ipcRenderer.invoke('screen:get-displays'),
   },
 
+  bible: {
+    getBooks: () => ipcRenderer.invoke('bible:get-books'),
+    getChapters: (bookId: number) => ipcRenderer.invoke('bible:get-chapters', bookId),
+    getVerses: (bookId: number, chapter: number) =>
+      ipcRenderer.invoke('bible:get-verses', bookId, chapter),
+    search: (query: string, bookId?: number) =>
+      ipcRenderer.invoke('bible:search', query, bookId),
+    getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) =>
+      ipcRenderer.invoke('bible:get-verse-range', bookId, chapter, startVerse, endVerse),
+    hasData: () => ipcRenderer.invoke('bible:has-data'),
+  },
+
   projection: {
-    open: (sections: any[], hymnTitle: string, hymnNumber: string) =>
-      ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber),
-    navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string) =>
-      ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber),
+    open: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
+      ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
+    navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string, contentType?: string, bibleRef?: string) =>
+      ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber, contentType, bibleRef),
+    updateHymn: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
+      ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
     close: () => ipcRenderer.invoke('projection:close'),
     sendKeyRequest: (action: 'prev' | 'next' | 'close') =>
       ipcRenderer.invoke('projection:key-request', action),
