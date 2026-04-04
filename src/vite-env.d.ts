@@ -22,6 +22,7 @@ export interface Hymn {
   category_id?: number | null;
   section_count?: number;
   snippet?: string;
+  created_at?: string;
 }
 
 export interface BibleBook {
@@ -99,6 +100,7 @@ export interface AppSettings {
   bgOpacity?: number;      // 0–1, opacity of the media layer (default 1)
   hymnNumberColor?: string; // hex, e.g. '#9fb3ff'
   contentTextColor?: string; // hex, e.g. '#ffffff'
+  adminPasswordHash?: string; // bcrypt-like hash or empty
 }
 
 export interface IElectronAPI {
@@ -110,6 +112,7 @@ export interface IElectronAPI {
     searchHymnsContent: (query: string, categoryId?: number) => Promise<Hymn[]>;
     getHymnWithSections: (id: number) => Promise<HymnWithSections | null>;
     createHymnWithSections: (payload: CreateHymnInput) => Promise<number>;
+    updateHymnWithSections: (id: number, payload: { number: string; title: string; sections: { type: 'strofa' | 'refren'; text: string }[] }) => Promise<void>;
     importPresentations: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
     importPresentationFiles: (filePaths: string[], categoryId?: number) => Promise<ImportResult>;
     clearAll: () => Promise<void>;
@@ -156,8 +159,9 @@ export interface IElectronAPI {
     getDisplays: () => Promise<DisplayInfo[]>;
   };
   projection: {
-    open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string) => Promise<void>;
+    open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number) => Promise<void>;
     navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string) => Promise<void>;
+    updateHymn: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number) => Promise<void>;
     close: () => Promise<void>;
     sendKeyRequest: (action: 'prev' | 'next' | 'close') => Promise<void>;
     onSlide: (cb: (data: ProjectionSlideData) => void) => void;

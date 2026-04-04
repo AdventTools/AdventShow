@@ -97,6 +97,7 @@ const BUILTIN_CATEGORIES = [
   'Exploratori',
   'Companioni',
   'Tineret',
+  'Imnuri Speciale',
 ];
 
 export function initDB() {
@@ -130,6 +131,13 @@ export function initDB() {
   // Migration: add category_id to existing hymns table if missing
   try {
     db.exec('ALTER TABLE hymns ADD COLUMN category_id INTEGER REFERENCES categories(id)');
+  } catch {
+    // Column already exists — fine
+  }
+
+  // Migration: add created_at column
+  try {
+    db.exec("ALTER TABLE hymns ADD COLUMN created_at TEXT DEFAULT ''");
   } catch {
     // Column already exists — fine
   }
@@ -242,7 +250,8 @@ export function getHymnByNumber(number: string) {
 }
 
 export function searchHymns(query: string, categoryId?: number) {
-  const searchPattern = `%${query}%`;
+  const normalizedPattern = `%${normalizeSearchText(query)}%`;
+  const originalPattern = `%${query}%`;
   if (categoryId !== undefined) {
     return getDb()
       .prepare(`
@@ -255,7 +264,7 @@ export function searchHymns(query: string, categoryId?: number) {
         ORDER BY CAST(h.number AS INTEGER)
         LIMIT 50
       `)
-      .all(categoryId, searchPattern, searchPattern, searchPattern);
+      .all(categoryId, originalPattern, originalPattern, normalizedPattern);
   }
   return getDb()
     .prepare(`
@@ -268,7 +277,7 @@ export function searchHymns(query: string, categoryId?: number) {
       ORDER BY CAST(h.number AS INTEGER)
       LIMIT 50
     `)
-    .all(searchPattern, searchPattern, searchPattern);
+    .all(originalPattern, originalPattern, normalizedPattern);
 }
 
 export function getAllHymnsWithSnippets(categoryId?: number) {
@@ -305,7 +314,7 @@ export function getAllHymnsWithSnippets(categoryId?: number) {
 }
 
 export function searchHymnsContent(query: string, categoryId?: number) {
-  const searchPattern = `%${query}%`;
+  const searchPattern = `%${normalizeSearchText(query)}%`;
   const snippetSubquery = `
     (SELECT s.text FROM hymn_sections s
      WHERE s.hymn_id = h.id AND s.type = 'strofa'
@@ -448,8 +457,8 @@ export function createHymnWithSections(input: CreateHymnInput): number {
     let hymnResult: { lastInsertRowid: number | bigint };
     try {
       hymnResult = db
-        .prepare('INSERT INTO hymns (number, title, search_text, category_id) VALUES (?, ?, ?, ?)')
-        .run(number, title, searchText, categoryId);
+        .prepare('INSERT INTO hymns (number, title, search_text, category_id, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(number, title, searchText, categoryId, new Date().toISOString());
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes('UNIQUE constraint failed: hymns.number')) {
         throw new Error('Schema bazei de date este veche (număr global unic). Repornește aplicația pentru migrare automată și încearcă din nou.');
@@ -476,6 +485,35 @@ export function createHymnWithSections(input: CreateHymnInput): number {
   });
 
   return tx(input);
+}
+
+export function updateHymnWithSections(id: number, input: { number: string; title: string; sections: HymnSectionInput[] }) {
+  const db = getDb();
+  const tx = db.transaction(() => {
+    const number = normalizeHymnNumber(input.number);
+    const title = input.title.trim();
+    const sections = input.sections
+      .map(s => ({ type: s.type, text: s.text.trim() }))
+      .filter(s => s.text.length > 0);
+
+    if (!number) throw new Error('Numărul imnului este obligatoriu.');
+    if (!title) throw new Error('Titlul imnului este obligatoriu.');
+    if (sections.length === 0) throw new Error('Adaugă cel puțin o secțiune cu text.');
+
+    const searchText = normalizeSearchText(`${number} ${title} ${sections.map(s => s.text).join(' ')}`);
+    db.prepare('UPDATE hymns SET number = ?, title = ?, search_text = ? WHERE id = ?')
+      .run(number, title, searchText, id);
+
+    db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(id);
+    const insertSection = db.prepare(`
+      INSERT INTO hymn_sections (hymn_id, order_index, type, text)
+      VALUES (@hymnId, @order_index, @type, @text)
+    `);
+    sections.forEach((section, index) => {
+      insertSection.run({ hymnId: id, order_index: index, type: section.type, text: section.text });
+    });
+  });
+  tx();
 }
 
 export function clearAllData() {
