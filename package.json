@@ -1,7 +1,7 @@
 {
   "name": "proiectie-imnuri",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "productName": "Proiectie Imnuri",
   "description": "Aplicatie pentru import, formatare, previzualizare si organizare pe categorii a imnurilor, cu administrare si proiectare rapida in biserica.",
   "author": "Ovidius S Zanfir",
