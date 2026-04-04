@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.invoke('bible:search', query, bookId),
     getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) =>
       ipcRenderer.invoke('bible:get-verse-range', bookId, chapter, startVerse, endVerse),
+    hasData: () => ipcRenderer.invoke('bible:has-data'),
   },
 
   projection: {
