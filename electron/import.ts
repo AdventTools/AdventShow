@@ -240,6 +240,12 @@ function inferTitleFromLegacyPpt(slide: LegacyPptSlide, file: string) {
       continue;
     }
 
+    // Handle "NNN. TITLE" or "NNN TITLE" pattern (e.g. Exploratori PPTs)
+    const numberedTitleMatch = block.text.match(/^(\d+)\.?\s+(.+)/);
+    if (numberedTitleMatch && !number) {
+      number = String(parseInt(numberedTitleMatch[1], 10));
+    }
+
     if (!number && /\d/.test(block.text) && block.text.length <= 24) {
       const digits = block.text.match(/\d+/g);
       if (digits) number = digits.join('');
@@ -252,7 +258,10 @@ function inferTitleFromLegacyPpt(slide: LegacyPptSlide, file: string) {
     .filter(text => !/^imnul\b/i.test(text) && !/^\d+$/.test(text));
 
   for (const candidate of titleCandidates) {
-    if (candidate.length > title.length) title = candidate;
+    // Strip leading "NNN. " or "NNN " prefix from title
+    const cleaned = candidate.replace(/^\d+\.?\s+/, '');
+    const finalCandidate = cleaned || candidate;
+    if (finalCandidate.length > title.length) title = finalCandidate;
   }
 
   if (!number) {
@@ -263,7 +272,13 @@ function inferTitleFromLegacyPpt(slide: LegacyPptSlide, file: string) {
     title = path.basename(file, path.extname(file));
   }
 
-  return { number, title };
+  // Prefer filename title when detected title is ALL CAPS (better casing)
+  if (title === title.toUpperCase() && title.length > 2) {
+    const fileTitle = path.basename(file, path.extname(file)).replace(/^\d+\.?\s*/, '').trim();
+    if (fileTitle) title = fileTitle;
+  }
+
+  return { number: String(parseInt(number, 10) || number), title };
 }
 
 function getLegacyPptLinesForSlide(slide: LegacyPptSlide): string[] {
@@ -338,11 +353,11 @@ async function parseShapes(zip: JSZip, filename: string): Promise<Shape[]> {
     for (const sp of spList) {
       // Position & size
       const xfrm = sp?.['p:spPr']?.[0]?.['a:xfrm']?.[0];
-      const ext   = xfrm?.['a:ext']?.[0]?.['$'];
-      const off   = xfrm?.['a:off']?.[0]?.['$'];
-      const cx    = parseInt(ext?.cx ?? '0');
-      const cy    = parseInt(ext?.cy ?? '0');
-      const area  = cx * cy;
+      const ext = xfrm?.['a:ext']?.[0]?.['$'];
+      const off = xfrm?.['a:off']?.[0]?.['$'];
+      const cx = parseInt(ext?.cx ?? '0');
+      const cy = parseInt(ext?.cy ?? '0');
+      const area = cx * cy;
       const yOffset = parseInt(off?.y ?? '0');
 
       // Paragraphs
@@ -358,15 +373,15 @@ async function parseShapes(zip: JSZip, filename: string): Promise<Shape[]> {
         const runs: any[] = para['a:r'] ?? [];
         for (const run of runs) {
           const t = run['a:t'];
-          if (Array.isArray(t))     text += t.map(String).join('');
+          if (Array.isArray(t)) text += t.map(String).join('');
           else if (typeof t === 'string') text += t;
-          else if (t?._)            text += String(t._);
+          else if (t?._) text += String(t._);
         }
         // Fields (e.g. link text)
         const fields: any[] = para['a:fld'] ?? [];
         for (const fld of fields) {
           const t = fld['a:t'];
-          if (Array.isArray(t))     text += t.map(String).join('');
+          if (Array.isArray(t)) text += t.map(String).join('');
           else if (typeof t === 'string') text += t;
         }
         paragraphs.push(text.trim());
@@ -443,16 +458,19 @@ function extractTitle(shapes: Shape[]): { number: string; title: string } {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** "R."  "R"  "r."  "r."  alone on a line (the marker itself, no following text) */
-const R_ALONE   = /^\s*R\.?\s*$/i;
+const R_ALONE = /^\s*R\.?\s*$/i;
 
 /** "R. O, ce har..."  — marker followed immediately by refren text on the same line */
-const R_INLINE  = /^\s*R\.?\s+(.+)$/i;
+const R_INLINE = /^\s*R\.?\s+(.+)$/i;
 
 /** "Refren"  "REFREN"  "Refren:"  alone */
 const REFREN_WORD = /^\s*refren:?\s*$/i;
 
 /** "1."  "2."  "Strofa 1"  "Strofa 2" — stanza header */
-const STROFA_HDR  = /^\s*(strofa\s*)?\d+\.?\s*$/i;
+const STROFA_HDR = /^\s*(strofa\s*)?\d+\.?\s*$/i;
+
+/** Inline stanza number at start of a line: "1.  Text..." or "2. Text..." */
+const INLINE_STANZA_NUM = /^\d+\.\s+/;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // processLines — state machine that splits a flat list of lines into
@@ -494,7 +512,13 @@ function processLines(lines: string[]): { type: 'strofa' | 'refren'; text: strin
       continue; // header itself not stored
     }
 
-    buf.push(line);
+    // Strip inline stanza number from first line of a stanza
+    // e.g. "1.  Suntem uniţi inimi şi gând," → "Suntem uniţi inimi şi gând,"
+    if (buf.length === 0 && mode === 'strofa' && INLINE_STANZA_NUM.test(line)) {
+      buf.push(line.replace(INLINE_STANZA_NUM, ''));
+    } else {
+      buf.push(line);
+    }
   }
 
   flush();

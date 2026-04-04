@@ -394,14 +394,14 @@ function App() {
         setPreviewSections(expanded);
         setPreviewTitle(data.title);
         setPreviewNumber(String(data.number));
-        setProjSlideIndex(0);
+        setProjSlideIndex(-1);
         setSelectedHymnId(id);
 
-        // If projecting, fluid hymn switch
+        // If projecting, fluid hymn switch — show title slide first
         if (projecting) {
             const secs = expanded.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
-            await window.electron.projection.updateHymn(secs, data.title, String(data.number), 0, 'hymn');
-            setProjSlideIndex(0);
+            await window.electron.projection.updateHymn(secs, data.title, String(data.number), -1, 'hymn');
+            setProjSlideIndex(-1);
         }
     }, [projecting]);
 
@@ -436,22 +436,25 @@ function App() {
     }, []);
 
     // ── Projection control ──
-    const startProjection = useCallback(async (startIndex = 0) => {
+    const startProjection = useCallback(async (startIndex?: number) => {
         if (!previewSections.length) return;
         const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
         const ct = previewType ?? 'hymn';
-        const br = ct === 'bible' && previewSections[startIndex]
-            ? `${previewTitle}:${(previewSections[startIndex] as any).label?.replace('v. ', '') ?? ''}`
+        // Hymns start at title slide (-1), Bible starts at first verse (0)
+        const idx = startIndex ?? (ct === 'hymn' ? -1 : 0);
+        const br = ct === 'bible' && previewSections[idx]
+            ? `${previewTitle}:${(previewSections[idx] as any).label?.replace('v. ', '') ?? ''}`
             : undefined;
-        await window.electron.projection.open(secs, previewTitle, previewNumber, startIndex, ct, br);
+        await window.electron.projection.open(secs, previewTitle, previewNumber, idx, ct, br);
         setProjecting(true);
-        setProjSlideIndex(startIndex);
+        setProjSlideIndex(idx);
     }, [previewSections, previewTitle, previewNumber, previewType]);
 
     const navigateSlide = useCallback(async (newIdx: number) => {
         if (!projecting) return;
         const n = previewSections.length;
-        if (newIdx < 0 || newIdx >= n) return;
+        const minIdx = previewType === 'bible' ? 0 : -1;
+        if (newIdx < minIdx || newIdx >= n) return;
         setProjSlideIndex(newIdx);
         const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
         const ct = previewType ?? 'hymn';
@@ -666,7 +669,9 @@ function App() {
                 } else if (previewSections.length > 0) {
                     clearPreview();
                 }
-                // Always focus search after any Escape
+                // Always clear search fields and focus
+                setRefSearch('');
+                setContentSearch('');
                 refSearchRef.current?.focus();
                 return;
             }
@@ -1412,7 +1417,7 @@ function PreviewPanel({
                             <Square className="icon-xs" /> Oprește
                         </button>
                         <div className="nav-btns">
-                            <button className="btn-nav" onClick={() => onNavigateSlide(projSlideIndex - 1)} disabled={projSlideIndex <= 0}>
+                            <button className="btn-nav" onClick={() => onNavigateSlide(projSlideIndex - 1)} disabled={projSlideIndex <= -1}>
                                 <ChevronLeft className="icon-xs" />
                             </button>
                             <button className="btn-nav" onClick={() => onNavigateSlide(projSlideIndex + 1)} disabled={projSlideIndex >= previewSections.length - 1}>

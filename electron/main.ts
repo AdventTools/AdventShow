@@ -436,7 +436,8 @@ app.whenReady().then(() => {
     if (!projState) return
     if (contentType) projState.contentType = contentType as any
     if (bibleRef) projState.bibleRef = bibleRef
-    const clamped = Math.max(0, Math.min(index, projState.sections.length - 1))
+    const minIndex = projState.contentType === 'bible' ? 0 : -1
+    const clamped = Math.max(minIndex, Math.min(index, projState.sections.length - 1))
     sendSlideToProjection(clamped)
   })
 
