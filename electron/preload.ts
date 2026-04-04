@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('electron', {
     getAllHymns: (categoryId?: number) => ipcRenderer.invoke('db:get-all-hymns', categoryId),
     getHymn: (number: string) => ipcRenderer.invoke('db:get-hymn', number),
     searchHymns: (query: string, categoryId?: number) => ipcRenderer.invoke('db:search-hymns', query, categoryId),
+    getAllHymnsWithSnippets: (categoryId?: number) => ipcRenderer.invoke('db:get-all-hymns-with-snippets', categoryId),
+    searchHymnsContent: (query: string, categoryId?: number) => ipcRenderer.invoke('db:search-hymns-content', query, categoryId),
     getHymnWithSections: (id: number) => ipcRenderer.invoke('db:get-hymn-with-sections', id),
     createHymnWithSections: (payload: {
       number: string;

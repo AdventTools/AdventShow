@@ -271,6 +271,74 @@ export function searchHymns(query: string, categoryId?: number) {
     .all(searchPattern, searchPattern, searchPattern);
 }
 
+export function getAllHymnsWithSnippets(categoryId?: number) {
+  const snippetSubquery = `
+    (SELECT s.text FROM hymn_sections s
+     WHERE s.hymn_id = h.id AND s.type = 'strofa'
+     ORDER BY s.order_index LIMIT 1) AS snippet
+  `;
+  if (categoryId !== undefined) {
+    return getDb()
+      .prepare(`
+        SELECT h.id, h.number, h.title, h.category_id,
+               COUNT(sec.id) AS section_count,
+               ${snippetSubquery}
+        FROM hymns h
+        LEFT JOIN hymn_sections sec ON sec.hymn_id = h.id
+        WHERE h.category_id = ?
+        GROUP BY h.id
+        ORDER BY CAST(h.number AS INTEGER)
+      `)
+      .all(categoryId);
+  }
+  return getDb()
+    .prepare(`
+      SELECT h.id, h.number, h.title, h.category_id,
+             COUNT(sec.id) AS section_count,
+             ${snippetSubquery}
+      FROM hymns h
+      LEFT JOIN hymn_sections sec ON sec.hymn_id = h.id
+      GROUP BY h.id
+      ORDER BY CAST(h.number AS INTEGER)
+    `)
+    .all();
+}
+
+export function searchHymnsContent(query: string, categoryId?: number) {
+  const searchPattern = `%${query}%`;
+  const snippetSubquery = `
+    (SELECT s.text FROM hymn_sections s
+     WHERE s.hymn_id = h.id AND s.type = 'strofa'
+     ORDER BY s.order_index LIMIT 1) AS snippet
+  `;
+  if (categoryId !== undefined) {
+    return getDb()
+      .prepare(`
+        SELECT DISTINCT h.id, h.number, h.title, h.category_id,
+               (SELECT COUNT(*) FROM hymn_sections sec2 WHERE sec2.hymn_id = h.id) AS section_count,
+               ${snippetSubquery}
+        FROM hymns h
+        INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
+        WHERE h.category_id = ? AND sec.text LIKE ?
+        ORDER BY CAST(h.number AS INTEGER)
+        LIMIT 50
+      `)
+      .all(categoryId, searchPattern);
+  }
+  return getDb()
+    .prepare(`
+      SELECT DISTINCT h.id, h.number, h.title, h.category_id,
+             (SELECT COUNT(*) FROM hymn_sections sec2 WHERE sec2.hymn_id = h.id) AS section_count,
+             ${snippetSubquery}
+      FROM hymns h
+      INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
+      WHERE sec.text LIKE ?
+      ORDER BY CAST(h.number AS INTEGER)
+      LIMIT 50
+    `)
+    .all(searchPattern);
+}
+
 export function getHymnWithSections(hymnId: number) {
   const db = getDb();
   const hymn = db.prepare('SELECT * FROM hymns WHERE id = ?').get(hymnId);
