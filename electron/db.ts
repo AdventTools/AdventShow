@@ -259,7 +259,7 @@ export function searchHymns(query: string, categoryId?: number) {
                COUNT(s.id) AS section_count
         FROM hymns h
         LEFT JOIN hymn_sections s ON s.hymn_id = h.id
-        WHERE h.category_id = ? AND (h.number LIKE ? OR h.title LIKE ? OR h.search_text LIKE ?)
+        WHERE h.category_id = ? AND (h.number LIKE ? OR h.title LIKE ? OR LOWER(h.title) LIKE ?)
         GROUP BY h.id
         ORDER BY CAST(h.number AS INTEGER)
         LIMIT 50
@@ -272,7 +272,7 @@ export function searchHymns(query: string, categoryId?: number) {
              COUNT(s.id) AS section_count
       FROM hymns h
       LEFT JOIN hymn_sections s ON s.hymn_id = h.id
-      WHERE h.number LIKE ? OR h.title LIKE ? OR h.search_text LIKE ?
+      WHERE h.number LIKE ? OR h.title LIKE ? OR LOWER(h.title) LIKE ?
       GROUP BY h.id
       ORDER BY CAST(h.number AS INTEGER)
       LIMIT 50
@@ -314,7 +314,8 @@ export function getAllHymnsWithSnippets(categoryId?: number) {
 }
 
 export function searchHymnsContent(query: string, categoryId?: number) {
-  const searchPattern = `%${normalizeSearchText(query)}%`;
+  const normalizedPattern = `%${normalizeSearchText(query)}%`;
+  const originalPattern = `%${query}%`;
   const snippetSubquery = `
     (SELECT s.text FROM hymn_sections s
      WHERE s.hymn_id = h.id AND s.type = 'strofa'
@@ -328,11 +329,11 @@ export function searchHymnsContent(query: string, categoryId?: number) {
                ${snippetSubquery}
         FROM hymns h
         INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
-        WHERE h.category_id = ? AND sec.text LIKE ?
+        WHERE h.category_id = ? AND (sec.text LIKE ? OR h.search_text LIKE ?)
         ORDER BY CAST(h.number AS INTEGER)
         LIMIT 50
       `)
-      .all(categoryId, searchPattern);
+      .all(categoryId, originalPattern, normalizedPattern);
   }
   return getDb()
     .prepare(`
@@ -341,11 +342,11 @@ export function searchHymnsContent(query: string, categoryId?: number) {
              ${snippetSubquery}
       FROM hymns h
       INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
-      WHERE sec.text LIKE ?
+      WHERE sec.text LIKE ? OR h.search_text LIKE ?
       ORDER BY CAST(h.number AS INTEGER)
       LIMIT 50
     `)
-    .all(searchPattern);
+    .all(originalPattern, normalizedPattern);
 }
 
 export function getHymnWithSections(hymnId: number) {

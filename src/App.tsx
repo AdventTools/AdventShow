@@ -367,7 +367,7 @@ function App() {
         // If projecting, fluid hymn switch
         if (projecting) {
             const secs = expanded.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
-            await window.electron.projection.updateHymn(secs, data.title, String(data.number), 0);
+            await window.electron.projection.updateHymn(secs, data.title, String(data.number), 0, 'hymn');
             setProjSlideIndex(0);
         }
     }, [projecting]);
@@ -405,10 +405,14 @@ function App() {
     const startProjection = useCallback(async (startIndex = 0) => {
         if (!previewSections.length) return;
         const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
-        await window.electron.projection.open(secs, previewTitle, previewNumber, startIndex);
+        const ct = previewType ?? 'hymn';
+        const br = ct === 'bible' && previewSections[startIndex]
+            ? `${previewTitle}:${(previewSections[startIndex] as any).label?.replace('v. ', '') ?? ''}`
+            : undefined;
+        await window.electron.projection.open(secs, previewTitle, previewNumber, startIndex, ct, br);
         setProjecting(true);
         setProjSlideIndex(startIndex);
-    }, [previewSections, previewTitle, previewNumber]);
+    }, [previewSections, previewTitle, previewNumber, previewType]);
 
     const navigateSlide = useCallback(async (newIdx: number) => {
         if (!projecting) return;
@@ -416,8 +420,12 @@ function App() {
         if (newIdx < 0 || newIdx >= n) return;
         setProjSlideIndex(newIdx);
         const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
-        await window.electron.projection.navigate(secs, newIdx, previewTitle, previewNumber);
-    }, [projecting, previewSections, previewTitle, previewNumber]);
+        const ct = previewType ?? 'hymn';
+        const br = ct === 'bible' && previewSections[newIdx]
+            ? `${previewTitle}:${(previewSections[newIdx] as any).label?.replace('v. ', '') ?? ''}`
+            : undefined;
+        await window.electron.projection.navigate(secs, newIdx, previewTitle, previewNumber, ct, br);
+    }, [projecting, previewSections, previewTitle, previewNumber, previewType]);
 
     const stopProjection = useCallback(async () => {
         await window.electron.projection.close();

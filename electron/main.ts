@@ -84,6 +84,8 @@ interface ProjState {
   currentIndex: number
   hymnTitle: string
   hymnNumber: string
+  contentType?: 'hymn' | 'bible'
+  bibleRef?: string
 }
 let projState: ProjState | null = null
 
@@ -95,6 +97,8 @@ function sendSlideToProjection(index: number) {
     currentIndex: index,
     hymnTitle: projState.hymnTitle,
     hymnNumber: projState.hymnNumber,
+    contentType: projState.contentType,
+    bibleRef: projState.bibleRef,
   })
   win?.webContents.send('projection:controller-sync', { currentIndex: index })
 }
@@ -375,9 +379,9 @@ app.whenReady().then(() => {
 
   // ── Projection ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('projection:open', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) => {
+  ipcMain.handle('projection:open', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
     const idx = typeof startIndex === 'number' ? startIndex : 0
-    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber }
+    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
     if (projectionWin) {
       projectionWin.focus()
     } else {
@@ -391,24 +395,27 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('projection:navigate', (_e, _sections: any[], index: number) => {
+  ipcMain.handle('projection:navigate', (_e, _sections: any[], index: number, _hymnTitle: string, _hymnNumber: string, contentType?: string, bibleRef?: string) => {
     if (!projState) return
+    if (contentType) projState.contentType = contentType as any
+    if (bibleRef) projState.bibleRef = bibleRef
     const clamped = Math.max(0, Math.min(index, projState.sections.length - 1))
     sendSlideToProjection(clamped)
   })
 
-  ipcMain.handle('projection:update-hymn', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) => {
+  ipcMain.handle('projection:update-hymn', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
     const idx = typeof startIndex === 'number' ? startIndex : 0
-    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber }
+    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
     sendSlideToProjection(idx)
   })
 
   ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close') => {
     if (action === 'close') { projectionWin?.close(); return }
     if (!projState) return
+    const minIndex = projState.contentType === 'bible' ? 0 : -1  // Bible has no title slide
     const newIndex = action === 'next'
       ? Math.min(projState.currentIndex + 1, projState.sections.length - 1)
-      : Math.max(projState.currentIndex - 1, -1)   // -1 = title slide
+      : Math.max(projState.currentIndex - 1, minIndex)
     sendSlideToProjection(newIndex)
   })
 
