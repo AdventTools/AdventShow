@@ -146,6 +146,9 @@ export function initDB() {
     insertBuiltin.run(name);
   }
 
+  // Create Bible tables (if not present yet)
+  initBibleTables();
+
   // Normalize purely numeric hymn numbers to 3-digit format (e.g. 1 -> 001).
   db.prepare(`
     UPDATE hymns
@@ -660,4 +663,103 @@ export function bulkInsertHymns(hymns: HymnImportData[]) {
   });
 
   tx(hymns);
+}
+
+// ── Bible tables ──────────────────────────────────────────────────────────────
+
+export function initBibleTables() {
+  const db = getDb();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bible_books (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      abbreviation TEXT NOT NULL,
+      testament TEXT NOT NULL CHECK(testament IN ('VT', 'NT')),
+      book_order INTEGER NOT NULL,
+      chapter_count INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS bible_verses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id INTEGER NOT NULL REFERENCES bible_books(id),
+      chapter INTEGER NOT NULL,
+      verse INTEGER NOT NULL,
+      text TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_bible_verses_book_chapter
+      ON bible_verses(book_id, chapter);
+  `);
+}
+
+// ── Bible queries ─────────────────────────────────────────────────────────────
+
+export function getBibleBooks() {
+  return getDb()
+    .prepare('SELECT * FROM bible_books ORDER BY book_order')
+    .all();
+}
+
+export function getBibleChapters(bookId: number): number[] {
+  return getDb()
+    .prepare('SELECT DISTINCT chapter FROM bible_verses WHERE book_id = ? ORDER BY chapter')
+    .all(bookId)
+    .map((r: any) => r.chapter);
+}
+
+export function getBibleVerses(bookId: number, chapter: number) {
+  return getDb()
+    .prepare('SELECT verse, text FROM bible_verses WHERE book_id = ? AND chapter = ? ORDER BY verse')
+    .all(bookId, chapter);
+}
+
+export function searchBible(query: string, bookId?: number) {
+  const pattern = `%${query}%`;
+  if (bookId !== undefined) {
+    return getDb()
+      .prepare(`
+        SELECT bv.book_id, bv.chapter, bv.verse, bv.text,
+               bb.name as book_name, bb.abbreviation
+        FROM bible_verses bv
+        JOIN bible_books bb ON bb.id = bv.book_id
+        WHERE bv.book_id = ? AND bv.text LIKE ?
+        ORDER BY bv.book_id, bv.chapter, bv.verse
+        LIMIT 100
+      `)
+      .all(bookId, pattern);
+  }
+  return getDb()
+    .prepare(`
+      SELECT bv.book_id, bv.chapter, bv.verse, bv.text,
+             bb.name as book_name, bb.abbreviation
+      FROM bible_verses bv
+      JOIN bible_books bb ON bb.id = bv.book_id
+      WHERE bv.text LIKE ?
+      ORDER BY bv.book_id, bv.chapter, bv.verse
+      LIMIT 100
+    `)
+    .all(pattern);
+}
+
+export function getBibleVerseRange(bookId: number, chapter: number, startVerse: number, endVerse: number) {
+  return getDb()
+    .prepare(`
+      SELECT bv.verse, bv.text, bb.name as book_name, bb.abbreviation
+      FROM bible_verses bv
+      JOIN bible_books bb ON bb.id = bv.book_id
+      WHERE bv.book_id = ? AND bv.chapter = ? AND bv.verse >= ? AND bv.verse <= ?
+      ORDER BY bv.verse
+    `)
+    .all(bookId, chapter, startVerse, endVerse);
+}
+
+export function hasBibleData(): boolean {
+  try {
+    const row = getDb()
+      .prepare("SELECT count(*) as cnt FROM sqlite_master WHERE type='table' AND name='bible_books'")
+      .get() as { cnt: number } | undefined;
+    return !!(row && row.cnt > 0);
+  } catch {
+    return false;
+  }
 }

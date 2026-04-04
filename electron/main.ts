@@ -23,6 +23,12 @@ import {
   updateHymn,
   updateHymnCategory,
   updateSection,
+  getBibleBooks,
+  getBibleChapters,
+  getBibleVerses,
+  searchBible,
+  getBibleVerseRange,
+  hasBibleData,
 } from './db'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
@@ -161,13 +167,18 @@ function createWindow() {
 
 function copySeedDbIfNeeded() {
   const userDbPath = path.join(app.getPath('userData'), 'hymns.db')
-  if (fs.existsSync(userDbPath)) return
   const seedPaths = [
     path.join(process.resourcesPath ?? '', 'hymns.db'),
     path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
   ]
-  for (const seedPath of seedPaths) {
-    if (fs.existsSync(seedPath)) { fs.copyFileSync(seedPath, userDbPath); return }
+  function copyFromSeed() {
+    for (const seedPath of seedPaths) {
+      if (fs.existsSync(seedPath)) { fs.copyFileSync(seedPath, userDbPath); return true }
+    }
+    return false
+  }
+  if (!fs.existsSync(userDbPath)) {
+    copyFromSeed()
   }
 }
 
@@ -386,6 +397,17 @@ app.whenReady().then(() => {
     projectionWin = null
     projState = null
   })
+
+  // ── Bible ───────────────────────────────────────────────────────────────────
+  ipcMain.handle('bible:get-books', () => getBibleBooks())
+  ipcMain.handle('bible:get-chapters', (_e, bookId: number) => getBibleChapters(bookId))
+  ipcMain.handle('bible:get-verses', (_e, bookId: number, chapter: number) =>
+    getBibleVerses(bookId, chapter))
+  ipcMain.handle('bible:search', (_e, query: string, bookId?: number) =>
+    searchBible(query, bookId))
+  ipcMain.handle('bible:get-verse-range',
+    (_e, bookId: number, chapter: number, startVerse: number, endVerse: number) =>
+      getBibleVerseRange(bookId, chapter, startVerse, endVerse))
 
   createWindow()
 })
