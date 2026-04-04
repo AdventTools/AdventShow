@@ -77,6 +77,17 @@ contextBridge.exposeInMainWorld('electron', {
     getDisplays: () => ipcRenderer.invoke('screen:get-displays'),
   },
 
+  bible: {
+    getBooks: () => ipcRenderer.invoke('bible:get-books'),
+    getChapters: (bookId: number) => ipcRenderer.invoke('bible:get-chapters', bookId),
+    getVerses: (bookId: number, chapter: number) =>
+      ipcRenderer.invoke('bible:get-verses', bookId, chapter),
+    search: (query: string, bookId?: number) =>
+      ipcRenderer.invoke('bible:search', query, bookId),
+    getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) =>
+      ipcRenderer.invoke('bible:get-verse-range', bookId, chapter, startVerse, endVerse),
+  },
+
   projection: {
     open: (sections: any[], hymnTitle: string, hymnNumber: string) =>
       ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber),
