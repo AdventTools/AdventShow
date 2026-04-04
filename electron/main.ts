@@ -32,6 +32,7 @@ import {
   searchBible,
   getBibleVerseRange,
   hasBibleData,
+  seedBibleFromJson,
 } from './db'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
@@ -62,6 +63,7 @@ interface AppSettings {
   hymnNumberColor?: string
   contentTextColor?: string
   adminPasswordHash?: string
+  projectionFontSize?: number
 }
 
 function getSettingsPath() {
@@ -217,6 +219,7 @@ app.whenReady().then(() => {
 
   copySeedDbIfNeeded()
   initDB()
+  seedBibleFromJson()
 
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => readSettings())

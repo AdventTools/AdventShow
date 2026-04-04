@@ -161,11 +161,17 @@ function parseBibleReference(input: string): {
 /**
  * BibleShow-style book matching. Matches any prefix of the book name or
  * abbreviation, with diacritics stripped and spaces collapsed.
+ * Handles numeric prefixes: "1 imp" matches "1 Împărați", "2cor" matches "2 Corinteni".
  * Returns the best-matching book or null.
  */
 function matchBibleBook(query: string, booksList: BibleBook[]): BibleBook | null {
     const q = normalizeDiacritics(query).replace(/\s+/g, '');
     if (!q) return null;
+
+    // Extract leading number prefix if present (e.g. "1", "2", "3")
+    const numPrefixMatch = q.match(/^(\d+)(.*)$/);
+    const qNumPrefix = numPrefixMatch ? numPrefixMatch[1] : '';
+    const qRest = numPrefixMatch ? numPrefixMatch[2] : q;
 
     const scored: { book: BibleBook; score: number }[] = [];
 
@@ -182,6 +188,24 @@ function matchBibleBook(query: string, booksList: BibleBook[]): BibleBook | null
         else if (abbrCompact.startsWith(q)) score = 80; // Abbreviation prefix
         else if (nameCompact.startsWith(q)) score = 70; // Name prefix
         else if (nameCompact.includes(q)) score = 30;   // Name contains
+
+        // Handle numeric prefix matching: "1 imp" → "1 imparati"
+        // Check if book name starts with same number and rest matches
+        if (score === 0 && qNumPrefix) {
+            const bookNumMatch = nameCompact.match(/^(\d+)(.*)$/);
+            const bookAbbrMatch = abbrCompact.match(/^(\d+)(.*)$/);
+            if (bookNumMatch && bookNumMatch[1] === qNumPrefix && qRest) {
+                const bookNameRest = bookNumMatch[2];
+                if (bookNameRest === qRest) score = 93;
+                else if (bookNameRest.startsWith(qRest)) score = 68;
+                else if (bookNameRest.includes(qRest)) score = 28;
+            }
+            if (bookAbbrMatch && bookAbbrMatch[1] === qNumPrefix && qRest) {
+                const bookAbbrRest = bookAbbrMatch[2];
+                if (bookAbbrRest === qRest) score = Math.max(score, 98);
+                else if (bookAbbrRest.startsWith(qRest)) score = Math.max(score, 78);
+            }
+        }
 
         if (score > 0) scored.push({ book, score });
     }
@@ -256,9 +280,14 @@ function App() {
     const refSearchRef = useRef<HTMLInputElement>(null);
     const hymnListRef = useRef<HTMLDivElement>(null);
     const projSlideIndexRef = useRef(0);
+    const searchConsumedRef = useRef(true); // tracks if current search was already loaded into preview
+    const skipAutoPreviewRef = useRef(false); // prevent auto-preview overriding search-triggered load
 
     // Keep ref in sync
     useEffect(() => { projSlideIndexRef.current = projSlideIndex; }, [projSlideIndex]);
+
+    // Mark search as "new" whenever refSearch changes
+    useEffect(() => { searchConsumedRef.current = false; }, [refSearch]);
 
     // ── Load categories + books on mount ──
     const loadCategories = useCallback(async () => {
@@ -479,6 +508,10 @@ function App() {
 
     // Auto-preview when verses load (from sidebar/chapter click, NOT from reference search)
     useEffect(() => {
+        if (skipAutoPreviewRef.current) {
+            skipAutoPreviewRef.current = false;
+            return;
+        }
         if (verses.length > 0 && selectedChapter) {
             const book = books.find(b => b.id === selectedBookId);
             const secs = verses.map(v => ({
@@ -505,15 +538,29 @@ function App() {
         const book = matchBibleBook(ref.bookQuery, books);
         if (!book) return false;
 
+        // Always expand sidebar tree: select book + load chapters
+        setSelectedBookId(book.id);
+        setSelectedBookName(book.name);
+        setBibleSearchResults(null);
+        const chs = await window.electron.bible.getChapters(book.id);
+        setChapters(chs);
+
         if (!ref.chapter) {
-            // Only book matched → select book, show chapters
-            await selectBook(book);
+            // Only book matched → show chapters, no chapter/verse selected
+            setSelectedChapter(null);
+            setVerses([]);
+            setPreviewType(null);
+            setPreviewSections([]);
+            setProjSlideIndex(0);
             return true;
         }
 
-        // Load chapter verses
+        // Load chapter verses + expand sidebar to chapter
+        setSelectedChapter(ref.chapter);
         const vrs = await window.electron.bible.getVerses(book.id, ref.chapter);
         if (!vrs.length) return false;
+        skipAutoPreviewRef.current = true; // prevent auto-preview from overriding our precise index
+        setVerses(vrs);
 
         // Build preview sections
         const secs = vrs.map((v: BibleVerse) => ({
@@ -526,22 +573,20 @@ function App() {
         setPreviewTitle(`${book.name} ${ref.chapter}`);
         setPreviewNumber(book.abbreviation);
 
-        // Set verse index
-        const verseIdx = ref.verse
-            ? vrs.findIndex((v: BibleVerse) => v.verse === ref.verse)
-            : 0;
-        setProjSlideIndex(Math.max(0, verseIdx));
-
-        // Update sidebar state for visual consistency
-        setSelectedBookId(book.id);
-        setSelectedBookName(book.name);
-        setSelectedChapter(ref.chapter);
-        setVerses(vrs);
-        setSelectedVerseIdx(Math.max(0, verseIdx));
-        setBibleSearchResults(null);
+        if (ref.verse) {
+            // Full reference (book + chapter + verse) → activate verse
+            const verseIdx = vrs.findIndex((v: BibleVerse) => v.verse === ref.verse);
+            const idx = Math.max(0, verseIdx);
+            setProjSlideIndex(idx);
+            setSelectedVerseIdx(idx);
+        } else {
+            // Chapter only → show chapter but no verse active
+            setProjSlideIndex(0);
+            setSelectedVerseIdx(0);
+        }
 
         return true;
-    }, [refSearch, books, selectBook]);
+    }, [refSearch, books]);
 
     // ── Scroll selected hymn into view ──
     useEffect(() => {
@@ -671,24 +716,39 @@ function App() {
     const onSearchKeydown = useCallback(async (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            if (projecting) {
-                // Already projecting — do nothing (ProjectorController handles slide nav)
-                return;
-            }
-            if (previewSections.length > 0) {
-                // Preview exists → second Enter → project from current slide
-                startProjection(projSlideIndex);
-                return;
-            }
-            // No preview → first Enter → load into preview
+
+            // Check if user has a new/unconsumed search query
+            const isNewSearch = refSearch.trim().length > 0 && !searchConsumedRef.current;
+
             if (tab === 'imnuri') {
-                if (selectedHymnId) {
-                    previewHymn(selectedHymnId);
-                } else if (hymns.length > 0) {
-                    previewHymn(hymns[0].id);
+                if (isNewSearch || !previewSections.length) {
+                    // New search or no preview → load hymn into preview (replaces existing)
+                    if (projecting) await stopProjection();
+                    if (selectedHymnId) {
+                        previewHymn(selectedHymnId);
+                    } else if (hymns.length > 0) {
+                        previewHymn(hymns[0].id);
+                    }
+                    searchConsumedRef.current = true;
+                } else if (previewSections.length > 0 && !projecting) {
+                    // Preview exists, search consumed → project
+                    startProjection(projSlideIndex);
                 }
-            } else if (tab === 'biblia') {
-                await loadBibleReference();
+                // If projecting and no new search → do nothing (ProjectorController handles)
+                return;
+            }
+
+            if (tab === 'biblia') {
+                if (isNewSearch) {
+                    // Try to load bible reference from search
+                    if (projecting) await stopProjection();
+                    const loaded = await loadBibleReference();
+                    if (loaded) searchConsumedRef.current = true;
+                } else if (previewSections.length > 0 && !projecting) {
+                    // No new search, preview exists → project
+                    startProjection(projSlideIndex);
+                }
+                return;
             }
             return;
         }
@@ -1842,6 +1902,14 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                             <div className="field">
                                 <label>Ecran Proiecție</label>
                                 <DisplayPicker settings={settings} onSave={saveSettings} />
+                            </div>
+                            <div className="field">
+                                <label>Mărime Font Proiecție: {((settings.projectionFontSize ?? 1.2) * 100).toFixed(0)}%</label>
+                                <input
+                                    type="range" min="0.6" max="2.0" step="0.05"
+                                    value={settings.projectionFontSize ?? 1.2}
+                                    onChange={e => saveSettings({ projectionFontSize: parseFloat(e.target.value) })}
+                                />
                             </div>
                         </div>
                     )}
