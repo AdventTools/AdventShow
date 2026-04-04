@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   Check,
   FolderOpen,
   Monitor,
@@ -12,10 +11,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AdminPage } from './AdminPage';
 import './App.css';
 import { SearchPage } from './SearchPage';
-import { UrgentMessagePage } from './UrgentMessagePage';
 import { Category } from './vite-env';
 
-type Page = 'search' | 'admin' | 'urgent';
+type Page = 'search' | 'admin';
 
 function App() {
   const [page, setPage] = useState<Page>('search');
@@ -82,19 +80,7 @@ function App() {
                 </button>
               )}
             </div>
-            <button
-              onClick={() => setPage('urgent')}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-300 transition-all text-xs font-semibold"
-              title="Anunțuri urgente"
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              Anunț urgent
-            </button>
           </div>
-        )}
-
-        {page === 'urgent' && (
-          <span className="text-xs text-white/50 uppercase tracking-widest font-semibold">Anunțuri Urgente</span>
         )}
 
         {/* Admin tab buttons — only on admin page */}
@@ -121,7 +107,7 @@ function App() {
 
         {/* Add button / Admin toggle */}
         <div className="flex items-center gap-2 ml-2">
-          {(page === 'admin' || page === 'urgent') ? (
+          {page === 'admin' ? (
             <button
               onClick={() => setPage('search')}
               title="Înapoi la Căutare"
@@ -146,8 +132,7 @@ function App() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* Left sidebar — categories */}
-        {page !== 'urgent' && (
-          <aside className="w-48 flex flex-col bg-[#151822] border-r border-white/5 flex-shrink-0">
+        <aside className="w-48 flex flex-col bg-[#151822] border-r border-white/5 flex-shrink-0">
           <div className="flex items-center justify-between px-4 pt-4 pb-2">
             <span className="text-[10px] font-bold text-white/25 tracking-widest uppercase">Categorii</span>
             <button
@@ -212,8 +197,7 @@ function App() {
           <div className="px-4 py-3 text-[10px] text-white/15 border-t border-white/5">
             v{version}
           </div>
-          </aside>
-        )}
+        </aside>
 
         {/* Main content */}
         <main className="flex-1 overflow-hidden">
@@ -233,9 +217,6 @@ function App() {
               activeCategoryId={activeCategoryId}
               onCategoriesChanged={loadCategories}
             />
-          )}
-          {page === 'urgent' && (
-            <UrgentMessagePage />
           )}
         </main>
       </div>
