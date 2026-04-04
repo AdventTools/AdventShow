@@ -669,6 +669,11 @@
     border-left-color: var(--accent);
 }
 
+.preview-section.selected {
+    background: rgba(99 102 241 / 0.10);
+    border-left-color: rgba(99 102 241 / 0.5);
+}
+
 .preview-section.next {
     background: rgba(99 102 241 / 0.06);
     border-left-color: rgba(99 102 241 / 0.3);

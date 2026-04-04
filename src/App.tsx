@@ -97,6 +97,99 @@ function isWithinGracePeriod(createdAt?: string): boolean {
     return Date.now() - created < GRACE_PERIOD_MS;
 }
 
+// ── Bible reference parsing (BibleShow-style) ───────────────────────────────
+
+/**
+ * Parse a Bible reference like "deu 12 12", "gen 1:3", "1cor 3 16", "ps 23"
+ * Returns the book query string, chapter number, and optional verse/range.
+ */
+function parseBibleReference(input: string): {
+    bookQuery: string;
+    chapter?: number;
+    verse?: number;
+    endVerse?: number;
+} | null {
+    let trimmed = input.trim();
+    if (!trimmed) return null;
+
+    // Normalize "gen 1:3" or "gen 1:3-5" → "gen 1 3" / "gen 1 3-5"
+    trimmed = trimmed.replace(/(\d+)\s*:\s*(\d+)(?:\s*[-–]\s*(\d+))?/, (_, ch, v, ev) =>
+        ev ? `${ch} ${v}-${ev}` : `${ch} ${v}`
+    );
+
+    const tokens = trimmed.split(/\s+/);
+    let verse: number | undefined;
+    let endVerse: number | undefined;
+    let chapter: number | undefined;
+
+    if (tokens.length >= 2) {
+        const last = tokens[tokens.length - 1];
+        const rangeMatch = last.match(/^(\d+)[-–](\d+)$/);
+
+        if (rangeMatch) {
+            tokens.pop();
+            const v1 = parseInt(rangeMatch[1]);
+            const v2 = parseInt(rangeMatch[2]);
+            if (tokens.length >= 2 && /^\d+$/.test(tokens[tokens.length - 1])) {
+                chapter = parseInt(tokens[tokens.length - 1]);
+                tokens.pop();
+                verse = v1;
+                endVerse = v2;
+            } else {
+                chapter = v1;
+                endVerse = v2;
+            }
+        } else if (/^\d+$/.test(last)) {
+            const num = parseInt(last);
+            tokens.pop();
+            if (tokens.length >= 2 && /^\d+$/.test(tokens[tokens.length - 1])) {
+                verse = num;
+                chapter = parseInt(tokens[tokens.length - 1]);
+                tokens.pop();
+            } else {
+                chapter = num;
+            }
+        }
+    }
+
+    const bookQuery = tokens.join(' ').trim();
+    if (!bookQuery) return null;
+
+    return { bookQuery, chapter, verse, endVerse };
+}
+
+/**
+ * BibleShow-style book matching. Matches any prefix of the book name or
+ * abbreviation, with diacritics stripped and spaces collapsed.
+ * Returns the best-matching book or null.
+ */
+function matchBibleBook(query: string, booksList: BibleBook[]): BibleBook | null {
+    const q = normalizeDiacritics(query).replace(/\s+/g, '');
+    if (!q) return null;
+
+    const scored: { book: BibleBook; score: number }[] = [];
+
+    for (const book of booksList) {
+        const name = normalizeDiacritics(book.name);
+        const nameCompact = name.replace(/\s+/g, '');
+        const abbr = normalizeDiacritics(book.abbreviation);
+        const abbrCompact = abbr.replace(/\s+/g, '');
+
+        let score = 0;
+
+        if (abbrCompact === q) score = 100;           // Exact abbreviation
+        else if (nameCompact === q) score = 95;        // Exact name
+        else if (abbrCompact.startsWith(q)) score = 80; // Abbreviation prefix
+        else if (nameCompact.startsWith(q)) score = 70; // Name prefix
+        else if (nameCompact.includes(q)) score = 30;   // Name contains
+
+        if (score > 0) scored.push({ book, score });
+    }
+
+    scored.sort((a, b) => b.score - a.score || a.book.book_order - b.book.book_order);
+    return scored.length > 0 ? scored[0].book : null;
+}
+
 type Tab = 'imnuri' | 'biblia';
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -162,6 +255,10 @@ function App() {
     // ── Refs ──
     const refSearchRef = useRef<HTMLInputElement>(null);
     const hymnListRef = useRef<HTMLDivElement>(null);
+    const projSlideIndexRef = useRef(0);
+
+    // Keep ref in sync
+    useEffect(() => { projSlideIndexRef.current = projSlideIndex; }, [projSlideIndex]);
 
     // ── Load categories + books on mount ──
     const loadCategories = useCallback(async () => {
@@ -372,7 +469,7 @@ function App() {
         setSelectedVerseIdx(0);
     }, [selectedBookId]);
 
-    // Auto-preview when verses load
+    // Auto-preview when verses load (from sidebar/chapter click, NOT from reference search)
     useEffect(() => {
         if (verses.length > 0 && selectedChapter) {
             const book = books.find(b => b.id === selectedBookId);
@@ -388,6 +485,55 @@ function App() {
             setProjSlideIndex(0);
         }
     }, [verses, selectedChapter, books, selectedBookId]);
+
+    // ── Load Bible reference (Enter-triggered, BibleShow-style) ──
+    const loadBibleReference = useCallback(async (): Promise<boolean> => {
+        const input = refSearch.trim();
+        if (!input) return false;
+
+        const ref = parseBibleReference(input);
+        if (!ref) return false;
+
+        const book = matchBibleBook(ref.bookQuery, books);
+        if (!book) return false;
+
+        if (!ref.chapter) {
+            // Only book matched → select book, show chapters
+            await selectBook(book);
+            return true;
+        }
+
+        // Load chapter verses
+        const vrs = await window.electron.bible.getVerses(book.id, ref.chapter);
+        if (!vrs.length) return false;
+
+        // Build preview sections
+        const secs = vrs.map((v: BibleVerse) => ({
+            text: v.text,
+            type: 'verse',
+            label: `v. ${v.verse}`,
+        }));
+        setPreviewType('bible');
+        setPreviewSections(secs);
+        setPreviewTitle(`${book.name} ${ref.chapter}`);
+        setPreviewNumber(book.abbreviation);
+
+        // Set verse index
+        const verseIdx = ref.verse
+            ? vrs.findIndex((v: BibleVerse) => v.verse === ref.verse)
+            : 0;
+        setProjSlideIndex(Math.max(0, verseIdx));
+
+        // Update sidebar state for visual consistency
+        setSelectedBookId(book.id);
+        setSelectedBookName(book.name);
+        setSelectedChapter(ref.chapter);
+        setVerses(vrs);
+        setSelectedVerseIdx(Math.max(0, verseIdx));
+        setBibleSearchResults(null);
+
+        return true;
+    }, [refSearch, books, selectBook]);
 
     // ── Scroll selected hymn into view ──
     useEffect(() => {
@@ -471,23 +617,32 @@ function App() {
                 if (projecting) {
                     // handled by ProjectorController
                 } else if (previewSections.length > 0) {
-                    startProjection();
+                    startProjection(projSlideIndexRef.current);
                 }
                 return;
             }
 
-            // ↑↓ navigate hymn list
-            if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !inInput && tab === 'imnuri') {
+            // ↑↓ navigate hymn list / bible verses
+            if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !inInput) {
+                if (projecting) return; // Let ProjectorController handle
                 e.preventDefault();
-                const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
-                let nextIdx: number;
-                if (e.key === 'ArrowDown') {
-                    nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : currentIdx;
-                } else {
-                    nextIdx = currentIdx > 0 ? currentIdx - 1 : 0;
-                }
-                if (hymns[nextIdx]) {
-                    previewHymn(hymns[nextIdx].id);
+                if (tab === 'imnuri') {
+                    const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
+                    let nextIdx: number;
+                    if (e.key === 'ArrowDown') {
+                        nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : currentIdx;
+                    } else {
+                        nextIdx = currentIdx > 0 ? currentIdx - 1 : 0;
+                    }
+                    if (hymns[nextIdx]) {
+                        previewHymn(hymns[nextIdx].id);
+                    }
+                } else if (tab === 'biblia' && previewSections.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                        setProjSlideIndex(prev => Math.min(prev + 1, previewSections.length - 1));
+                    } else {
+                        setProjSlideIndex(prev => Math.max(prev - 1, 0));
+                    }
                 }
                 return;
             }
@@ -504,59 +659,76 @@ function App() {
     }, [projecting, previewSections, modalOpen, hymnEditor, passwordModal, needsPasswordSetup,
         stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn]);
 
-    // ── Bible reference search (e.g. "Geneza 1") ──
-    useEffect(() => {
-        if (tab !== 'biblia' || !refSearch.trim()) return;
-        const ref = refSearch.trim();
-        const match = ref.match(/^(.+?)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/);
-        if (!match) return;
-        const bookName = match[1].toLowerCase();
-        const chapter = parseInt(match[2]);
-        const book = books.find(b => {
-            const n = normalizeDiacritics(b.name);
-            const a = normalizeDiacritics(b.abbreviation);
-            const q = normalizeDiacritics(bookName);
-            return n === q || a === q || n.startsWith(q) || a.startsWith(q);
-        });
-        if (book) {
-            selectBook(book).then(() => {
-                if (chapter) selectChapter(chapter);
-            });
-        }
-    }, [refSearch, tab, books, selectBook, selectChapter]);
-
-    // ── Search Enter/Esc handler ──
-    const onSearchKeydown = useCallback((e: React.KeyboardEvent) => {
+    // ── Search Enter/Esc/Arrow handler ──
+    const onSearchKeydown = useCallback(async (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             if (projecting) {
-                // next slide is handled by ProjectorController
-            } else if (previewSections.length > 0) {
-                startProjection();
-            } else if (tab === 'imnuri') {
+                // Already projecting — do nothing (ProjectorController handles slide nav)
+                return;
+            }
+            if (previewSections.length > 0) {
+                // Preview exists → second Enter → project from current slide
+                startProjection(projSlideIndex);
+                return;
+            }
+            // No preview → first Enter → load into preview
+            if (tab === 'imnuri') {
                 if (selectedHymnId) {
                     previewHymn(selectedHymnId);
                 } else if (hymns.length > 0) {
                     previewHymn(hymns[0].id);
                 }
+            } else if (tab === 'biblia') {
+                await loadBibleReference();
             }
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            setRefSearch('');
-            setContentSearch('');
-            (document.activeElement as HTMLElement)?.blur();
-        } else if (e.key === 'ArrowDown' && tab === 'imnuri') {
-            e.preventDefault();
-            const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
-            const nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : 0;
-            if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
-        } else if (e.key === 'ArrowUp' && tab === 'imnuri') {
-            e.preventDefault();
-            const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
-            const nextIdx = currentIdx > 0 ? currentIdx - 1 : hymns.length - 1;
-            if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
+            return;
         }
-    }, [projecting, previewSections, startProjection, tab, selectedHymnId, hymns, previewHymn]);
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            if (projecting) {
+                stopProjection();
+            } else if (previewSections.length > 0) {
+                clearPreview();
+            } else {
+                setRefSearch('');
+                setContentSearch('');
+                (document.activeElement as HTMLElement)?.blur();
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (projecting) {
+                navigateSlide(projSlideIndex + 1);
+            } else if (tab === 'imnuri') {
+                const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
+                const nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : 0;
+                if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
+            } else if (tab === 'biblia' && previewSections.length > 0) {
+                setProjSlideIndex(prev => Math.min(prev + 1, previewSections.length - 1));
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (projecting) {
+                navigateSlide(projSlideIndex - 1);
+            } else if (tab === 'imnuri') {
+                const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
+                const nextIdx = currentIdx > 0 ? currentIdx - 1 : hymns.length - 1;
+                if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
+            } else if (tab === 'biblia' && previewSections.length > 0) {
+                setProjSlideIndex(prev => Math.max(prev - 1, 0));
+            }
+            return;
+        }
+    }, [projecting, previewSections, projSlideIndex, startProjection, tab,
+        selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
+        clearPreview, navigateSlide]);
 
     // ── Close context menu on click elsewhere ──
     useEffect(() => {
@@ -609,7 +781,7 @@ function App() {
                             value={refSearch}
                             onChange={e => setRefSearch(e.target.value)}
                             onKeyDown={onSearchKeydown}
-                            placeholder={tab === 'imnuri' ? 'Nr. / Titlu imn...' : 'Carte Capitol:Verset...'}
+                            placeholder={tab === 'imnuri' ? 'Nr. / Titlu imn...' : 'ex: deu 12 12, ps 23, gen 1:3'}
                         />
                     </div>
                     <div className="search-box search-box-wide">
@@ -652,7 +824,7 @@ function App() {
                     <kbd>↑↓</kbd>
                     <span>navigare</span>
                     <kbd>Enter</kbd>
-                    <span>proiectează</span>
+                    <span>previzualizare / proiecție</span>
                     <kbd>Esc</kbd>
                     <span>oprește</span>
                 </div>
@@ -733,6 +905,7 @@ function App() {
                         onStopProjection={stopProjection}
                         onClearPreview={clearPreview}
                         onNavigateSlide={navigateSlide}
+                        onSelectSlide={(i) => setProjSlideIndex(i)}
                     />
                 </div>
             </div>
@@ -1082,7 +1255,7 @@ function BibleSearchResultsList({
 function PreviewPanel({
     previewType, previewSections, previewTitle, previewNumber,
     projecting, projSlideIndex,
-    onStartProjection, onStopProjection, onClearPreview, onNavigateSlide,
+    onStartProjection, onStopProjection, onClearPreview, onNavigateSlide, onSelectSlide,
 }: {
     previewType: 'hymn' | 'bible' | null;
     previewSections: { text: string; type: string; label: string }[];
@@ -1094,13 +1267,14 @@ function PreviewPanel({
     onStopProjection: () => void;
     onClearPreview: () => void;
     onNavigateSlide: (idx: number) => void;
+    onSelectSlide: (idx: number) => void;
 }) {
     const bodyRef = useRef<HTMLDivElement>(null);
 
-    // Scroll current slide into view when projecting
+    // Scroll current/selected slide into view
     useEffect(() => {
-        if (projecting && bodyRef.current) {
-            const cur = bodyRef.current.querySelector('.preview-section.current');
+        if (bodyRef.current) {
+            const cur = bodyRef.current.querySelector('.preview-section.current, .preview-section.selected');
             if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }
     }, [projSlideIndex, projecting]);
@@ -1117,9 +1291,10 @@ function PreviewPanel({
                         <p>Selectați un imn sau un pasaj biblic</p>
                         <div className="preview-shortcuts">
                             <div><kbd>Enter</kbd> previzualizare → <kbd>Enter</kbd> proiecție</div>
+                            <div><kbd>↑↓</kbd> navighează versete / imnuri</div>
                             <div><kbd>Esc</kbd> oprește / curăță</div>
                             <div><kbd>/</kbd> caută rapid</div>
-                            <div><kbd>↑↓</kbd> navighează imnuri</div>
+                            <div>ex: <em>deu 12 12</em>, <em>ps 23</em>, <em>gen 1:3</em></div>
                         </div>
                     </div>
                 </div>
@@ -1134,15 +1309,14 @@ function PreviewPanel({
                 <span className="title">
                     {previewNumber ? `${previewNumber}. ` : ''}{previewTitle}
                 </span>
-                {projecting && (
-                    <span className="slide-counter">{projSlideIndex + 1}/{previewSections.length}</span>
-                )}
+                <span className="slide-counter">{projSlideIndex + 1}/{previewSections.length}</span>
             </div>
             <div className="preview-body" ref={bodyRef}>
                 {previewSections.map((sec, i) => {
                     let cls = 'preview-section clickable';
                     if (projecting && i === projSlideIndex) cls += ' current';
-                    else if (projecting && i === projSlideIndex + 1) cls += ' next';
+                    else if (!projecting && i === projSlideIndex) cls += ' selected';
+                    if (projecting && i === projSlideIndex + 1) cls += ' next';
 
                     return (
                         <div
@@ -1151,6 +1325,9 @@ function PreviewPanel({
                             onClick={() => {
                                 if (projecting) {
                                     onNavigateSlide(i);
+                                } else {
+                                    // Click to select verse/section in preview
+                                    onSelectSlide(i);
                                 }
                             }}
                             onDoubleClick={() => {
