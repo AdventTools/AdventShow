@@ -97,12 +97,12 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   projection: {
-    open: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) =>
-      ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber, startIndex),
-    navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string) =>
-      ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber),
-    updateHymn: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) =>
-      ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex),
+    open: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
+      ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
+    navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string, contentType?: string, bibleRef?: string) =>
+      ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber, contentType, bibleRef),
+    updateHymn: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
+      ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
     close: () => ipcRenderer.invoke('projection:close'),
     sendKeyRequest: (action: 'prev' | 'next' | 'close') =>
       ipcRenderer.invoke('projection:key-request', action),

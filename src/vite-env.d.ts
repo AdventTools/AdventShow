@@ -76,6 +76,8 @@ export interface ProjectionSlideData {
   currentIndex: number;
   hymnTitle: string;
   hymnNumber: string;
+  contentType?: 'hymn' | 'bible';
+  bibleRef?: string;  // e.g. "Deuteronomul 12:5"
 }
 
 export interface DisplayInfo {
@@ -159,9 +161,9 @@ export interface IElectronAPI {
     getDisplays: () => Promise<DisplayInfo[]>;
   };
   projection: {
-    open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number) => Promise<void>;
-    navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string) => Promise<void>;
-    updateHymn: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number) => Promise<void>;
+    open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
+    navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
+    updateHymn: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     close: () => Promise<void>;
     sendKeyRequest: (action: 'prev' | 'next' | 'close') => Promise<void>;
     onSlide: (cb: (data: ProjectionSlideData) => void) => void;
