@@ -24,8 +24,10 @@
       "filter": ["**/*"]
     }
   ],
+  "afterPack": "./scripts/afterPack.cjs",
   "mac": {
     "icon": "build/icons/mac/icon.icns",
+    "identity": null,
     "target": [
       "dmg",
       "zip"
