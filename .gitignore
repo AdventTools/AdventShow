@@ -28,3 +28,4 @@ build/icons/icons/
 *.njsproj
 *.sln
 *.sw?
+CHAT_SESSION_CHANGES_SUMMARY.md

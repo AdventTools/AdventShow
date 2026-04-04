@@ -21,6 +21,25 @@ export interface Hymn {
   search_text?: string;
   category_id?: number | null;
   section_count?: number;
+  snippet?: string;
+}
+
+export interface BibleBook {
+  id: number;
+  name: string;
+  abbreviation: string;
+  testament: 'VT' | 'NT';
+  book_order: number;
+  chapter_count: number;
+}
+
+export interface BibleVerse {
+  verse: number;
+  text: string;
+  book_id?: number;
+  chapter?: number;
+  book_name?: string;
+  abbreviation?: string;
 }
 
 export interface HymnWithSections extends Hymn {
@@ -85,8 +104,10 @@ export interface AppSettings {
 export interface IElectronAPI {
   db: {
     getAllHymns: (categoryId?: number) => Promise<Hymn[]>;
+    getAllHymnsWithSnippets: (categoryId?: number) => Promise<Hymn[]>;
     getHymn: (number: string) => Promise<Hymn | undefined>;
     searchHymns: (query: string, categoryId?: number) => Promise<Hymn[]>;
+    searchHymnsContent: (query: string, categoryId?: number) => Promise<Hymn[]>;
     getHymnWithSections: (id: number) => Promise<HymnWithSections | null>;
     createHymnWithSections: (payload: CreateHymnInput) => Promise<number>;
     importPresentations: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
@@ -110,6 +131,14 @@ export interface IElectronAPI {
     update: (id: number, type: 'strofa' | 'refren', text: string) => Promise<void>;
     delete: (id: number) => Promise<void>;
     reorder: (sections: { id: number; order_index: number }[]) => Promise<void>;
+  };
+  bible: {
+    getBooks: () => Promise<BibleBook[]>;
+    getChapters: (bookId: number) => Promise<number[]>;
+    getVerses: (bookId: number, chapter: number) => Promise<BibleVerse[]>;
+    search: (query: string, bookId?: number) => Promise<BibleVerse[]>;
+    getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) => Promise<BibleVerse[]>;
+    hasData: () => Promise<boolean>;
   };
   dialog: {
     selectFolder: () => Promise<string | undefined>;

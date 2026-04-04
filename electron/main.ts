@@ -12,6 +12,7 @@ import {
   deleteSection,
   exportJsonBackup,
   getAllHymns,
+  getAllHymnsWithSnippets,
   getCategories,
   getHymnByNumber,
   getHymnWithSections,
@@ -19,6 +20,7 @@ import {
   initDB,
   reorderSections,
   searchHymns,
+  searchHymnsContent,
   updateCategory,
   updateHymn,
   updateHymnCategory,
@@ -242,6 +244,10 @@ app.whenReady().then(() => {
   ipcMain.handle('db:get-hymn', (_e, number: string) => getHymnByNumber(number))
   ipcMain.handle('db:search-hymns', (_e, query: string, categoryId?: number) =>
     searchHymns(query, categoryId))
+  ipcMain.handle('db:get-all-hymns-with-snippets', (_e, categoryId?: number) =>
+    getAllHymnsWithSnippets(categoryId))
+  ipcMain.handle('db:search-hymns-content', (_e, query: string, categoryId?: number) =>
+    searchHymnsContent(query, categoryId))
   ipcMain.handle('db:get-hymn-with-sections', (_e, id: number) => getHymnWithSections(id))
   ipcMain.handle('db:create-hymn-with-sections', (_e, payload: {
     number: string;
