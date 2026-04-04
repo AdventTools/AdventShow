@@ -408,6 +408,7 @@ app.whenReady().then(() => {
   ipcMain.handle('bible:get-verse-range',
     (_e, bookId: number, chapter: number, startVerse: number, endVerse: number) =>
       getBibleVerseRange(bookId, chapter, startVerse, endVerse))
+  ipcMain.handle('bible:has-data', () => hasBibleData())
 
   createWindow()
 })
