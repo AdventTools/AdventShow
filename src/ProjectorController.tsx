@@ -12,16 +12,17 @@ interface ProjectorControllerProps {
   hymnTitle: string;
   hymnNumber: string;
   onClose: () => void;
+  onNavigate: (index: number) => void;
 }
 
-export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }: ProjectorControllerProps) {
+export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, onNavigate }: ProjectorControllerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const navigate = useCallback(async (index: number) => {
     const clamped = Math.max(0, Math.min(index, sections.length - 1));
     setCurrentIndex(clamped);
-    await window.electron.projection.navigate(sections, clamped, hymnTitle, hymnNumber);
-  }, [sections, hymnTitle, hymnNumber]);
+    onNavigate(clamped);
+  }, [sections, onNavigate]);
 
   // Sync index when projection window drives navigation (arrows/Escape pressed there)
   useEffect(() => {
