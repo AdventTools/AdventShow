@@ -104,6 +104,7 @@ export interface AppSettings {
   contentTextColor?: string; // hex, e.g. '#ffffff'
   adminPasswordHash?: string; // bcrypt-like hash or empty
   projectionFontSize?: number; // font size multiplier, default 1.2
+  windowBounds?: { x: number; y: number; width: number; height: number };
 }
 
 export interface IElectronAPI {
