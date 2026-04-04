@@ -64,6 +64,7 @@ interface AppSettings {
   contentTextColor?: string
   adminPasswordHash?: string
   projectionFontSize?: number
+  windowBounds?: { x: number; y: number; width: number; height: number }
 }
 
 function getSettingsPath() {
@@ -157,12 +158,45 @@ function createProjectionWindow() {
 }
 
 function createWindow() {
+  const settings = readSettings()
+  const saved = settings.windowBounds
+
+  // Validate saved bounds are on a visible display
+  let bounds: Partial<Electron.BrowserWindowConstructorOptions> = {}
+  if (saved) {
+    const displays = screen.getAllDisplays()
+    const visible = displays.some(d => {
+      const db = d.bounds
+      return saved.x >= db.x - 100 && saved.x < db.x + db.width + 100
+        && saved.y >= db.y - 100 && saved.y < db.y + db.height + 100
+    })
+    if (visible) {
+      bounds = { x: saved.x, y: saved.y, width: saved.width, height: saved.height }
+    }
+  }
+
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    ...bounds,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+
+  // Save window bounds on move/resize (debounced)
+  let boundsTimer: ReturnType<typeof setTimeout> | null = null
+  const saveBounds = () => {
+    if (boundsTimer) clearTimeout(boundsTimer)
+    boundsTimer = setTimeout(() => {
+      if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
+      const b = win.getBounds()
+      const s = readSettings()
+      s.windowBounds = { x: b.x, y: b.y, width: b.width, height: b.height }
+      writeSettings(s)
+    }, 500)
+  }
+  win.on('moved', saveBounds)
+  win.on('resized', saveBounds)
 
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', new Date().toLocaleString())

@@ -659,6 +659,7 @@ function App() {
                     stopProjection();
                 } else if (previewSections.length > 0) {
                     clearPreview();
+                    refSearchRef.current?.focus();
                 } else if (inInput) {
                     (document.activeElement as HTMLElement)?.blur();
                 }
@@ -759,6 +760,7 @@ function App() {
                 stopProjection();
             } else if (previewSections.length > 0) {
                 clearPreview();
+                refSearchRef.current?.focus();
             } else {
                 setRefSearch('');
                 setContentSearch('');
@@ -1196,7 +1198,7 @@ function HymnList({
                                 <span className="hymn-num">{hymn.number}</span>
                                 <div className="hymn-info">
                                     <span className="hymn-title">{hymn.title}</span>
-                                    {snippetLine && <span className="hymn-snippet">{snippetLine}</span>}
+                                    {snippetLine && <span className="hymn-snippet">— {snippetLine}</span>}
                                 </div>
                             </div>
                         );

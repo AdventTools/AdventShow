@@ -377,7 +377,7 @@
 
 .hymn-item {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
     padding: 8px 10px;
     border-radius: var(--radius-sm);
@@ -408,9 +408,12 @@
 
 .hymn-info {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
     min-width: 0;
+    flex: 1;
+    overflow: hidden;
 }
 
 .hymn-title {
@@ -418,6 +421,8 @@
     font-weight: 600;
     color: var(--text-primary);
     line-height: 1.4;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .hymn-snippet {
@@ -427,6 +432,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-style: italic;
+    min-width: 0;
+    flex: 1;
 }
 
 /* ── Bible ── */
@@ -689,17 +696,17 @@
 }
 
 .sec-label.strofa {
-    color: rgba(255 255 255 / 0.25);
+    color: rgba(147 197 253 / 0.7);
 }
 
 .sec-label.refren {
     color: var(--amber);
-    opacity: 0.7;
+    opacity: 0.85;
 }
 
 .sec-label.verse {
     color: var(--accent);
-    opacity: 0.5;
+    opacity: 0.7;
 }
 
 .sec-text {
@@ -707,6 +714,7 @@
     color: var(--text-primary);
     line-height: 1.5;
     white-space: pre-line;
+    text-align: left;
 }
 
 /* Preview actions */
