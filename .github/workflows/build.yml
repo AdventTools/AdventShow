@@ -3,10 +3,11 @@ name: Build and Release Electron App
 on:
   push:
     tags:
-      - "v*.*.*"   # example: v1.0.0
+      - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
-  contents: write   # needed to create/update releases
+  contents: write
 
 jobs:
   build:
@@ -45,7 +46,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifacts
+      - name: Upload raw build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
@@ -64,11 +65,70 @@ jobs:
       - name: Show downloaded files
         run: find artifacts -type f
 
+      - name: Rename assets to include tag version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+
+          find artifacts -type f -name "*.exe" -exec bash -c '
+            file="$1"
+            dir="$(dirname "$file")"
+            base="$(basename "$file" .exe)"
+            mv "$file" "$dir/${base}-${VERSION}.exe"
+          ' _ {} \;
+
+          find artifacts -type f -name "*.dmg" -exec bash -c '
+            file="$1"
+            dir="$(dirname "$file")"
+            base="$(basename "$file" .dmg)"
+            mv "$file" "$dir/${base}-${VERSION}.dmg"
+          ' _ {} \;
+
+          find artifacts -type f -name "*.AppImage" -exec bash -c '
+            file="$1"
+            dir="$(dirname "$file")"
+            base="$(basename "$file" .AppImage)"
+            mv "$file" "$dir/${base}-${VERSION}.AppImage"
+          ' _ {} \;
+
+          find artifacts -type f -name "*.deb" -exec bash -c '
+            file="$1"
+            dir="$(dirname "$file")"
+            base="$(basename "$file" .deb)"
+            mv "$file" "$dir/${base}-${VERSION}.deb"
+          ' _ {} \;
+
+          find artifacts -type f -name "*.rpm" -exec bash -c '
+            file="$1"
+            dir="$(dirname "$file")"
+            base="$(basename "$file" .rpm)"
+            mv "$file" "$dir/${base}-${VERSION}.rpm"
+          ' _ {} \;
+        env:
+          VERSION: ${{ github.ref_name }}
+
+      - name: Keep only release files
+        run: |
+          find artifacts -type f \
+            ! -name "*.exe" \
+            ! -name "*.dmg" \
+            ! -name "*.AppImage" \
+            ! -name "*.deb" \
+            ! -name "*.rpm" \
+            -delete
+
+      - name: Show final release files
+        run: find artifacts -type f
+
       - name: Create GitHub Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            artifacts/**/*
           generate_release_notes: true
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
