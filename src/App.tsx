@@ -428,6 +428,7 @@ function App() {
         setPreviewTitle('');
         setPreviewNumber('');
         setProjSlideIndex(0);
+        setSelectedHymnId(null);
     }, []);
 
     // ── Projection control ──
@@ -722,18 +723,20 @@ function App() {
             const isNewSearch = refSearch.trim().length > 0 && !searchConsumedRef.current;
 
             if (tab === 'imnuri') {
-                if (isNewSearch || !previewSections.length) {
-                    // New search or no preview → load hymn into preview (replaces existing)
+                if (isNewSearch) {
+                    // New/changed search → always load first result from current list
                     if (projecting) await stopProjection();
-                    if (selectedHymnId) {
-                        previewHymn(selectedHymnId);
-                    } else if (hymns.length > 0) {
-                        previewHymn(hymns[0].id);
+                    if (hymns.length > 0) {
+                        searchConsumedRef.current = true;
+                        await previewHymn(hymns[0].id);
                     }
-                    searchConsumedRef.current = true;
                 } else if (previewSections.length > 0 && !projecting) {
                     // Preview exists, search consumed → project
                     startProjection(projSlideIndex);
+                } else if (!previewSections.length && hymns.length > 0) {
+                    // No preview yet (e.g. after clearing) → load first result
+                    searchConsumedRef.current = true;
+                    await previewHymn(hymns[0].id);
                 }
                 // If projecting and no new search → do nothing (ProjectorController handles)
                 return;
