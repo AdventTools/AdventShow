@@ -24,6 +24,7 @@ import {
   updateCategory,
   updateHymn,
   updateHymnCategory,
+  updateHymnWithSections,
   updateSection,
   getBibleBooks,
   getBibleChapters,
@@ -60,6 +61,7 @@ interface AppSettings {
   bgOpacity?: number
   hymnNumberColor?: string
   contentTextColor?: string
+  adminPasswordHash?: string
 }
 
 function getSettingsPath() {
@@ -262,6 +264,11 @@ app.whenReady().then(() => {
   ipcMain.handle('hymn:set-category', (_e, id: number, categoryId?: number) =>
     updateHymnCategory(id, categoryId))
   ipcMain.handle('hymn:delete', (_e, id: number) => deleteHymn(id))
+  ipcMain.handle('hymn:update-with-sections', (_e, id: number, payload: {
+    number: string;
+    title: string;
+    sections: { type: 'strofa' | 'refren'; text: string }[];
+  }) => updateHymnWithSections(id, payload))
   ipcMain.handle('db:clear-all', () => clearAllData())
   ipcMain.handle('db:export-json-backup', (_e, destPath: string) => {
     const backup = exportJsonBackup()
@@ -368,14 +375,15 @@ app.whenReady().then(() => {
 
   // ── Projection ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('projection:open', (_e, sections: any[], hymnTitle: string, hymnNumber: string) => {
-    projState = { sections, currentIndex: -1, hymnTitle, hymnNumber }
+  ipcMain.handle('projection:open', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) => {
+    const idx = typeof startIndex === 'number' ? startIndex : 0
+    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber }
     if (projectionWin) {
       projectionWin.focus()
     } else {
       createProjectionWindow()
     }
-    const sendInitial = () => sendSlideToProjection(-1)
+    const sendInitial = () => sendSlideToProjection(idx)
     if (projectionWin?.webContents.isLoading()) {
       projectionWin.webContents.once('did-finish-load', sendInitial)
     } else {
@@ -387,6 +395,12 @@ app.whenReady().then(() => {
     if (!projState) return
     const clamped = Math.max(0, Math.min(index, projState.sections.length - 1))
     sendSlideToProjection(clamped)
+  })
+
+  ipcMain.handle('projection:update-hymn', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) => {
+    const idx = typeof startIndex === 'number' ? startIndex : 0
+    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber }
+    sendSlideToProjection(idx)
   })
 
   ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close') => {

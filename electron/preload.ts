@@ -31,6 +31,11 @@ contextBridge.exposeInMainWorld('electron', {
       categoryId?: number;
       sections: { type: 'strofa' | 'refren'; text: string }[];
     }) => ipcRenderer.invoke('db:create-hymn-with-sections', payload),
+    updateHymnWithSections: (id: number, payload: {
+      number: string;
+      title: string;
+      sections: { type: 'strofa' | 'refren'; text: string }[];
+    }) => ipcRenderer.invoke('hymn:update-with-sections', id, payload),
     importPresentations: (dirPath: string, categoryId?: number) => ipcRenderer.invoke('db:import-presentations', dirPath, categoryId),
     importPresentationFiles: (filePaths: string[], categoryId?: number) => ipcRenderer.invoke('db:import-presentation-files', filePaths, categoryId),
     clearAll: () => ipcRenderer.invoke('db:clear-all'),
@@ -92,10 +97,12 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   projection: {
-    open: (sections: any[], hymnTitle: string, hymnNumber: string) =>
-      ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber),
+    open: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) =>
+      ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber, startIndex),
     navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string) =>
       ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber),
+    updateHymn: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number) =>
+      ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex),
     close: () => ipcRenderer.invoke('projection:close'),
     sendKeyRequest: (action: 'prev' | 'next' | 'close') =>
       ipcRenderer.invoke('projection:key-request', action),

@@ -42,7 +42,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
       const inTextField =
         e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
 
-      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         if (!inTextField) e.preventDefault();
         navigate(currentIndexRef.current + 1);
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
@@ -55,8 +55,8 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
-  // navigate and onClose are both stable useCallbacks — intentionally no currentIndex dep
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // navigate and onClose are both stable useCallbacks — intentionally no currentIndex dep
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate, onClose]);
 
   const current = sections[currentIndex];
@@ -84,7 +84,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
           {currentIndex + 1} / {sections.length}
         </span>
         <div className="ml-auto flex items-center gap-1">
-          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→</kbd>
+          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ Space</kbd>
           <span className="text-[9px] text-white/15">pentru navigare</span>
           <button
             onClick={onClose}
@@ -186,13 +186,12 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose }
               key={i}
               onClick={() => navigate(i)}
               title={sectionLabel(s, i)}
-              className={`rounded-full transition-all duration-200 ${
-                i === currentIndex
+              className={`rounded-full transition-all duration-200 ${i === currentIndex
                   ? 'w-5 h-2 bg-primary'
                   : s.type === 'refren'
-                  ? 'w-2 h-2 bg-amber-400/40 hover:bg-amber-400/70'
-                  : 'w-2 h-2 bg-white/15 hover:bg-white/40'
-              }`}
+                    ? 'w-2 h-2 bg-amber-400/40 hover:bg-amber-400/70'
+                    : 'w-2 h-2 bg-white/15 hover:bg-white/40'
+                }`}
             />
           ))}
         </div>

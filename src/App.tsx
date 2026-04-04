@@ -3,8 +3,11 @@ import {
     ChevronLeft,
     ChevronRight,
     Download,
+    Edit3,
     FolderOpen,
+    Lock,
     Monitor,
+    Plus,
     Play,
     Search,
     Settings,
@@ -24,6 +27,11 @@ import type {
     Hymn,
     HymnSection,
 } from './vite-env';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const MASTER_PASSWORD = 'ProiectieMaster2025!';
+const GRACE_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,13 +66,35 @@ function expandHymnSections(sections: HymnSection[]) {
                 result.push({ text: refren.text, type: 'refren', label: 'Refren' });
             }
         } else if (sec.type === 'refren') {
-            // Skip if following a strofa (already inserted above)
             const idx = sections.indexOf(sec);
             if (idx > 0 && sections[idx - 1].type === 'strofa') continue;
             result.push({ text: sec.text, type: 'refren', label: 'Refren' });
         }
     }
     return result;
+}
+
+function hashPassword(pw: string): string {
+    // Simple hash for local use (not crypto-secure, just obfuscation)
+    let hash = 0;
+    for (let i = 0; i < pw.length; i++) {
+        const c = pw.charCodeAt(i);
+        hash = ((hash << 5) - hash) + c;
+        hash |= 0;
+    }
+    return 'h:' + hash.toString(36) + ':' + pw.length;
+}
+
+function checkPassword(input: string, hash: string): boolean {
+    if (input === MASTER_PASSWORD) return true;
+    return hashPassword(input) === hash;
+}
+
+function isWithinGracePeriod(createdAt?: string): boolean {
+    if (!createdAt) return false;
+    const created = new Date(createdAt).getTime();
+    if (isNaN(created)) return false;
+    return Date.now() - created < GRACE_PERIOD_MS;
 }
 
 type Tab = 'imnuri' | 'biblia';
@@ -108,8 +138,30 @@ function App() {
     // ── Modal state ──
     const [modalOpen, setModalOpen] = useState<string | null>(null);
 
+    // ── Context menu state ──
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hymn: Hymn } | null>(null);
+
+    // ── Password state ──
+    const [adminPasswordHash, setAdminPasswordHash] = useState<string | null>(null);
+    const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+    const [passwordModal, setPasswordModal] = useState<{
+        action: () => void;
+        title: string;
+    } | null>(null);
+
+    // ── Add/Edit Hymn modal ──
+    const [hymnEditor, setHymnEditor] = useState<{
+        mode: 'add' | 'edit';
+        hymnId?: number;
+        number: string;
+        title: string;
+        sections: { type: 'strofa' | 'refren'; text: string }[];
+        categoryId?: number;
+    } | null>(null);
+
     // ── Refs ──
     const refSearchRef = useRef<HTMLInputElement>(null);
+    const hymnListRef = useRef<HTMLDivElement>(null);
 
     // ── Load categories + books on mount ──
     const loadCategories = useCallback(async () => {
@@ -125,6 +177,17 @@ function App() {
         } catch (e) {
             console.error('Failed to load Bible books:', e);
         }
+    }, []);
+
+    // Load admin password on mount
+    useEffect(() => {
+        window.electron.settings.get().then(s => {
+            if (s.adminPasswordHash) {
+                setAdminPasswordHash(s.adminPasswordHash);
+            } else {
+                setNeedsPasswordSetup(true);
+            }
+        });
     }, []);
 
     useEffect(() => {
@@ -203,7 +266,34 @@ function App() {
         setPreviewNumber(String(data.number));
         setProjSlideIndex(0);
         setSelectedHymnId(id);
-    }, []);
+
+        // If projecting, fluid hymn switch
+        if (projecting) {
+            const secs = expanded.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
+            await window.electron.projection.updateHymn(secs, data.title, String(data.number), 0);
+            setProjSlideIndex(0);
+        }
+    }, [projecting]);
+
+    // ── Preview bible search result ──
+    const previewBibleResult = useCallback(async (verse: BibleVerse) => {
+        if (!verse.book_id || !verse.chapter) return;
+        // Load all verses from this chapter
+        const vrs = await window.electron.bible.getVerses(verse.book_id, verse.chapter);
+        const book = books.find(b => b.id === verse.book_id);
+        const secs = vrs.map(v => ({
+            text: v.text,
+            type: 'verse',
+            label: `v. ${v.verse}`,
+        }));
+        setPreviewType('bible');
+        setPreviewSections(secs);
+        setPreviewTitle(`${book?.name ?? verse.book_name ?? ''} ${verse.chapter}`);
+        setPreviewNumber(book?.abbreviation ?? verse.abbreviation ?? '');
+        // Find the index of the clicked verse
+        const idx = vrs.findIndex(v => v.verse === verse.verse);
+        setProjSlideIndex(Math.max(0, idx));
+    }, [books]);
 
     // ── Clear preview ──
     const clearPreview = useCallback(() => {
@@ -215,12 +305,12 @@ function App() {
     }, []);
 
     // ── Projection control ──
-    const startProjection = useCallback(async () => {
+    const startProjection = useCallback(async (startIndex = 0) => {
         if (!previewSections.length) return;
         const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
-        await window.electron.projection.open(secs, previewTitle, previewNumber);
+        await window.electron.projection.open(secs, previewTitle, previewNumber, startIndex);
         setProjecting(true);
-        setProjSlideIndex(0);
+        setProjSlideIndex(startIndex);
     }, [previewSections, previewTitle, previewNumber]);
 
     const navigateSlide = useCallback(async (newIdx: number) => {
@@ -299,11 +389,70 @@ function App() {
         }
     }, [verses, selectedChapter, books, selectedBookId]);
 
+    // ── Scroll selected hymn into view ──
+    useEffect(() => {
+        if (selectedHymnId && hymnListRef.current) {
+            const el = hymnListRef.current.querySelector(`[data-hymn-id="${selectedHymnId}"]`);
+            if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }, [selectedHymnId]);
+
+    // ── Password helper ──
+    const requirePassword = useCallback((action: () => void, title: string) => {
+        if (!adminPasswordHash) {
+            action();
+            return;
+        }
+        setPasswordModal({ action, title });
+    }, [adminPasswordHash]);
+
+    // ── Context menu actions ──
+    const openEditHymn = useCallback(async (hymnId: number) => {
+        const data = await window.electron.db.getHymnWithSections(hymnId);
+        if (!data) return;
+        const doEdit = () => {
+            setHymnEditor({
+                mode: 'edit',
+                hymnId: data.id,
+                number: data.number,
+                title: data.title,
+                sections: data.sections.map(s => ({ type: s.type, text: s.text })),
+                categoryId: data.category_id ?? undefined,
+            });
+        };
+        // Check if within grace period
+        if (isWithinGracePeriod(data.created_at)) {
+            doEdit();
+        } else {
+            requirePassword(doEdit, 'Editare imn');
+        }
+    }, [requirePassword]);
+
+    const deleteHymnAction = useCallback(async (hymnId: number) => {
+        const doDelete = async () => {
+            if (!confirm('Sigur vrei să ștergi acest imn?')) return;
+            await window.electron.hymn.delete(hymnId);
+            if (selectedHymnId === hymnId) {
+                clearPreview();
+                setSelectedHymnId(null);
+            }
+            loadHymns();
+            loadCategories();
+        };
+        // Get hymn data to check grace period
+        const data = await window.electron.db.getHymnWithSections(hymnId);
+        if (data && isWithinGracePeriod(data.created_at)) {
+            doDelete();
+        } else {
+            requirePassword(doDelete, 'Ștergere imn');
+        }
+    }, [selectedHymnId, clearPreview, loadHymns, loadCategories, requirePassword]);
+
     // ── Global keyboard ──
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
             const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-            if (modalOpen) return;
+            if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup) return;
 
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -327,6 +476,22 @@ function App() {
                 return;
             }
 
+            // ↑↓ navigate hymn list
+            if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !inInput && tab === 'imnuri') {
+                e.preventDefault();
+                const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
+                let nextIdx: number;
+                if (e.key === 'ArrowDown') {
+                    nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : currentIdx;
+                } else {
+                    nextIdx = currentIdx > 0 ? currentIdx - 1 : 0;
+                }
+                if (hymns[nextIdx]) {
+                    previewHymn(hymns[nextIdx].id);
+                }
+                return;
+            }
+
             // Quick focus search with /
             if (e.key === '/' && !inInput) {
                 e.preventDefault();
@@ -336,7 +501,8 @@ function App() {
         };
         window.addEventListener('keydown', handler, true);
         return () => window.removeEventListener('keydown', handler, true);
-    }, [projecting, previewSections, modalOpen, stopProjection, clearPreview, startProjection]);
+    }, [projecting, previewSections, modalOpen, hymnEditor, passwordModal, needsPasswordSetup,
+        stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn]);
 
     // ── Bible reference search (e.g. "Geneza 1") ──
     useEffect(() => {
@@ -379,8 +545,29 @@ function App() {
             setRefSearch('');
             setContentSearch('');
             (document.activeElement as HTMLElement)?.blur();
+        } else if (e.key === 'ArrowDown' && tab === 'imnuri') {
+            e.preventDefault();
+            const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
+            const nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : 0;
+            if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
+        } else if (e.key === 'ArrowUp' && tab === 'imnuri') {
+            e.preventDefault();
+            const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
+            const nextIdx = currentIdx > 0 ? currentIdx - 1 : hymns.length - 1;
+            if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
         }
     }, [projecting, previewSections, startProjection, tab, selectedHymnId, hymns, previewHymn]);
+
+    // ── Close context menu on click elsewhere ──
+    useEffect(() => {
+        if (!contextMenu) return;
+        const handler = () => setContextMenu(null);
+        window.addEventListener('click', handler);
+        return () => window.removeEventListener('click', handler);
+    }, [contextMenu]);
+
+    // ── Is "Imnuri Speciale" active? ──
+    const isSpecialCategory = categories.find(c => c.id === activeCategoryId)?.name === 'Imnuri Speciale';
 
     // ══════════════════════════════════════════════════════════════════════════
     // RENDER
@@ -393,6 +580,7 @@ function App() {
                 <div className="header-logo">
                     <Monitor className="icon-sm text-indigo-400" />
                     <span>Proiecție</span>
+                    {projecting && <span className="live-badge">● LIVE</span>}
                 </div>
 
                 {/* Tabs */}
@@ -436,6 +624,23 @@ function App() {
                     </div>
                 </div>
 
+                {/* Add hymn button (only for Imnuri Speciale) */}
+                {tab === 'imnuri' && isSpecialCategory && (
+                    <button
+                        className="header-btn add-btn"
+                        onClick={() => setHymnEditor({
+                            mode: 'add',
+                            number: '',
+                            title: '',
+                            sections: [{ type: 'strofa', text: '' }],
+                            categoryId: activeCategoryId,
+                        })}
+                        title="Adaugă imn"
+                    >
+                        <Plus className="icon-sm" />
+                    </button>
+                )}
+
                 {/* Settings */}
                 <button className="header-btn" onClick={() => setModalOpen('settings')} title="Setări">
                     <Settings className="icon-sm" />
@@ -444,6 +649,8 @@ function App() {
                 <div className="kbd-hints">
                     <kbd>/</kbd>
                     <span>caută</span>
+                    <kbd>↑↓</kbd>
+                    <span>navigare</span>
                     <kbd>Enter</kbd>
                     <span>proiectează</span>
                     <kbd>Esc</kbd>
@@ -479,12 +686,21 @@ function App() {
                             activeCategoryId={activeCategoryId}
                             selectedHymnId={selectedHymnId}
                             onSelect={previewHymn}
+                            onContextMenu={(e, hymn) => {
+                                e.preventDefault();
+                                setContextMenu({ x: e.clientX, y: e.clientY, hymn });
+                            }}
+                            listRef={hymnListRef}
                         />
                     ) : bibleSearchResults ? (
                         <BibleSearchResultsList
                             results={bibleSearchResults}
                             selectedIdx={selectedVerseIdx}
-                            onSelect={setSelectedVerseIdx}
+                            onSelect={(idx) => {
+                                setSelectedVerseIdx(idx);
+                                const verse = bibleSearchResults[idx];
+                                if (verse) previewBibleResult(verse);
+                            }}
                         />
                     ) : (
                         <BibleContentArea
@@ -531,12 +747,71 @@ function App() {
                 />
             )}
 
+            {/* ── Context Menu ── */}
+            {contextMenu && (
+                <ContextMenu
+                    x={contextMenu.x}
+                    y={contextMenu.y}
+                    hymn={contextMenu.hymn}
+                    categories={categories}
+                    onClose={() => setContextMenu(null)}
+                    onEdit={() => { setContextMenu(null); openEditHymn(contextMenu.hymn.id); }}
+                    onDelete={() => { setContextMenu(null); deleteHymnAction(contextMenu.hymn.id); }}
+                    onChangeCategory={async (catId) => {
+                        setContextMenu(null);
+                        requirePassword(async () => {
+                            await window.electron.hymn.setCategory(contextMenu.hymn.id, catId);
+                            loadHymns();
+                            loadCategories();
+                        }, 'Schimbare categorie');
+                    }}
+                />
+            )}
+
             {/* ── Settings Modal ── */}
             {modalOpen === 'settings' && (
                 <SettingsModal
                     onClose={() => setModalOpen(null)}
                     onCategoriesChanged={loadCategories}
                     onHymnsChanged={loadHymns}
+                />
+            )}
+
+            {/* ── Hymn Editor Modal ── */}
+            {hymnEditor && (
+                <HymnEditorModal
+                    editor={hymnEditor}
+                    onClose={() => setHymnEditor(null)}
+                    onSave={async () => {
+                        setHymnEditor(null);
+                        await loadHymns();
+                        await loadCategories();
+                    }}
+                />
+            )}
+
+            {/* ── Password Verification Modal ── */}
+            {passwordModal && (
+                <PasswordModal
+                    title={passwordModal.title}
+                    hash={adminPasswordHash ?? ''}
+                    onSuccess={() => {
+                        passwordModal.action();
+                        setPasswordModal(null);
+                    }}
+                    onCancel={() => setPasswordModal(null)}
+                />
+            )}
+
+            {/* ── First Launch Password Setup ── */}
+            {needsPasswordSetup && (
+                <PasswordSetupModal
+                    onSave={async (pw) => {
+                        const hash = hashPassword(pw);
+                        setAdminPasswordHash(hash);
+                        await window.electron.settings.set({ adminPasswordHash: hash });
+                        setNeedsPasswordSetup(false);
+                    }}
                 />
             )}
         </div>
@@ -641,13 +916,15 @@ function SidebarBibleBooks({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function HymnList({
-    hymns, categories, activeCategoryId, selectedHymnId, onSelect,
+    hymns, categories, activeCategoryId, selectedHymnId, onSelect, onContextMenu, listRef,
 }: {
     hymns: Hymn[];
     categories: Category[];
     activeCategoryId?: number;
     selectedHymnId: number | null;
     onSelect: (id: number) => void;
+    onContextMenu: (e: React.MouseEvent, hymn: Hymn) => void;
+    listRef: React.RefObject<HTMLDivElement>;
 }) {
     const catName = activeCategoryId
         ? categories.find(c => c.id === activeCategoryId)?.name ?? 'Toate'
@@ -664,14 +941,16 @@ function HymnList({
                     <p>Niciun imn găsit</p>
                 </div>
             ) : (
-                <div className="hymn-list">
+                <div className="hymn-list" ref={listRef}>
                     {hymns.map(hymn => {
                         const snippetLine = getSnippetFirstLine(hymn.snippet);
                         return (
                             <div
                                 key={hymn.id}
+                                data-hymn-id={hymn.id}
                                 className={`hymn-item ${selectedHymnId === hymn.id ? 'selected' : ''}`}
                                 onClick={() => onSelect(hymn.id)}
+                                onContextMenu={e => onContextMenu(e, hymn)}
                             >
                                 <span className="hymn-num">{hymn.number}</span>
                                 <div className="hymn-info">
@@ -811,7 +1090,7 @@ function PreviewPanel({
     previewNumber: string;
     projecting: boolean;
     projSlideIndex: number;
-    onStartProjection: () => void;
+    onStartProjection: (startIndex?: number) => void;
     onStopProjection: () => void;
     onClearPreview: () => void;
     onNavigateSlide: (idx: number) => void;
@@ -840,6 +1119,7 @@ function PreviewPanel({
                             <div><kbd>Enter</kbd> previzualizare → <kbd>Enter</kbd> proiecție</div>
                             <div><kbd>Esc</kbd> oprește / curăță</div>
                             <div><kbd>/</kbd> caută rapid</div>
+                            <div><kbd>↑↓</kbd> navighează imnuri</div>
                         </div>
                     </div>
                 </div>
@@ -860,7 +1140,7 @@ function PreviewPanel({
             </div>
             <div className="preview-body" ref={bodyRef}>
                 {previewSections.map((sec, i) => {
-                    let cls = 'preview-section';
+                    let cls = 'preview-section clickable';
                     if (projecting && i === projSlideIndex) cls += ' current';
                     else if (projecting && i === projSlideIndex + 1) cls += ' next';
 
@@ -868,7 +1148,16 @@ function PreviewPanel({
                         <div
                             key={i}
                             className={cls}
-                            onClick={() => { if (projecting) onNavigateSlide(i); }}
+                            onClick={() => {
+                                if (projecting) {
+                                    onNavigateSlide(i);
+                                }
+                            }}
+                            onDoubleClick={() => {
+                                if (!projecting) {
+                                    onStartProjection(i);
+                                }
+                            }}
                         >
                             <div className={`sec-label ${sec.type}`}>{sec.label}</div>
                             <div className="sec-text">{sec.text}</div>
@@ -893,7 +1182,7 @@ function PreviewPanel({
                     </>
                 ) : (
                     <>
-                        <button className="btn-project" onClick={onStartProjection}>
+                        <button className="btn-project" onClick={() => onStartProjection()}>
                             <Play className="icon-xs" /> Proiectează
                         </button>
                         <button className="btn-clear" onClick={onClearPreview}>
@@ -901,6 +1190,347 @@ function PreviewPanel({
                         </button>
                     </>
                 )}
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Context Menu
+// ═════════════════════════════════════════════════════════════════════════════
+
+function ContextMenu({
+    x, y, hymn, categories, onEdit, onDelete, onChangeCategory,
+}: {
+    x: number;
+    y: number;
+    hymn: Hymn;
+    categories: Category[];
+    onClose: () => void;
+    onEdit: () => void;
+    onDelete: () => void;
+    onChangeCategory: (catId?: number) => void;
+}) {
+    const [showCategories, setShowCategories] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    // Adjust position if menu goes off-screen
+    const style: React.CSSProperties = {
+        position: 'fixed',
+        left: Math.min(x, window.innerWidth - 220),
+        top: Math.min(y, window.innerHeight - 250),
+        zIndex: 1000,
+    };
+
+    return (
+        <div className="context-menu" style={style} ref={menuRef} onClick={e => e.stopPropagation()}>
+            <div className="context-menu-header">
+                <span className="context-hymn-num">{hymn.number}</span>
+                <span className="context-hymn-title">{hymn.title}</span>
+            </div>
+            <button className="context-item" onClick={onEdit}>
+                <Edit3 className="icon-xs" /> Editează
+            </button>
+            <button className="context-item" onClick={() => setShowCategories(!showCategories)}>
+                <FolderOpen className="icon-xs" /> Schimbă categoria
+                <ChevronRight className="icon-xs ml-auto" />
+            </button>
+            {showCategories && (
+                <div className="context-submenu">
+                    {categories.map(cat => (
+                        <button
+                            key={cat.id}
+                            className={`context-subitem ${hymn.category_id === cat.id ? 'active' : ''}`}
+                            onClick={() => onChangeCategory(cat.id)}
+                        >
+                            {cat.name}
+                        </button>
+                    ))}
+                </div>
+            )}
+            <div className="context-divider" />
+            <button className="context-item danger" onClick={onDelete}>
+                <Trash2 className="icon-xs" /> Șterge
+            </button>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Hymn Editor Modal (Add / Edit)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function HymnEditorModal({
+    editor, onClose, onSave,
+}: {
+    editor: {
+        mode: 'add' | 'edit';
+        hymnId?: number;
+        number: string;
+        title: string;
+        sections: { type: 'strofa' | 'refren'; text: string }[];
+        categoryId?: number;
+    };
+    onClose: () => void;
+    onSave: () => void;
+}) {
+    const [number, setNumber] = useState(editor.number);
+    const [title, setTitle] = useState(editor.title);
+    const [sections, setSections] = useState(editor.sections.length > 0
+        ? editor.sections
+        : [{ type: 'strofa' as const, text: '' }]);
+    const [error, setError] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const addSection = (type: 'strofa' | 'refren') => {
+        setSections([...sections, { type, text: '' }]);
+    };
+
+    const updateSection = (idx: number, field: 'type' | 'text', value: string) => {
+        const updated = [...sections];
+        if (field === 'type') updated[idx] = { ...updated[idx], type: value as 'strofa' | 'refren' };
+        else updated[idx] = { ...updated[idx], text: value };
+        setSections(updated);
+    };
+
+    const removeSection = (idx: number) => {
+        if (sections.length <= 1) return;
+        setSections(sections.filter((_, i) => i !== idx));
+    };
+
+    const handleSave = async () => {
+        setError('');
+        if (!number.trim()) { setError('Numărul este obligatoriu.'); return; }
+        if (!title.trim()) { setError('Titlul este obligatoriu.'); return; }
+        const validSections = sections.filter(s => s.text.trim());
+        if (validSections.length === 0) { setError('Adaugă cel puțin o secțiune cu text.'); return; }
+
+        setSaving(true);
+        try {
+            if (editor.mode === 'add') {
+                await window.electron.db.createHymnWithSections({
+                    number: number.trim(),
+                    title: title.trim(),
+                    categoryId: editor.categoryId,
+                    sections: validSections,
+                });
+            } else if (editor.hymnId) {
+                await window.electron.db.updateHymnWithSections(editor.hymnId, {
+                    number: number.trim(),
+                    title: title.trim(),
+                    sections: validSections,
+                });
+            }
+            onSave();
+        } catch (err: any) {
+            setError(err?.message ?? 'Eroare la salvare');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="modal-dialog modal-wide">
+                <div className="modal-header">
+                    <h3>{editor.mode === 'add' ? 'Adaugă Imn' : 'Editează Imn'}</h3>
+                    <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
+                </div>
+                <div className="modal-body">
+                    <div className="hymn-editor">
+                        <div className="editor-row">
+                            <div className="field">
+                                <label>Număr</label>
+                                <input
+                                    type="text"
+                                    className="editor-input"
+                                    value={number}
+                                    onChange={e => setNumber(e.target.value)}
+                                    placeholder="001"
+                                />
+                            </div>
+                            <div className="field" style={{ flex: 1 }}>
+                                <label>Titlu</label>
+                                <input
+                                    type="text"
+                                    className="editor-input"
+                                    value={title}
+                                    onChange={e => setTitle(e.target.value)}
+                                    placeholder="Titlul imnului..."
+                                />
+                            </div>
+                        </div>
+
+                        <div className="editor-sections-label">Secțiuni</div>
+                        {sections.map((sec, i) => (
+                            <div key={i} className="editor-section">
+                                <div className="editor-section-header">
+                                    <select
+                                        value={sec.type}
+                                        onChange={e => updateSection(i, 'type', e.target.value)}
+                                        className="editor-select"
+                                    >
+                                        <option value="strofa">Strofă</option>
+                                        <option value="refren">Refren</option>
+                                    </select>
+                                    <button
+                                        className="btn-sm danger"
+                                        onClick={() => removeSection(i)}
+                                        disabled={sections.length <= 1}
+                                    >
+                                        <X className="icon-xs" />
+                                    </button>
+                                </div>
+                                <textarea
+                                    className="editor-textarea"
+                                    value={sec.text}
+                                    onChange={e => updateSection(i, 'text', e.target.value)}
+                                    placeholder="Textul secțiunii..."
+                                    rows={4}
+                                />
+                            </div>
+                        ))}
+
+                        <div className="editor-add-btns">
+                            <button className="btn-sm" onClick={() => addSection('strofa')}>
+                                <Plus className="icon-xs" /> Strofă
+                            </button>
+                            <button className="btn-sm" onClick={() => addSection('refren')}>
+                                <Plus className="icon-xs" /> Refren
+                            </button>
+                        </div>
+
+                        {error && <div className="editor-error">{error}</div>}
+
+                        <div className="editor-actions">
+                            <button className="btn-project" onClick={handleSave} disabled={saving}>
+                                {saving ? 'Se salvează...' : 'Salvează'}
+                            </button>
+                            <button className="btn-clear" onClick={onClose}>Anulează</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Password Modal
+// ═════════════════════════════════════════════════════════════════════════════
+
+function PasswordModal({
+    title, hash, onSuccess, onCancel,
+}: {
+    title: string;
+    hash: string;
+    onSuccess: () => void;
+    onCancel: () => void;
+}) {
+    const [pw, setPw] = useState('');
+    const [error, setError] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    const handleSubmit = () => {
+        if (checkPassword(pw, hash)) {
+            onSuccess();
+        } else {
+            setError('Parolă incorectă');
+            setPw('');
+        }
+    };
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+            <div className="modal-dialog modal-sm">
+                <div className="modal-header">
+                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />{title}</h3>
+                    <button className="modal-close" onClick={onCancel}><X className="icon-sm" /></button>
+                </div>
+                <div className="modal-body">
+                    <div className="field">
+                        <label>Introduceți parola de admin:</label>
+                        <input
+                            ref={inputRef}
+                            type="password"
+                            className="editor-input"
+                            value={pw}
+                            onChange={e => { setPw(e.target.value); setError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
+                            placeholder="Parola..."
+                        />
+                    </div>
+                    {error && <div className="editor-error">{error}</div>}
+                    <div className="editor-actions" style={{ marginTop: 12 }}>
+                        <button className="btn-project" onClick={handleSubmit}>Confirmă</button>
+                        <button className="btn-clear" onClick={onCancel}>Anulează</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Password Setup Modal (first launch)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function PasswordSetupModal({ onSave }: { onSave: (pw: string) => void }) {
+    const [pw, setPw] = useState('');
+    const [confirm, setConfirm] = useState('');
+    const [error, setError] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    const handleSave = () => {
+        if (pw.length < 4) { setError('Parola trebuie să aibă cel puțin 4 caractere.'); return; }
+        if (pw !== confirm) { setError('Parolele nu se potrivesc.'); return; }
+        onSave(pw);
+    };
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-dialog modal-sm">
+                <div className="modal-header">
+                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />Configurare Parolă Admin</h3>
+                </div>
+                <div className="modal-body">
+                    <p className="setup-hint">
+                        Setați o parolă de administrare pentru a proteja editarea imnurilor.
+                        Aceasta va fi necesară pentru modificări după 24 de ore de la crearea unui imn.
+                    </p>
+                    <div className="field">
+                        <label>Parolă nouă</label>
+                        <input
+                            ref={inputRef}
+                            type="password"
+                            className="editor-input"
+                            value={pw}
+                            onChange={e => { setPw(e.target.value); setError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') document.getElementById('confirm-pw')?.focus(); }}
+                            placeholder="Minim 4 caractere..."
+                        />
+                    </div>
+                    <div className="field">
+                        <label>Confirmă parola</label>
+                        <input
+                            id="confirm-pw"
+                            type="password"
+                            className="editor-input"
+                            value={confirm}
+                            onChange={e => { setConfirm(e.target.value); setError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+                            placeholder="Repetă parola..."
+                        />
+                    </div>
+                    {error && <div className="editor-error">{error}</div>}
+                    <div className="editor-actions" style={{ marginTop: 12 }}>
+                        <button className="btn-project" onClick={handleSave}>Salvează</button>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -981,12 +1611,48 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 </div>
                             </div>
                             <div className="field">
+                                <label>Video Fundal</label>
+                                <div className="field-row">
+                                    <span className="field-value">{settings.bgVideoPath || 'Niciunul'}</span>
+                                    <button className="btn-sm" onClick={async () => {
+                                        const p = await window.electron.dialog.pickMedia('video');
+                                        if (p) saveSettings({ bgVideoPath: p });
+                                    }}>Alege...</button>
+                                </div>
+                            </div>
+                            <div className="field">
                                 <label>Opacitate: {((settings.bgOpacity ?? 1) * 100).toFixed(0)}%</label>
                                 <input
                                     type="range" min="0" max="1" step="0.05"
                                     value={settings.bgOpacity ?? 1}
                                     onChange={e => saveSettings({ bgOpacity: parseFloat(e.target.value) })}
                                 />
+                            </div>
+                            <div className="field">
+                                <label>Culoare Număr Imn</label>
+                                <div className="field-row">
+                                    <input
+                                        type="color"
+                                        value={settings.hymnNumberColor ?? '#9fb3ff'}
+                                        onChange={e => saveSettings({ hymnNumberColor: e.target.value })}
+                                    />
+                                    <span className="color-preview" style={{ color: settings.hymnNumberColor ?? '#9fb3ff' }}>
+                                        123.
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="field">
+                                <label>Culoare Text Conținut</label>
+                                <div className="field-row">
+                                    <input
+                                        type="color"
+                                        value={settings.contentTextColor ?? '#ffffff'}
+                                        onChange={e => saveSettings({ contentTextColor: e.target.value })}
+                                    />
+                                    <span className="color-preview" style={{ color: settings.contentTextColor ?? '#ffffff' }}>
+                                        Exemplu text
+                                    </span>
+                                </div>
                             </div>
                             <div className="field">
                                 <label>Ecran Proiecție</label>
