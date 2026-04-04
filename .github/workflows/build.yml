@@ -1,8 +1,12 @@
-name: Build Electron App
+name: Build and Release Electron App
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - "v*.*.*"   # example: v1.0.0
+
+permissions:
+  contents: write   # needed to create/update releases
 
 jobs:
   build:
@@ -11,10 +15,13 @@ jobs:
         include:
           - os: windows-latest
             script: build:win
+            artifact_name: electron-windows
           - os: macos-latest
             script: build:mac
+            artifact_name: electron-macos
           - os: ubuntu-latest
             script: build:linux
+            artifact_name: electron-linux
 
     runs-on: ${{ matrix.os }}
 
@@ -36,10 +43,32 @@ jobs:
       - name: Build app
         run: npm run ${{ matrix.script }}
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: electron-${{ matrix.os }}
+          name: ${{ matrix.artifact_name }}
           path: release/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show downloaded files
+        run: find artifacts -type f
+
+      - name: Create GitHub Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
