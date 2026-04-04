@@ -103,6 +103,7 @@ export interface AppSettings {
   hymnNumberColor?: string; // hex, e.g. '#9fb3ff'
   contentTextColor?: string; // hex, e.g. '#ffffff'
   adminPasswordHash?: string; // bcrypt-like hash or empty
+  projectionFontSize?: number; // font size multiplier, default 1.2
 }
 
 export interface IElectronAPI {

@@ -52,22 +52,24 @@ export function ProjectionPage() {
   const section: HymnSection | undefined = data?.sections[data.currentIndex];
   const isBible = data?.contentType === 'bible';
 
+  // Font size setting: default 1.2 (larger than before), user-adjustable from settings
+  const fontSizeMultiplier = (bg.projectionFontSize ?? 1.2) * zoomLevel;
+
   // Dynamic font size calculation based on lines and character count
-  let dynamicFontSize = `calc(clamp(2rem, 4.5vw, 5.5rem) * ${zoomLevel})`;
+  let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier})`;
   if (section) {
     const lines = section.text.split('\n');
     const lineCount = Math.max(1, lines.length);
     const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
 
-    // Character width is roughly 0.55em. Max width ~ 90vw
-    const maxVw = Math.min(8, 140 / maxLineCharCount).toFixed(2);
-    // Line height is 1.45. Max height ~ 70vh
-    const maxVh = Math.min(12, 65 / (lineCount * 1.45)).toFixed(2);
+    // Fit-to-page: compute max font size that fits viewport width and height
+    const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
+    const maxVh = Math.min(14, 72 / (lineCount * 1.45)).toFixed(2);
 
-    // Bible gets slightly larger base clamp
-    const minSize = isBible ? '2rem' : '1.5rem';
-    const maxSize = isBible ? '7.5rem' : '6.5rem';
-    dynamicFontSize = `calc(clamp(${minSize}, min(${maxVw}vw, ${maxVh}vh), ${maxSize}) * ${zoomLevel})`;
+    // Bible gets slightly larger base clamp; hymns also increased
+    const minSize = isBible ? '2.5rem' : '2rem';
+    const maxSize = isBible ? '9rem' : '8rem';
+    dynamicFontSize = `calc(clamp(${minSize}, min(${maxVw}vw, ${maxVh}vh), ${maxSize}) * ${fontSizeMultiplier})`;
   }
 
   // Resolve background styles
@@ -211,7 +213,7 @@ export function ProjectionPage() {
               className="font-black tabular-nums"
               style={{
                 color: hymnNumberColor,
-                fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${zoomLevel})`,
+                fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${fontSizeMultiplier})`,
                 lineHeight: 1,
                 textShadow: '0 4px 48px rgba(0,0,0,0.9)',
               }}
@@ -222,7 +224,7 @@ export function ProjectionPage() {
               className="font-bold uppercase tracking-widest"
               style={{
                 color: contentTextColor,
-                fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${zoomLevel})`,
+                fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${fontSizeMultiplier})`,
                 letterSpacing: '0.12em',
                 textShadow: '0 2px 32px rgba(0,0,0,0.9)',
               }}

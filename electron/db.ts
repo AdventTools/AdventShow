@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import { createRequire } from 'module';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -865,8 +866,102 @@ export function hasBibleData(): boolean {
     const row = getDb()
       .prepare("SELECT count(*) as cnt FROM sqlite_master WHERE type='table' AND name='bible_books'")
       .get() as { cnt: number } | undefined;
-    return !!(row && row.cnt > 0);
+    if (!row || row.cnt === 0) return false;
+    const verseRow = getDb()
+      .prepare('SELECT count(*) as cnt FROM bible_verses')
+      .get() as { cnt: number } | undefined;
+    return !!(verseRow && verseRow.cnt > 0);
   } catch {
     return false;
+  }
+}
+
+// ── Bible auto-seeding from cornilescu.json ──────────────────────────────────
+
+const ABBREVIATIONS: Record<string, string> = {
+  "Geneza": "Gen", "Exodul": "Exod", "Leviticul": "Lev",
+  "Numeri": "Num", "Deuteronomul": "Deut", "Iosua": "Ios",
+  "Judecători": "Jud", "Rut": "Rut", "1 Samuel": "1Sam",
+  "2 Samuel": "2Sam", "1 Împărați": "1Imp", "2 Împărați": "2Imp",
+  "1 Cronici": "1Cron", "2 Cronici": "2Cron", "Ezra": "Ezra",
+  "Neemia": "Neem", "Estera": "Est", "Iov": "Iov",
+  "Psalmii": "Ps", "Proverbe": "Prov", "Eclesiastul": "Ecl",
+  "Cântarea Cântărilor": "Cânt", "Isaia": "Is", "Ieremia": "Ier",
+  "Plângerile lui Ieremia": "Plâng", "Ezechiel": "Ez",
+  "Daniel": "Dan", "Osea": "Os", "Ioel": "Ioel",
+  "Amos": "Amos", "Obadia": "Ob", "Iona": "Iona",
+  "Mica": "Mica", "Naum": "Naum", "Habacuc": "Hab",
+  "Țefania": "Tef", "Hagai": "Hag", "Zaharia": "Zah",
+  "Maleahi": "Mal", "Matei": "Mat", "Marcu": "Marc",
+  "Luca": "Luca", "Ioan": "Ioan", "Faptele Apostolilor": "Fapte",
+  "Romani": "Rom", "1 Corinteni": "1Cor", "2 Corinteni": "2Cor",
+  "Galateni": "Gal", "Efeseni": "Ef", "Filipeni": "Fil",
+  "Coloseni": "Col", "1 Tesaloniceni": "1Tes", "2 Tesaloniceni": "2Tes",
+  "1 Timotei": "1Tim", "2 Timotei": "2Tim", "Titus": "Tit",
+  "Filimon": "Flm", "Evrei": "Evr", "Iacov": "Iac",
+  "1 Petru": "1Pet", "2 Petru": "2Pet", "1 Ioan": "1Ioan",
+  "2 Ioan": "2Ioan", "3 Ioan": "3Ioan", "Iuda": "Iuda",
+  "Apocalipsa": "Apoc",
+};
+
+export function seedBibleFromJson() {
+  // Check if Bible data already exists
+  if (hasBibleData()) return;
+
+  // Find cornilescu.json in various locations
+  const candidatePaths = [
+    path.join(process.resourcesPath ?? '', 'cornilescu.json'),
+    path.join(app.getAppPath(), 'scripts', 'cornilescu.json'),
+    path.join(app.getAppPath(), '..', 'scripts', 'cornilescu.json'),
+    path.join(process.env['APP_ROOT'] ?? '', 'scripts', 'cornilescu.json'),
+  ];
+
+  let jsonPath: string | null = null;
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) { jsonPath = p; break; }
+  }
+
+  if (!jsonPath) {
+    console.warn('[Bible] cornilescu.json not found, skipping seed');
+    return;
+  }
+
+  console.log('[Bible] Seeding from', jsonPath);
+  try {
+    const raw = fs.readFileSync(jsonPath, 'utf-8');
+    const data = JSON.parse(raw);
+    const books: any[] = data.books;
+    if (!books || !books.length) return;
+
+    const db = getDb();
+    const insertBook = db.prepare(
+      'INSERT OR REPLACE INTO bible_books (id, name, abbreviation, testament, book_order, chapter_count) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    const insertVerse = db.prepare(
+      'INSERT INTO bible_verses (book_id, chapter, verse, text) VALUES (?, ?, ?, ?)'
+    );
+
+    const tx = db.transaction(() => {
+      let totalVerses = 0;
+      for (const book of books) {
+        const nr = book.nr;
+        const name = book.name;
+        const abbr = ABBREVIATIONS[name] ?? name.substring(0, 4);
+        const testament = nr <= 39 ? 'VT' : 'NT';
+        const chapters = book.chapters ?? [];
+        insertBook.run(nr, name, abbr, testament, nr, chapters.length);
+
+        for (const ch of chapters) {
+          for (const v of (ch.verses ?? [])) {
+            insertVerse.run(nr, ch.chapter, v.verse, (v.text ?? '').trim());
+            totalVerses++;
+          }
+        }
+      }
+      console.log(`[Bible] Seeded ${books.length} books, ${totalVerses} verses`);
+    });
+    tx();
+  } catch (err) {
+    console.error('[Bible] Seed failed:', err);
   }
 }
