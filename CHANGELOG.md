@@ -1,5 +1,15 @@
 # Changelog — AdventShow
 
+## v1.1.3 (11 Aprilie 2026)
+
+### Curățenie
+- README simplificat — conține doar informații pentru utilizatorul final
+- Linkuri de descărcare corecte, fără versiune hardcodată în fișier
+- Fișiere parazite eliminate din release-uri (elevate.exe, AdventShow.exe neambalat)
+- Changelog curățat de detalii tehnice interne
+
+---
+
 ## v1.1.2 (11 Aprilie 2026)
 
 ### Fix proiecție
@@ -12,9 +22,6 @@
 ### Proiecție
 - **Font uniform per imn** — dimensiunea fontului se calculează pe baza celei mai dificile strofe/refren din imn și se aplică identic pe toate slide-urile. Fontul nu mai variază de la o strofă la alta, dar rămâne cât mai mare posibil fără a depăși ecranul, indiferent de rezoluția monitorului.
 - Versetele biblice rămân cu dimensionare individuală (sunt independente).
-
-### Documentație
-- Reguli de versionare clarificate în instrucțiunile Contributor: PATCH se incrementează automat la fiecare modificare, MINOR/MAJOR doar la instrucțiunea explicită a utilizatorului.
 
 ---
 
@@ -34,8 +41,7 @@
 - **Pagina Despre** — tab nou în Setări cu informații despre aplicație, versiune, dezvoltatori și link-uri GitHub
 
 ### Documentație
-- README complet rescris în română, cu instrucțiuni clare de descărcare pentru utilizatori non-tehnici
-- Fișier `.github/contributor-notes.md` cu reguli de dezvoltare și versionare
+- README complet rescris în română cu instrucțiuni de descărcare și instalare
 
 ---
 
@@ -108,35 +114,4 @@ Fork complet rescris al aplicației originale, cu interfață nouă, integrare B
 - Culoare număr imn și culoare text configurabile
 - Dimensiune font proiecție reglabilă (60%–200%, implicit 120%)
 
----
 
-### Îmbunătățiri tehnice
-
-#### Arhitectură
-- Electron 30.5.1 + React 18 + TypeScript + Vite 5 + TailwindCSS + DaisyUI 5
-- better-sqlite3 v12.6.2 pentru acces rapid la baza de date
-- Preload bridge tipizat complet (IPC typesafe între main ↔ renderer)
-- Protocol custom `localfile://` pentru imagini/video locale fără probleme CORS
-
-#### Baza de date
-- Schema unificată: `hymns`, `hymn_sections`, `categories`, `bible_books`, `bible_verses`
-- Căutare normalizată (diacritice, lowercase) pentru potriviri flexibile
-- `seedBibleFromJson()` — auto-import Biblie din `cornilescu.json` la prima pornire
-- Script `import_missing_hymns.py` pentru import PPT/PPTX → SQLite
-
-#### Proiecție
-- Font sizing dinamic cu fit-to-page: imnuri clamp 2–8rem, Biblie 2.5–9rem
-- Multiplicator font configurabil (`projectionFontSize` în settings)
-- `contentType` / `bibleRef` propagate prin tot pipeline-ul (main → preload → projection)
-- Fereastră proiecție: fullscreen, transparentă, always-on-top pe monitor principal
-
-#### Persistență setări
-- `settings.json` în `app.getPath('userData')` — supraviețuiește actualizărilor
-- `windowBounds` salvate la move/resize cu debounce 500ms
-- Validare: bounds-urile sunt verificate că sunt pe un display vizibil
-
-#### Build & distribuție
-- electron-builder cu NSIS (Windows) + DMG (macOS) + AppImage (Linux)
-- Baza de date `hymns.db` și `cornilescu.json` incluse ca `extraResources`
-- Versiune corectă (1.0.0) în numele installerului
-- Installere disponibile direct în [GitHub Releases](../../releases)
