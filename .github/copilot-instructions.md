@@ -28,6 +28,14 @@ Repo: https://github.com/AdventTools/AdventShow
 - Comentariile din cod pot fi în engleză sau română, dar preferabil în engleză.
 - README-ul principal este în română.
 
+### Repo public — ce se publică și ce nu
+- Acesta este un **repo public**. Tot ce e comis este vizibil oricui.
+- **README.md** conține **exclusiv informații pentru utilizatorul final**: descărcare, instalare, funcționalități, scurtături. Nimic despre procese interne, Copilot, reguli de versionare, structura codului, comenzi de build sau arhitectură.
+- **CHANGELOG.md** conține **doar modificări vizibile utilizatorului** (funcționalități, fix-uri, UI). Nu se menționează Copilot, instrucțiuni interne, procese de CI/CD, refactorizări tehnice invizibile.
+- **Nu se comit NICIODATĂ**: token-uri, chei API, parole, secrete de orice fel. Verifică de două ori înainte de commit.
+- Detaliile tehnice și de dezvoltare rămân **doar** în `.github/copilot-instructions.md` și în comentariile din cod.
+- Regula de bază: **nu ne spălăm rufele în public**.
+
 ### Versionare (Semantic Versioning)
 - Folosim **SemVer**: `MAJOR.MINOR.PATCH`
   - **MAJOR** — schimbări incompatibile / rescrierea majoră a funcționalității
