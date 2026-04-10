@@ -42,7 +42,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/**/*.exe
+            release/**/*-Setup.exe
             release/**/*.AppImage
           draft: false
           prerelease: false
