@@ -1,4 +1,25 @@
-# Changelog — Proiecție Imnuri
+# Changelog — AdventShow
+
+## v1.1.0 (10 Aprilie 2026)
+
+### Redenumire proiect
+- Aplicația se numește acum **AdventShow** (anterior „Proiecție Imnuri")
+- AppId, productName, shortcut și titlu actualizate peste tot
+- Repo mutat la [github.com/AdventTools/AdventShow](https://github.com/AdventTools/AdventShow)
+
+### Corecții interfață
+- „Strofa 1/2/3..." în loc de „Strofă 1/2/3..." — corecție de gramatică românească în proiecție, controller și editor
+- Indicatorii de poziție (dots) din partea de jos a proiecției sunt acum **albi** și vizibili (anterior erau gri, aproape invizibili)
+
+### Funcționalitate nouă
+- **Previne hibernarea / screensaver-ul** — laptopul/PC-ul nu mai intră în sleep cât timp AdventShow e pornit (folosește `powerSaveBlocker` din Electron)
+- **Pagina Despre** — tab nou în Setări cu informații despre aplicație, versiune, dezvoltatori și link-uri GitHub
+
+### Documentație
+- README complet rescris în română, cu instrucțiuni clare de descărcare pentru utilizatori non-tehnici
+- Fișier `.github/contributor-notes.md` cu reguli de dezvoltare și versionare
+
+---
 
 ## v1.0.0 (4 Aprilie 2026)
 

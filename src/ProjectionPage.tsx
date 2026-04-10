@@ -143,7 +143,7 @@ export function ProjectionPage() {
                   : 'border-white/30 text-white/70'}`}
               style={{ fontSize: 'clamp(0.7rem, 1.2vw, 0.95rem)', letterSpacing: '0.2em', textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}
             >
-              {section.type === 'refren' ? 'Refren' : `Strofă ${(data?.sections
+              {section.type === 'refren' ? 'Refren' : `Strofa ${(data?.sections
                 .slice(0, data.currentIndex + 1)
                 .filter(s => s.type === 'strofa').length) ?? ''}`}
             </span>
@@ -254,11 +254,11 @@ export function ProjectionPage() {
       {data && data.sections.length > 1 && data.currentIndex >= 0 && (
         <div
           className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 pb-8 z-10"
-          style={{ opacity: visible ? 0.4 : 0, transition: 'opacity 0.4s' }}
+          style={{ opacity: visible ? 0.7 : 0, transition: 'opacity 0.4s' }}
         >
           {isBible ? (
             /* Bible: current verse / total */
-            <span className="text-white/50 text-sm font-mono tracking-wider">
+            <span className="text-white text-sm font-mono tracking-wider">
               {data.currentIndex + 1} / {data.sections.length}
             </span>
           ) : (
@@ -268,8 +268,8 @@ export function ProjectionPage() {
                 className={`rounded-full transition-all duration-300 ${i === data.currentIndex
                   ? 'w-6 h-2 bg-white'
                   : s.type === 'refren'
-                    ? 'w-2 h-2 bg-amber-400/60'
-                    : 'w-2 h-2 bg-white/30'
+                    ? 'w-2 h-2 bg-amber-400/80'
+                    : 'w-2 h-2 bg-white/70'
                   }`}
               />
             ))

@@ -68,7 +68,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
   const sectionLabel = (s: HymnSection, idx: number) => {
     if (s.type === 'refren') return 'Refren';
     const strofaNum = sections.slice(0, idx + 1).filter(x => x.type === 'strofa').length;
-    return `Strofă ${strofaNum}`;
+    return `Strofa ${strofaNum}`;
   };
 
   return (

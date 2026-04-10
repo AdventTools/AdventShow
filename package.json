@@ -1,10 +1,10 @@
 {
-  "name": "proiectie-imnuri",
+  "name": "adventshow",
   "private": true,
-  "version": "1.0.0",
-  "productName": "Proiectie Imnuri",
-  "description": "Aplicatie pentru import, formatare, previzualizare si organizare pe categorii a imnurilor, cu administrare si proiectare rapida in biserica.",
-  "author": "Ovidius S Zanfir",
+  "version": "1.1.0",
+  "productName": "AdventShow",
+  "description": "Aplicatie gratuita pentru proiectia imnurilor si versetelor biblice in biserica.",
+  "author": "AdventTools",
   "type": "module",
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
