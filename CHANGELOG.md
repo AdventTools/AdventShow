@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.1.2 (11 Aprilie 2026)
+
+### Fix proiecție
+- **Fix font overflow** — constantele de calcul font au fost ajustate conservativ: zona utilizabilă redusă la ~58vh (din 72vh) pentru a compensa header-ul, footer-ul și padding-ul. Lățimea caracterelor bold compensată cu factor 120 (din 150). Fontul minim coborât la 1.5rem, maxim la 7rem. Imnul 009 și alte imnuri cu text lung nu mai ies din ecran.
+
+---
+
 ## v1.1.1 (10 Aprilie 2026)
 
 ### Proiecție
