@@ -66,6 +66,26 @@ Repo: https://github.com/AdventTools/AdventShow
 - Installerele trebuie generate prin `npm run build:win`, `npm run build:mac`, `npm run build:linux`
 - Numele installerului folosește `${productName}` din electron-builder.json5
 - `hymns.db` și `cornilescu.json` sunt incluse ca `extraResources`
+- **macOS** — build-ul se face **local** pe mașina dezvoltatorului (este necesar macOS nativ pentru a genera `.dmg`)
+- **Windows și Linux** — build-urile se fac prin **GitHub Actions** (workflow CI/CD)
+
+### Release-uri (OBLIGATORIU)
+- **La FIECARE modificare** care ajunge pe branch-ul `main`, trebuie creat un **GitHub Release** nou.
+- Release-ul trebuie să conțină **installerele** pentru toate platformele (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`).
+- Fără excepție: orice commit pe `main` care schimbă funcționalitatea, corectează bug-uri sau actualizează versiunea **trebuie** să fie însoțit de un release cu fișierele binare atașate.
+- Link-urile de descărcare din `README.md` trebuie să rămână mereu funcționale și să corespundă ultimului release.
+- La schimbarea versiunii, actualizează și numele fișierelor din tabelul de descărcare din `README.md`.
+- Tag-ul git pentru release este `v<MAJOR>.<MINOR>.<PATCH>` (ex: `v1.1.0`).
+- Procedura de release:
+  1. Actualizează `version` în `package.json`
+  2. Actualizează `CHANGELOG.md` cu modificările
+  3. Actualizează badge-ul de versiune și link-urile din `README.md`
+  4. Commit + push pe `main`
+  5. Creează tag: `git tag v<versiune>`
+  6. Push tag: `git push origin v<versiune>`
+  7. Build local macOS: `npm run build:mac` → încarcă `.dmg` în release
+  8. GitHub Actions construiește automat Windows + Linux și le atașează la release
+  9. Verifică că toate link-urile de descărcare funcționează
 
 ### Git
 - Branch principal: `main`
