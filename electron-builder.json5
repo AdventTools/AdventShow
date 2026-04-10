@@ -1,8 +1,8 @@
 // @see - https://www.electron.build/configuration/configuration
 {
-  "appId": "com.proiectieimnuri.app",
+  "appId": "com.adventtools.adventshow",
   "asar": true,
-  "productName": "Proiectie Imnuri",
+  "productName": "AdventShow",
   "icon": "build/icon.png",
   "directories": {
     "output": "release/${version}",
@@ -59,7 +59,7 @@
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "Proiectie Imnuri"
+    "shortcutName": "AdventShow"
   },
   "linux": {
     "icon": "build/icons/png",
