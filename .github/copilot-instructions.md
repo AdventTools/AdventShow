@@ -32,10 +32,12 @@ Repo: https://github.com/AdventTools/AdventShow
 - Folosim **SemVer**: `MAJOR.MINOR.PATCH`
   - **MAJOR** — schimbări incompatibile / rescrierea majoră a funcționalității
   - **MINOR** — funcționalități noi, compatibile înapoi
-  - **PATCH** — bug fixes, corecții minore
+  - **PATCH** — bug fixes, corecții minore, îmbunătățiri mici
+- **Copilot incrementează automat DOAR clasa PATCH** (ex: 1.1.0 → 1.1.1 → 1.1.2). La fiecare commit pe `main` care modifică cod sau funcționalitate, versiunea PATCH crește cu 1.
+- **Clasele MAJOR și MINOR se incrementează DOAR la instrucțiunea explicită a utilizatorului.** Niciodată automat.
 - Versiunea se actualizează în **`package.json`** (`version` field). Vite o preia automat prin `import.meta.env.VITE_APP_VERSION`.
 - La fiecare schimbare de versiune, actualizează și **`CHANGELOG.md`** cu descrierea modificărilor.
-- Nu uita să actualizezi badge-ul de versiune din **`README.md`**.
+- Nu uita să actualizezi badge-ul de versiune și link-urile de descărcare din **`README.md`**.
 
 ### Convenții de cod
 - TypeScript strict — fără `any` unde se poate evita

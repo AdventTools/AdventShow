@@ -1,5 +1,16 @@
 # Changelog — AdventShow
 
+## v1.1.1 (10 Aprilie 2026)
+
+### Proiecție
+- **Font uniform per imn** — dimensiunea fontului se calculează pe baza celei mai dificile strofe/refren din imn și se aplică identic pe toate slide-urile. Fontul nu mai variază de la o strofă la alta, dar rămâne cât mai mare posibil fără a depăși ecranul, indiferent de rezoluția monitorului.
+- Versetele biblice rămân cu dimensionare individuală (sunt independente).
+
+### Documentație
+- Reguli de versionare clarificate în instrucțiunile Copilot: PATCH se incrementează automat la fiecare modificare, MINOR/MAJOR doar la instrucțiunea explicită a utilizatorului.
+
+---
+
 ## v1.1.0 (10 Aprilie 2026)
 
 ### Redenumire proiect
