@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, screen } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -91,6 +91,22 @@ interface ProjState {
   bibleRef?: string
 }
 let projState: ProjState | null = null
+
+// ── Keep-alive: prevent system sleep / screensaver while the app is running ──
+let powerSaveId: number | null = null
+
+function startPowerSaveBlocker() {
+  if (powerSaveId === null) {
+    powerSaveId = powerSaveBlocker.start('prevent-display-sleep')
+  }
+}
+
+function stopPowerSaveBlocker() {
+  if (powerSaveId !== null && powerSaveBlocker.isStarted(powerSaveId)) {
+    powerSaveBlocker.stop(powerSaveId)
+  }
+  powerSaveId = null
+}
 
 function sendSlideToProjection(index: number) {
   if (!projState || !projectionWin) return
@@ -227,6 +243,7 @@ function copySeedDbIfNeeded() {
 }
 
 app.on('window-all-closed', () => {
+  stopPowerSaveBlocker()
   if (process.platform !== 'darwin') { app.quit(); win = null }
 })
 
@@ -241,6 +258,9 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.whenReady().then(() => {
+  // Prevent system sleep / screensaver / hibernate while the app is running
+  startPowerSaveBlocker()
+
   // Serve local files via localfile:///abs/path
   // Forward ALL request headers (including Range) so video streaming works.
   protocol.handle('localfile', (request) => {

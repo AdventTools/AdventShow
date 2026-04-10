@@ -30,7 +30,7 @@ import type {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const MASTER_PASSWORD = 'ProiectieMaster2025!';
+const MASTER_PASSWORD = 'AdventShowMaster2025!';
 const GRACE_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ function expandHymnSections(sections: HymnSection[]) {
     for (const sec of sections) {
         if (sec.type === 'strofa') {
             stanzaNum++;
-            result.push({ text: stripStanzaNumber(sec.text), type: 'strofa', label: `Strofă ${stanzaNum}` });
+            result.push({ text: stripStanzaNumber(sec.text), type: 'strofa', label: `Strofa ${stanzaNum}` });
             if (refren) {
                 result.push({ text: refren.text, type: 'refren', label: 'Refren' });
             }
@@ -1615,7 +1615,7 @@ function HymnEditorModal({
                                         onChange={e => updateSection(i, 'type', e.target.value)}
                                         className="editor-select"
                                     >
-                                        <option value="strofa">Strofă</option>
+                                        <option value="strofa">Strofa</option>
                                         <option value="refren">Refren</option>
                                     </select>
                                     <button
@@ -1638,7 +1638,7 @@ function HymnEditorModal({
 
                         <div className="editor-add-btns">
                             <button className="btn-sm" onClick={() => addSection('strofa')}>
-                                <Plus className="icon-xs" /> Strofă
+                                <Plus className="icon-xs" /> Strofa
                             </button>
                             <button className="btn-sm" onClick={() => addSection('refren')}>
                                 <Plus className="icon-xs" /> Refren
@@ -1790,7 +1790,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
 }) {
-    const [activeTab, setActiveTab] = useState<'projection' | 'import'>('projection');
+    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'about'>('projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
 
@@ -1813,13 +1813,13 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                 </div>
                 <div className="modal-body">
                     <div className="settings-tabs">
-                        {(['projection', 'import'] as const).map(t => (
+                        {(['projection', 'import', 'about'] as const).map(t => (
                             <button
                                 key={t}
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : 'Import / Export'}
+                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Import / Export' : 'Despre'}
                             </button>
                         ))}
                     </div>
@@ -1982,6 +1982,53 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 </button>
                             </div>
                             {importStatus && <div className="import-msg">{importStatus}</div>}
+                        </div>
+                    )}
+
+                    {activeTab === 'about' && (
+                        <div className="settings-content">
+                            <div className="flex flex-col items-center gap-4 py-6 text-center">
+                                <h2 className="text-2xl font-black text-primary tracking-wide">AdventShow</h2>
+                                <p className="text-white/50 text-sm">Versiunea {import.meta.env.VITE_APP_VERSION ?? '1.1.0'}</p>
+                                <p className="text-white/70 text-sm leading-relaxed max-w-md">
+                                    Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserică.
+                                    Include 922 imnuri din „Imnuri Creștine" și Biblia Cornilescu completă (31.102 versete).
+                                </p>
+                                <div className="border-t border-white/10 w-full my-2" />
+                                <div className="text-sm text-white/60 leading-relaxed">
+                                    <p className="font-semibold text-white/80 mb-1">Dezvoltatori</p>
+                                    <p>Ovidius Zanfir &amp; Samy Balasa</p>
+                                </div>
+                                <div className="text-sm text-white/60 leading-relaxed">
+                                    <p className="font-semibold text-white/80 mb-1">Organizație</p>
+                                    <a
+                                        href="https://github.com/AdventTools"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-primary hover:underline"
+                                    >
+                                        github.com/AdventTools
+                                    </a>
+                                </div>
+                                <div className="text-sm text-white/60 leading-relaxed">
+                                    <p className="font-semibold text-white/80 mb-1">Cod sursă</p>
+                                    <a
+                                        href="https://github.com/AdventTools/AdventShow"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-primary hover:underline"
+                                    >
+                                        github.com/AdventTools/AdventShow
+                                    </a>
+                                </div>
+                                <div className="border-t border-white/10 w-full my-2" />
+                                <p className="text-white/30 text-xs">
+                                    Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
+                                </p>
+                                <p className="text-white/20 text-[10px]">
+                                    Electron + React + TypeScript + TailwindCSS
+                                </p>
+                            </div>
                         </div>
                     )}
 
