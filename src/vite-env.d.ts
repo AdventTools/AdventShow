@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 
 export interface HymnSection {
   id: number;
