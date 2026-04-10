@@ -58,6 +58,8 @@ export function ProjectionPage() {
   // ── Uniform font size for the entire hymn ──
   // Analyze ALL sections once when the hymn changes, pick the tightest fit,
   // and use that font for every slide so it never varies mid-hymn.
+  // Constants are conservative: account for header (~6vh), footer dots (~6vh),
+  // padding, line-height 1.45, and bold text being ~20% wider than normal.
   const hymnFontSize = (() => {
     if (!data || data.sections.length === 0) return null;
 
@@ -71,13 +73,15 @@ export function ProjectionPage() {
       const lines = sec.text.split('\n');
       const lineCount = Math.max(1, lines.length);
       const maxLineCharCount = Math.max(1, ...lines.map((l: string) => l.trim().length));
-      worstVw = Math.min(worstVw, 150 / maxLineCharCount);
-      worstVh = Math.min(worstVh, 72 / (lineCount * 1.45));
+      // 120 instead of 150: bold weight 700 chars are ~20% wider
+      worstVw = Math.min(worstVw, 120 / maxLineCharCount);
+      // 58 instead of 72: usable area is ~58vh after header + footer + padding
+      worstVh = Math.min(worstVh, 58 / (lineCount * 1.45));
     }
 
     const vw = Math.min(10, worstVw).toFixed(2);
     const vh = Math.min(14, worstVh).toFixed(2);
-    return `calc(clamp(2rem, min(${vw}vw, ${vh}vh), 8rem) * ${fontSizeMultiplier})`;
+    return `calc(clamp(1.5rem, min(${vw}vw, ${vh}vh), 7rem) * ${fontSizeMultiplier})`;
   })();
 
   // Dynamic font size: use the uniform hymn font, or per-section for Bible
