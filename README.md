@@ -5,7 +5,7 @@
 Construită cu Electron + React + TypeScript. Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.0-green)
+![version](https://img.shields.io/badge/versiune-1.1.1-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -18,9 +18,9 @@ Construită cu Electron + React + TypeScript. Include Biblia Cornilescu complet�
 
 | Platformă | Fișier de descărcat |
 |-----------|---------------------|
-| **Windows** | [`AdventShow-Windows-1.1.0-Setup.exe`](https://github.com/AdventTools/AdventShow/releases/latest) |
-| **macOS** | [`AdventShow-Mac-1.1.0-Installer.dmg`](https://github.com/AdventTools/AdventShow/releases/latest) |
-| **Linux** | [`AdventShow-Linux-1.1.0.AppImage`](https://github.com/AdventTools/AdventShow/releases/latest) |
+| **Windows** | [`AdventShow-Windows-1.1.1-Setup.exe`](https://github.com/AdventTools/AdventShow/releases/latest) |
+| **macOS** | [`AdventShow-Mac-1.1.1-Installer.dmg`](https://github.com/AdventTools/AdventShow/releases/latest) |
+| **Linux** | [`AdventShow-Linux-1.1.1.AppImage`](https://github.com/AdventTools/AdventShow/releases/latest) |
 
 > 💡 La prima pornire, aplicația creează automat baza de date cu toate imnurile și Biblia Cornilescu. Nu trebuie să imporți nimic manual.
 
