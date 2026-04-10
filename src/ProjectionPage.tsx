@@ -55,18 +55,45 @@ export function ProjectionPage() {
   // Font size setting: default 1.2 (larger than before), user-adjustable from settings
   const fontSizeMultiplier = (bg.projectionFontSize ?? 1.2) * zoomLevel;
 
-  // Dynamic font size calculation based on lines and character count
+  // ── Uniform font size for the entire hymn ──
+  // Analyze ALL sections once when the hymn changes, pick the tightest fit,
+  // and use that font for every slide so it never varies mid-hymn.
+  const hymnFontSize = (() => {
+    if (!data || data.sections.length === 0) return null;
+
+    // For Bible content, keep per-verse sizing (verses are independent)
+    if (isBible) return null;
+
+    let worstVw = 10;
+    let worstVh = 14;
+
+    for (const sec of data.sections) {
+      const lines = sec.text.split('\n');
+      const lineCount = Math.max(1, lines.length);
+      const maxLineCharCount = Math.max(1, ...lines.map((l: string) => l.trim().length));
+      worstVw = Math.min(worstVw, 150 / maxLineCharCount);
+      worstVh = Math.min(worstVh, 72 / (lineCount * 1.45));
+    }
+
+    const vw = Math.min(10, worstVw).toFixed(2);
+    const vh = Math.min(14, worstVh).toFixed(2);
+    return `calc(clamp(2rem, min(${vw}vw, ${vh}vh), 8rem) * ${fontSizeMultiplier})`;
+  })();
+
+  // Dynamic font size: use the uniform hymn font, or per-section for Bible
   let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier})`;
-  if (section) {
+  if (hymnFontSize) {
+    // Hymn: consistent font across all slides
+    dynamicFontSize = hymnFontSize;
+  } else if (section) {
+    // Bible or fallback: per-section sizing
     const lines = section.text.split('\n');
     const lineCount = Math.max(1, lines.length);
     const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
 
-    // Fit-to-page: compute max font size that fits viewport width and height
     const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
     const maxVh = Math.min(14, 72 / (lineCount * 1.45)).toFixed(2);
 
-    // Bible gets slightly larger base clamp; hymns also increased
     const minSize = isBible ? '2.5rem' : '2rem';
     const maxSize = isBible ? '9rem' : '8rem';
     dynamicFontSize = `calc(clamp(${minSize}, min(${maxVw}vw, ${maxVh}vh), ${maxSize}) * ${fontSizeMultiplier})`;
