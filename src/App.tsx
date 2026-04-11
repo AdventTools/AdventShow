@@ -1,4 +1,5 @@
 import {
+    AlertCircle,
     Book,
     ChevronLeft,
     ChevronRight,
@@ -6,11 +7,13 @@ import {
     Edit3,
     Film,
     FolderOpen,
+    Loader,
     Lock,
     Monitor,
     Pause,
     Plus,
     Play,
+    RefreshCw,
     Search,
     Settings,
     Square,
@@ -29,6 +32,7 @@ import type {
     Category,
     Hymn,
     HymnSection,
+    YouTubeEntry,
 } from './vite-env';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -51,10 +55,8 @@ function normalizeDiacritics(str: string): string {
 
 function getSnippetFirstLine(snippet?: string): string {
     if (!snippet) return '';
-    let s = snippet.replace(/^\d+\.\s*/, '');
-    const nl = s.indexOf('\n');
-    if (nl > 0) s = s.substring(0, nl);
-    return s.trim();
+    // Remove stanza numbers (e.g. "1. ") and collapse all whitespace into single spaces
+    return snippet.replace(/\d+\.\s*/g, '').replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
 }
 
 function stripStanzaNumber(text: string): string {
@@ -269,9 +271,13 @@ function App() {
         currentTime: number; duration: number; paused: boolean;
     } | null>(null);
     const [videoName, setVideoName] = useState('');
+    const [videoUrl, setVideoUrl] = useState('');
     const [videoLoading, setVideoLoading] = useState(false);
     const [videoConverting, setVideoConverting] = useState(false);
     const [videoVolume, setVideoVolume] = useState(1);
+    // YouTube playlist
+    const [youtubePlaylist, setYoutubePlaylist] = useState<YouTubeEntry[]>([]);
+    const [youtubeProgress, setYoutubeProgress] = useState<Record<string, number>>({});
 
     // ── Modal state ──
     const [modalOpen, setModalOpen] = useState<string | null>(null);
@@ -304,6 +310,12 @@ function App() {
     const searchConsumedRef = useRef(true); // tracks if current search was already loaded into preview
     const skipAutoPreviewRef = useRef(false); // prevent auto-preview overriding search-triggered load
 
+    // ── Resizable layout state ──
+    const [sidebarWidth, setSidebarWidth] = useState(200);
+    const [previewWidth, setPreviewWidth] = useState(640);
+    const draggingRef = useRef<'sidebar' | 'preview' | null>(null);
+    const mainAreaRef = useRef<HTMLDivElement>(null);
+
     // Keep ref in sync
     useEffect(() => { projSlideIndexRef.current = projSlideIndex; }, [projSlideIndex]);
 
@@ -334,6 +346,9 @@ function App() {
             } else {
                 setNeedsPasswordSetup(true);
             }
+            // Restore saved layout widths
+            if (s.sidebarWidth) setSidebarWidth(s.sidebarWidth);
+            if (s.previewWidth) setPreviewWidth(s.previewWidth);
         });
     }, []);
 
@@ -351,6 +366,31 @@ function App() {
         return () => {
             window.electron.video.offStatus();
             window.electron.video.offConverting();
+        };
+    }, []);
+
+    // YouTube playlist: load on mount + listen for progress/status events
+    useEffect(() => {
+        window.electron.youtube.getPlaylist().then(setYoutubePlaylist);
+        window.electron.youtube.onProgress((id, percent) => {
+            setYoutubeProgress(prev => ({ ...prev, [id]: percent }));
+        });
+        window.electron.youtube.onStatus((id, status, error) => {
+            setYoutubePlaylist(prev => prev.map(e =>
+                e.id === id ? { ...e, status: status as YouTubeEntry['status'], error: error || undefined } : e
+            ));
+            // Remove progress tracking when done
+            if (status !== 'downloading') {
+                setYoutubeProgress(prev => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
+            }
+        });
+        return () => {
+            window.electron.youtube.offProgress();
+            window.electron.youtube.offStatus();
         };
     }, []);
 
@@ -392,21 +432,17 @@ function App() {
         return () => clearTimeout(t);
     }, [loadHymns, tab]);
 
-    // ── Bible content search ──
-    useEffect(() => {
+    // ── Bible content search (triggered on Enter, not real-time) ──
+    const doBibleContentSearch = useCallback(async () => {
         if (tab !== 'biblia') return;
         const cq = contentSearch.trim();
         if (cq.length >= 3) {
-            const doSearch = async () => {
-                const results = await window.electron.bible.search(
-                    cq,
-                    selectedBookId ?? undefined,
-                    selectedChapter ?? undefined,
-                );
-                setBibleSearchResults(results);
-            };
-            const t = setTimeout(doSearch, 300);
-            return () => clearTimeout(t);
+            const results = await window.electron.bible.search(
+                cq,
+                selectedBookId ?? undefined,
+                selectedChapter ?? undefined,
+            );
+            setBibleSearchResults(results);
         } else {
             setBibleSearchResults(null);
         }
@@ -568,18 +604,30 @@ function App() {
         if (!filePath) return;
         setVideoLoading(true);
         try {
-            const result = await window.electron.video.load(filePath);
+            const result = await window.electron.video.prepare(filePath);
             if (result.error) {
-                console.error('Video load error:', result.error);
+                console.error('Video prepare error:', result.error);
                 setVideoLoading(false);
                 return;
             }
-            setVideoName(result.name ?? '');
-            setVideoStatus({ currentTime: 0, duration: 0, paused: true });
+            const url = result.url ?? '';
+            const name = result.name ?? '';
+            // Add to unified playlist
+            const addResult = await window.electron.playlist.addLocal(url, name);
+            if (addResult.entry) {
+                setYoutubePlaylist(prev => [...prev, addResult.entry!]);
+            }
         } catch (err) {
-            console.error('Video load failed:', err);
+            console.error('Video prepare failed:', err);
         }
         setVideoLoading(false);
+    }, []);
+
+    const videoStartPlayback = useCallback(async (url: string, name: string) => {
+        setVideoName(name);
+        setVideoUrl(url);
+        setVideoStatus({ currentTime: 0, duration: 0, paused: true });
+        await window.electron.video.startPlayback(url, name);
     }, []);
 
     const videoPlay = useCallback(() => window.electron.video.play(), []);
@@ -588,11 +636,57 @@ function App() {
         window.electron.video.stop();
         setVideoStatus(null);
         setVideoName('');
+        setVideoUrl('');
     }, []);
     const videoSeek = useCallback((time: number) => window.electron.video.seek(time), []);
     const videoSetVolume = useCallback((vol: number) => {
         setVideoVolume(vol);
         window.electron.video.volume(vol);
+    }, []);
+
+    // YouTube playlist actions
+    const youtubeAdd = useCallback(async (url: string) => {
+        const result = await window.electron.youtube.add(url);
+        if (result.error) {
+            return result.error;
+        }
+        if (result.entry) {
+            setYoutubePlaylist(prev => [...prev, result.entry!]);
+        }
+        return null;
+    }, []);
+
+    const youtubeRemove = useCallback(async (id: string) => {
+        await window.electron.youtube.remove(id);
+        setYoutubePlaylist(prev => prev.filter(e => e.id !== id));
+    }, []);
+
+    const youtubeDelete = useCallback(async (id: string) => {
+        await window.electron.youtube.delete(id);
+        setYoutubePlaylist(prev => prev.filter(e => e.id !== id));
+    }, []);
+
+    const youtubePlay = useCallback(async (id: string) => {
+        const result = await window.electron.playlist.getFileUrl(id);
+        if (result.error || !result.url) {
+            console.error('Playlist file error:', result.error);
+            return;
+        }
+        videoStartPlayback(result.url, result.name ?? 'Video');
+    }, [videoStartPlayback]);
+
+    const youtubeRetry = useCallback(async (id: string) => {
+        setYoutubePlaylist(prev => prev.map(e =>
+            e.id === id ? { ...e, status: 'downloading' as const, error: undefined } : e
+        ));
+        await window.electron.youtube.retryDownload(id);
+    }, []);
+
+    const youtubeUpdateTitle = useCallback(async (id: string, title: string) => {
+        await window.electron.youtube.updateTitle(id, title);
+        setYoutubePlaylist(prev => prev.map(e =>
+            e.id === id ? { ...e, title } : e
+        ));
     }, []);
 
     // ── Load Bible reference (Enter-triggered, BibleShow-style) ──
@@ -724,6 +818,11 @@ function App() {
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopImmediatePropagation();
+                // Stop video if active
+                if (videoStatus) {
+                    videoStop();
+                    return;
+                }
                 if (projecting) {
                     stopProjection();
                 } else if (previewSections.length > 0) {
@@ -781,7 +880,45 @@ function App() {
         window.addEventListener('keydown', handler, true);
         return () => window.removeEventListener('keydown', handler, true);
     }, [projecting, previewSections, modalOpen, hymnEditor, passwordModal, needsPasswordSetup,
-        stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn]);
+        stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn,
+        videoStatus, videoStop]);
+
+    // ── Resizable column drag handlers ──
+    const onResizeMouseDown = useCallback((which: 'sidebar' | 'preview') => {
+        draggingRef.current = which;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMouseMove = (e: MouseEvent) => {
+            if (!draggingRef.current || !mainAreaRef.current) return;
+            const rect = mainAreaRef.current.getBoundingClientRect();
+            if (draggingRef.current === 'sidebar') {
+                const newW = Math.max(120, Math.min(400, e.clientX - rect.left));
+                setSidebarWidth(newW);
+            } else {
+                const newW = Math.max(300, Math.min(900, rect.right - e.clientX));
+                setPreviewWidth(newW);
+            }
+        };
+
+        const onMouseUp = () => {
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            draggingRef.current = null;
+            // Save layout widths
+            setTimeout(() => {
+                window.electron.settings.set({
+                    sidebarWidth: document.querySelector<HTMLElement>('.sidebar')?.offsetWidth,
+                    previewWidth: document.querySelector<HTMLElement>('.preview')?.offsetWidth,
+                });
+            }, 50);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    }, []);
 
     // ── Search Enter/Esc/Arrow handler ──
     const onSearchKeydown = useCallback(async (e: React.KeyboardEvent) => {
@@ -817,6 +954,9 @@ function App() {
                     if (projecting) await stopProjection();
                     const loaded = await loadBibleReference();
                     if (loaded) searchConsumedRef.current = true;
+                } else if (contentSearch.trim().length >= 3) {
+                    // Content search in Bible — triggered on Enter
+                    await doBibleContentSearch();
                 } else if (previewSections.length > 0 && !projecting) {
                     // No new search, preview exists → project
                     startProjection(projSlideIndex);
@@ -855,7 +995,7 @@ function App() {
         }
     }, [projecting, previewSections, projSlideIndex, startProjection, tab,
         selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
-        navigateSlide]);
+        navigateSlide, contentSearch, doBibleContentSearch]);
 
     // ── Close context menu on click elsewhere ──
     useEffect(() => {
@@ -966,7 +1106,11 @@ function App() {
             </header>
 
             {/* ── Main content area (3-column layout) ── */}
-            <div className="main-area">
+            <div
+                className="main-area"
+                ref={mainAreaRef}
+                style={{ gridTemplateColumns: `${sidebarWidth}px auto 1fr auto ${previewWidth}px` }}
+            >
                 {/* Sidebar */}
                 <aside className="sidebar">
                     {tab === 'imnuri' ? (
@@ -980,6 +1124,15 @@ function App() {
                             books={books}
                             selectedBookId={selectedBookId}
                             onSelect={selectBook}
+                            onDeselectBook={() => {
+                                setSelectedBookId(null);
+                                setSelectedBookName('');
+                                setSelectedChapter(null);
+                                setChapters([]);
+                                setVerses([]);
+                                setSelectedVerseIdx(0);
+                                setBibleSearchResults(null);
+                            }}
                         />
                     ) : (
                         <div className="sidebar-title">Video</div>
@@ -1008,6 +1161,9 @@ function App() {
                     )}
                 </aside>
 
+                {/* Resize handle: sidebar | content */}
+                <div className="resize-handle" onMouseDown={() => onResizeMouseDown('sidebar')} />
+
                 {/* Content */}
                 <div className="content">
                     {tab === 'imnuri' ? (
@@ -1030,13 +1186,20 @@ function App() {
                             videoVolume={videoVolume}
                             videoLoading={videoLoading}
                             videoConverting={videoConverting}
-                            projecting={projecting}
+                            youtubePlaylist={youtubePlaylist}
+                            youtubeProgress={youtubeProgress}
                             onPickFile={loadVideoFile}
                             onPlay={videoPlay}
                             onPause={videoPause}
                             onStop={videoStop}
                             onSeek={videoSeek}
                             onVolume={videoSetVolume}
+                            onYoutubeAdd={youtubeAdd}
+                            onYoutubeRemove={youtubeRemove}
+                            onYoutubeDelete={youtubeDelete}
+                            onYoutubePlay={youtubePlay}
+                            onYoutubeRetry={youtubeRetry}
+                            onYoutubeUpdateTitle={youtubeUpdateTitle}
                         />
                     ) : bibleSearchResults ? (
                         <BibleSearchResultsList
@@ -1073,6 +1236,9 @@ function App() {
                     )}
                 </div>
 
+                {/* Resize handle: content | preview */}
+                <div className="resize-handle" onMouseDown={() => onResizeMouseDown('preview')} />
+
                 {/* Preview */}
                 <div className="preview">
                     <PreviewPanel
@@ -1087,6 +1253,9 @@ function App() {
                         onClearPreview={clearPreview}
                         onNavigateSlide={navigateSlide}
                         onSelectSlide={(i) => setProjSlideIndex(i)}
+                        videoUrl={videoUrl}
+                        videoStatus={videoStatus}
+                        videoName={videoName}
                     />
                 </div>
             </div>
@@ -1218,11 +1387,12 @@ function SidebarCategories({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function SidebarBibleBooks({
-    books, selectedBookId, onSelect,
+    books, selectedBookId, onSelect, onDeselectBook,
 }: {
     books: BibleBook[];
     selectedBookId: number | null;
     onSelect: (book: BibleBook) => void;
+    onDeselectBook: () => void;
 }) {
     const vt = books.filter(b => b.testament === 'VT');
     const nt = books.filter(b => b.testament === 'NT');
@@ -1231,6 +1401,13 @@ function SidebarBibleBooks({
         <>
             <div className="sidebar-title">Cărți</div>
             <div className="sidebar-list">
+                <button
+                    className={`sidebar-item ${selectedBookId === null ? 'active' : ''}`}
+                    onClick={onDeselectBook}
+                >
+                    <Search className="icon-xs opacity-50" />
+                    <span className="sidebar-item-name">Toată Biblia</span>
+                </button>
                 {vt.length > 0 && (
                     <>
                         <div className="sidebar-group-label">Vechiul Testament</div>
@@ -1351,7 +1528,7 @@ function BibleContentArea({
     }
 
     return (
-        <div className="content-inner">
+        <div className="content-inner bible-split-view">
             <div className="bible-breadcrumb">
                 <button className="crumb-btn" onClick={onBackToChapters}>{selectedBookName}</button>
                 {selectedChapter && (
@@ -1362,19 +1539,25 @@ function BibleContentArea({
                 )}
             </div>
 
-            {!selectedChapter ? (
-                <>
-                    <div className="content-status">{chapters.length} capitole</div>
-                    <div className="chapter-grid">
-                        {chapters.map(ch => (
-                            <button key={ch} className="chapter-btn" onClick={() => onSelectChapter(ch)}>
-                                {ch}
-                            </button>
-                        ))}
-                    </div>
-                </>
-            ) : (
-                <>
+            {/* Chapters section — always visible */}
+            <div className={`bible-chapters-section ${selectedChapter ? 'compact' : ''}`}>
+                <div className="content-status">{chapters.length} capitole</div>
+                <div className="chapter-grid">
+                    {chapters.map(ch => (
+                        <button
+                            key={ch}
+                            className={`chapter-btn ${selectedChapter === ch ? 'active' : ''}`}
+                            onClick={() => onSelectChapter(ch)}
+                        >
+                            {ch}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Verses section — visible when a chapter is selected */}
+            {selectedChapter && (
+                <div className="bible-verses-section">
                     <div className="content-status">{verses.length} versete</div>
                     <div className="verse-list">
                         {verses.map((v, i) => (
@@ -1388,7 +1571,7 @@ function BibleContentArea({
                             </div>
                         ))}
                     </div>
-                </>
+                </div>
             )}
         </div>
     );
@@ -1450,119 +1633,113 @@ function formatTime(seconds: number): string {
 
 function VideoController({
     videoName, videoStatus, videoVolume, videoLoading, videoConverting,
-    projecting,
-    onPickFile, onPlay, onPause, onStop, onSeek, onVolume,
+    youtubePlaylist, youtubeProgress,
+    onPickFile, onPlay, onPause, onStop,
+    onSeek, onVolume,
+    onYoutubeAdd, onYoutubeRemove, onYoutubeDelete, onYoutubePlay, onYoutubeRetry, onYoutubeUpdateTitle,
 }: {
     videoName: string;
     videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
     videoVolume: number;
     videoLoading: boolean;
     videoConverting: boolean;
-    projecting: boolean;
+    youtubePlaylist: YouTubeEntry[];
+    youtubeProgress: Record<string, number>;
     onPickFile: () => void;
     onPlay: () => void;
     onPause: () => void;
     onStop: () => void;
     onSeek: (time: number) => void;
     onVolume: (vol: number) => void;
+    onYoutubeAdd: (url: string) => Promise<string | null>;
+    onYoutubeRemove: (id: string) => void;
+    onYoutubeDelete: (id: string) => void;
+    onYoutubePlay: (id: string) => void;
+    onYoutubeRetry: (id: string) => void;
+    onYoutubeUpdateTitle: (id: string, title: string) => void;
 }) {
-    const isActive = !!videoStatus;
+    const isPlaying = !!videoStatus;
     const isPaused = videoStatus?.paused ?? true;
     const currentTime = videoStatus?.currentTime ?? 0;
     const duration = videoStatus?.duration ?? 0;
 
-    // YouTube state
+    // YouTube URL input
     const [ytUrl, setYtUrl] = useState('');
-    const [ytLoading, setYtLoading] = useState(false);
     const [ytError, setYtError] = useState('');
+    const [ytAdding, setYtAdding] = useState(false);
 
-    const loadYouTube = async () => {
-        if (!ytUrl.trim()) return;
-        setYtLoading(true);
+    // yt-dlp install/update state
+    const [ytdlpInstalled, setYtdlpInstalled] = useState<boolean | null>(null);
+    const [ytdlpBusy, setYtdlpBusy] = useState(false);
+
+    // Delete confirmation
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+    // Editing title
+    const [editingTitle, setEditingTitle] = useState<string | null>(null);
+    const [editTitleValue, setEditTitleValue] = useState('');
+
+    useEffect(() => {
+        (async () => {
+            const inst = await window.electron.ytdlp.isInstalled();
+            setYtdlpInstalled(inst);
+        })();
+    }, []);
+
+    const installYtDlp = async () => {
+        setYtdlpBusy(true);
         setYtError('');
         try {
-            const result = await window.electron.ytdlp.getStreamUrl(ytUrl.trim());
-            if (result.error || !result.url) {
-                setYtError(result.error ?? 'Nu s-a putut obține stream-ul.');
-                setYtLoading(false);
-                return;
+            const r = await window.electron.ytdlp.install();
+            if (r.success) {
+                setYtdlpInstalled(true);
+            } else {
+                setYtError('Instalare eșuată: ' + (r.error ?? ''));
             }
-            await window.electron.video.loadUrl(result.url);
         } catch (err: any) {
             setYtError(err.message ?? 'Eroare necunoscută');
         }
-        setYtLoading(false);
+        setYtdlpBusy(false);
     };
 
-    return (
-        <div className="content-inner video-controller">
-            {/* Drop zone / file picker */}
-            {!isActive && !videoConverting && (
-                <div className="video-dropzone" onClick={onPickFile}>
-                    <Film className="icon-xl opacity-30" />
-                    <p className="video-dropzone-title">
-                        {videoLoading ? 'Se încarcă...' : 'Alege un fișier video'}
-                    </p>
-                    <p className="video-dropzone-sub">
-                        MP4, WebM, MOV, MKV, AVI — click sau drag & drop
-                    </p>
-                    {!projecting && (
-                        <p className="video-dropzone-hint">
-                            Fereastra de proiecție trebuie deschisă pentru redare
-                        </p>
-                    )}
-                </div>
-            )}
+    const updateYtDlp = async () => {
+        setYtdlpBusy(true);
+        setYtError('');
+        try {
+            const r = await window.electron.ytdlp.update();
+            if (r.success) {
+                // updated successfully
+            } else {
+                setYtError('Actualizare eșuată: ' + (r.error ?? ''));
+            }
+        } catch (err: any) {
+            setYtError(err.message ?? 'Eroare necunoscută');
+        }
+        setYtdlpBusy(false);
+    };
 
-            {/* YouTube section */}
-            {!isActive && !videoConverting && (
-                <div className="video-youtube-section">
-                    <div className="video-youtube-header">
-                        <span>YouTube</span>
-                    </div>
-                    <div className="video-youtube-input-row">
-                        <input
-                            type="text"
-                            className="video-youtube-input"
-                            placeholder="https://www.youtube.com/watch?v=..."
-                            value={ytUrl}
-                            onChange={(e) => setYtUrl(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') loadYouTube(); }}
-                        />
-                        <button
-                            className="video-youtube-btn"
-                            onClick={loadYouTube}
-                            disabled={ytLoading || !ytUrl.trim()}
-                        >
-                            {ytLoading ? '...' : 'Redă'}
-                        </button>
-                    </div>
-                    {ytError && <p className="video-youtube-error">{ytError}</p>}
-                    <p className="video-youtube-disclaimer">
-                        Funcția YouTube depinde de yt-dlp și poate să nu funcționeze temporar dacă YouTube
-                        își schimbă sistemul. Actualizează yt-dlp din Setări sau încearcă mai târziu.
-                    </p>
-                </div>
-            )}
+    const addYouTube = async () => {
+        if (!ytUrl.trim()) return;
+        setYtAdding(true);
+        setYtError('');
+        const error = await onYoutubeAdd(ytUrl.trim());
+        if (error) {
+            setYtError(error);
+        } else {
+            setYtUrl('');
+        }
+        setYtAdding(false);
+    };
 
-            {/* Converting indicator */}
-            {videoConverting && (
-                <div className="video-dropzone">
-                    <div className="video-converting-spinner" />
-                    <p className="video-dropzone-title">Se convertește video-ul...</p>
-                    <p className="video-dropzone-sub">Formatul nu e suportat nativ. Se convertește în MP4.</p>
-                </div>
-            )}
-
-            {/* Player controls */}
-            {isActive && !videoConverting && (
+    // ── Playing state: show player controls ──
+    if (isPlaying && !videoConverting) {
+        return (
+            <div className="content-inner video-controller">
                 <div className="video-player-controls">
                     <div className="video-player-name">
                         <Film className="icon-sm opacity-50" />
                         <span>{videoName}</span>
                     </div>
-
-                    {/* Seekbar */}
                     <div className="video-seekbar-container">
                         <span className="video-time">{formatTime(currentTime)}</span>
                         <input
@@ -1576,8 +1753,6 @@ function VideoController({
                         />
                         <span className="video-time">{formatTime(duration)}</span>
                     </div>
-
-                    {/* Buttons */}
                     <div className="video-buttons">
                         <button
                             className="video-btn video-btn-main"
@@ -1589,15 +1764,9 @@ function VideoController({
                                 : <Pause className="icon-sm" />
                             }
                         </button>
-                        <button
-                            className="video-btn"
-                            onClick={onStop}
-                            title="Oprește"
-                        >
+                        <button className="video-btn" onClick={onStop} title="Oprește">
                             <Square className="icon-sm" />
                         </button>
-
-                        {/* Volume */}
                         <div className="video-volume-group">
                             <Volume2 className="icon-sm opacity-50" />
                             <input
@@ -1612,6 +1781,237 @@ function VideoController({
                         </div>
                     </div>
                 </div>
+            </div>
+        );
+    }
+
+    // ── Converting state ──
+    if (videoConverting) {
+        return (
+            <div className="content-inner video-controller">
+                <div className="video-dropzone">
+                    <div className="video-converting-spinner" />
+                    <p className="video-dropzone-title">Se convertește video-ul...</p>
+                    <p className="video-dropzone-sub">Formatul nu e suportat nativ. Se convertește în MP4.</p>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Idle / Prepared state ──
+    return (
+        <div className="content-inner video-controller">
+            {/* ── Add sources row ── */}
+            <div className="video-section">
+                <div className="video-section-header">
+                    <Film className="icon-sm opacity-60" />
+                    <span>Playlist Video</span>
+                </div>
+
+                {/* Local file picker */}
+                <div className="video-dropzone-compact" onClick={onPickFile}>
+                    {videoLoading ? (
+                        <Loader className="icon-sm animate-spin opacity-50" />
+                    ) : (
+                        <Upload className="icon-sm opacity-40" />
+                    )}
+                    <span>{videoLoading ? 'Se încarcă...' : 'Adaugă fișier local (MP4, MKV, AVI, MOV...)'}</span>
+                </div>
+
+                {/* YouTube URL input */}
+                {ytdlpInstalled === false && (
+                    <div className="video-youtube-install">
+                        <p className="text-white/60 text-sm mb-2">
+                            Pentru videoclipuri YouTube, este nevoie de yt-dlp.
+                        </p>
+                        <button
+                            className="video-youtube-btn"
+                            onClick={installYtDlp}
+                            disabled={ytdlpBusy}
+                        >
+                            {ytdlpBusy ? 'Se instalează...' : 'Instalează yt-dlp'}
+                        </button>
+                    </div>
+                )}
+
+                {ytdlpInstalled !== false && (
+                    <div className="video-youtube-input-row">
+                        <input
+                            type="text"
+                            className="video-youtube-input"
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            value={ytUrl}
+                            onChange={(e) => setYtUrl(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') addYouTube(); }}
+                        />
+                        <button
+                            className="video-youtube-btn"
+                            onClick={addYouTube}
+                            disabled={ytAdding || !ytUrl.trim()}
+                        >
+                            {ytAdding ? <Loader className="icon-sm animate-spin" /> : <Plus className="icon-sm" />}
+                            <span>{ytAdding ? 'Se adaugă...' : 'YouTube'}</span>
+                        </button>
+                    </div>
+                )}
+
+                {ytError && <p className="video-youtube-error">{ytError}</p>}
+            </div>
+
+            {/* ── Unified Playlist ── */}
+            {youtubePlaylist.length > 0 && (
+                <div className="yt-playlist">
+                    {youtubePlaylist.map(entry => {
+                        const isLocal = !!entry.localUrl;
+                        return (
+                            <div key={entry.id} className={`yt-playlist-item yt-status-${entry.status}`}>
+                                <div className="yt-playlist-item-top">
+                                    <span className={`yt-source-badge ${isLocal ? 'yt-badge-local' : 'yt-badge-yt'}`}>
+                                        {isLocal ? 'Local' : 'YT'}
+                                    </span>
+                                    {editingTitle === entry.id ? (
+                                        <input
+                                            className="yt-playlist-title-input"
+                                            value={editTitleValue}
+                                            onChange={(e) => setEditTitleValue(e.target.value)}
+                                            onBlur={() => {
+                                                onYoutubeUpdateTitle(entry.id, editTitleValue);
+                                                setEditingTitle(null);
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    onYoutubeUpdateTitle(entry.id, editTitleValue);
+                                                    setEditingTitle(null);
+                                                }
+                                                if (e.key === 'Escape') setEditingTitle(null);
+                                            }}
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <span
+                                            className="yt-playlist-title"
+                                            onDoubleClick={() => {
+                                                setEditingTitle(entry.id);
+                                                setEditTitleValue(entry.title);
+                                            }}
+                                            title="Dublu-click pentru a edita titlul"
+                                        >
+                                            {entry.title}
+                                        </span>
+                                    )}
+                                    <span className={`yt-status-badge yt-badge-${entry.status}`}>
+                                        {entry.status === 'downloading' && <Loader className="icon-xs animate-spin" />}
+                                        {entry.status === 'ready' && '✓'}
+                                        {entry.status === 'error' && <AlertCircle className="icon-xs" />}
+                                        <span>
+                                            {entry.status === 'downloading' ? `${Math.round(youtubeProgress[entry.id] ?? 0)}%` :
+                                                entry.status === 'ready' ? 'Gata' : 'Eroare'}
+                                        </span>
+                                    </span>
+                                </div>
+
+                                {/* Progress bar for downloading */}
+                                {entry.status === 'downloading' && (
+                                    <div className="yt-progress-bar">
+                                        <div
+                                            className="yt-progress-fill"
+                                            style={{ width: `${youtubeProgress[entry.id] ?? 0}%` }}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Error message */}
+                                {entry.status === 'error' && entry.error && (
+                                    <p className="yt-error-msg">{entry.error}</p>
+                                )}
+
+                                {/* Action buttons */}
+                                <div className="yt-playlist-actions">
+                                    {entry.status === 'ready' && (
+                                        <button
+                                            className="video-btn video-btn-play yt-play-btn"
+                                            onClick={() => onYoutubePlay(entry.id)}
+                                            title="Redă"
+                                        >
+                                            <Play className="icon-sm" /> Redă
+                                        </button>
+                                    )}
+                                    {entry.status === 'error' && !isLocal && (
+                                        <button
+                                            className="video-btn yt-retry-btn"
+                                            onClick={() => onYoutubeRetry(entry.id)}
+                                            title="Reîncearcă descărcarea"
+                                        >
+                                            <RefreshCw className="icon-sm" /> Reîncearcă
+                                        </button>
+                                    )}
+
+                                    {/* Remove from playlist (always visible) */}
+                                    <button
+                                        className="video-btn yt-remove-btn"
+                                        onClick={() => onYoutubeRemove(entry.id)}
+                                        title="Elimină din playlist"
+                                    >
+                                        <X className="icon-sm" />
+                                    </button>
+
+                                    {/* Delete from disk (only for ready non-local entries) */}
+                                    {entry.status === 'ready' && !isLocal && (
+                                        deleteConfirm === entry.id ? (
+                                            <div className="yt-delete-confirm">
+                                                <span className="text-white/60 text-xs">Ștergi fișierul de pe disc?</span>
+                                                <button
+                                                    className="video-btn yt-btn-small yt-btn-danger"
+                                                    onClick={() => { onYoutubeDelete(entry.id); setDeleteConfirm(null); }}
+                                                >
+                                                    Da, șterge
+                                                </button>
+                                                <button
+                                                    className="video-btn yt-btn-small"
+                                                    onClick={() => setDeleteConfirm(null)}
+                                                >
+                                                    Anulează
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                className="video-btn yt-btn-small yt-btn-danger"
+                                                onClick={() => setDeleteConfirm(entry.id)}
+                                                title="Șterge fișierul de pe disc"
+                                            >
+                                                <Trash2 className="icon-sm" />
+                                            </button>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {youtubePlaylist.length === 0 && !videoLoading && (
+                <div className="empty-state" style={{ padding: '2rem 0' }}>
+                    <Film className="icon-lg opacity-20" />
+                    <p className="text-white/30 text-sm">Playlist-ul este gol. Adaugă un fișier local sau un link YouTube.</p>
+                </div>
+            )}
+
+            {/* yt-dlp update */}
+            {ytdlpInstalled && (
+                <div className="video-youtube-footer">
+                    <button
+                        className="video-youtube-update-btn"
+                        onClick={updateYtDlp}
+                        disabled={ytdlpBusy}
+                    >
+                        <RefreshCw className={`icon-xs ${ytdlpBusy ? 'animate-spin' : ''}`} />
+                        {ytdlpBusy ? 'Se actualizează...' : 'Actualizează yt-dlp'}
+                    </button>
+                    <p className="video-youtube-disclaimer">
+                        Dacă descărcarea eșuează, actualizează yt-dlp.
+                    </p>
+                </div>
             )}
         </div>
     );
@@ -1625,6 +2025,7 @@ function PreviewPanel({
     previewType, previewSections, previewTitle, previewNumber,
     projecting, projSlideIndex,
     onStartProjection, onStopProjection, onClearPreview, onNavigateSlide, onSelectSlide,
+    videoUrl, videoStatus, videoName,
 }: {
     previewType: 'hymn' | 'bible' | null;
     previewSections: { text: string; type: string; label: string }[];
@@ -1637,8 +2038,12 @@ function PreviewPanel({
     onClearPreview: () => void;
     onNavigateSlide: (idx: number) => void;
     onSelectSlide: (idx: number) => void;
+    videoUrl: string;
+    videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
+    videoName: string;
 }) {
     const bodyRef = useRef<HTMLDivElement>(null);
+    const previewVideoRef = useRef<HTMLVideoElement>(null);
 
     // Scroll current/selected slide into view
     useEffect(() => {
@@ -1647,6 +2052,61 @@ function PreviewPanel({
             if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
         }
     }, [projSlideIndex, projecting]);
+
+    // Sync preview video with projection video status
+    useEffect(() => {
+        const v = previewVideoRef.current;
+        if (!v || !videoStatus) return;
+        // Sync play/pause state
+        if (videoStatus.paused && !v.paused) v.pause();
+        else if (!videoStatus.paused && v.paused) v.play().catch(() => { });
+        // Sync time if drift > 1s
+        if (Math.abs(v.currentTime - videoStatus.currentTime) > 1) {
+            v.currentTime = videoStatus.currentTime;
+        }
+    }, [videoStatus]);
+
+    // Load/unload preview video source
+    useEffect(() => {
+        const v = previewVideoRef.current;
+        if (!v) return;
+        if (videoUrl) {
+            v.src = videoUrl;
+            v.load();
+        } else {
+            v.pause();
+            v.src = '';
+        }
+    }, [videoUrl]);
+
+    // If video is active, show video preview
+    if (videoUrl && videoStatus) {
+        const fmt = (t: number) => {
+            const m = Math.floor(t / 60);
+            const s = Math.floor(t % 60);
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+        return (
+            <div className="preview-panel projecting">
+                <div className="preview-header">
+                    <span className="label">● VIDEO</span>
+                    <span className="title">{videoName}</span>
+                </div>
+                <div className="preview-body" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
+                    <video
+                        ref={previewVideoRef}
+                        muted
+                        playsInline
+                        style={{ width: '100%', flex: 1, minHeight: 0, objectFit: 'contain', background: '#000' }}
+                    />
+                    <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-dim)', textAlign: 'center' }}>
+                        {fmt(videoStatus.currentTime)} / {fmt(videoStatus.duration)}
+                        {videoStatus.paused ? ' — Pauză' : ' — Redare'}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (!previewType || !previewSections.length) {
         return (
@@ -2099,6 +2559,15 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
         window.electron.settings.get().then(s => setSettings(s));
     }, []);
 
+    // Close on Escape
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
+
     const saveSettings = async (patch: Partial<AppSettings>) => {
         const updated = { ...settings, ...patch };
         setSettings(updated);
@@ -2213,6 +2682,20 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 />
                             </div>
                             <AudioOutputPicker settings={settings} onSave={saveSettings} />
+                            <div className="field">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={settings.debugLog ?? false}
+                                        onChange={e => saveSettings({ debugLog: e.target.checked })}
+                                    />
+                                    Jurnal detaliat pentru depanare (debug log)
+                                </label>
+                                <p className="text-white/40 text-xs mt-1">
+                                    Scrie un fișier de log detaliat în folderul aplicației. Util pentru diagnosticarea problemelor cu video și YouTube.
+                                </p>
+                            </div>
+                            <DownloadFolderPicker settings={settings} onSave={saveSettings} />
                         </div>
                     )}
 
@@ -2467,6 +2950,42 @@ function AudioOutputPicker({ settings, onSave }: {
                     </div>
                 )}
             </div>
+        </div>
+    );
+}
+
+function DownloadFolderPicker({ settings, onSave }: {
+    settings: AppSettings;
+    onSave: (p: Partial<AppSettings>) => void;
+}) {
+    const [defaultFolder, setDefaultFolder] = useState('');
+
+    useEffect(() => {
+        window.electron.playlist.getDownloadFolder().then(f => setDefaultFolder(f));
+    }, []);
+
+    const currentFolder = settings.downloadFolder || defaultFolder;
+
+    return (
+        <div className="field">
+            <label>Folder Descărcări YouTube</label>
+            <div className="field-row">
+                <span className="field-value" title={currentFolder}>
+                    {currentFolder ? currentFolder.split('/').slice(-2).join('/') : 'Se detectează...'}
+                </span>
+                <button className="btn-sm" onClick={async () => {
+                    const p = await window.electron.dialog.selectFolder();
+                    if (p) onSave({ downloadFolder: p });
+                }}>Schimbă...</button>
+                {settings.downloadFolder && (
+                    <button className="btn-sm" onClick={() => onSave({ downloadFolder: undefined })}>
+                        Resetează
+                    </button>
+                )}
+            </div>
+            <p className="text-white/40 text-xs mt-1">
+                Folderul în care se salvează videoclipurile descărcate de pe YouTube.
+            </p>
         </div>
     );
 }

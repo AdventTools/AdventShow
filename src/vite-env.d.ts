@@ -106,7 +106,22 @@ export interface AppSettings {
   adminPasswordHash?: string; // bcrypt-like hash or empty
   projectionFontSize?: number; // font size multiplier, default 1.2
   audioOutputDeviceId?: string; // audio output device id for video playback
+  debugLog?: boolean; // enable detailed debug logging to file
   windowBounds?: { x: number; y: number; width: number; height: number };
+  downloadFolder?: string; // custom download folder for YouTube videos
+  sidebarWidth?: number; // pixels, default 200
+  previewWidth?: number; // pixels, default 640
+}
+
+export interface YouTubeEntry {
+  id: string;
+  url: string;
+  title: string;
+  fileName: string;
+  status: 'downloading' | 'ready' | 'error';
+  error?: string;
+  addedAt: string;
+  localUrl?: string; // present for local file entries in unified playlist
 }
 
 export interface IElectronAPI {
@@ -176,6 +191,7 @@ export interface IElectronAPI {
     offControllerSync: () => void;
     onClosed: (cb: () => void) => void;
     offClosed: () => void;
+    signalReady: () => void;
   };
   update: {
     check: () => Promise<{ available: boolean; version?: string; changelog?: string; downloadUrl?: string }>;
@@ -183,6 +199,8 @@ export interface IElectronAPI {
   };
   video: {
     pickFile: () => Promise<string | undefined>;
+    prepare: (filePath: string) => Promise<{ url?: string; name?: string; converted?: boolean; error?: string }>;
+    startPlayback: (url: string, name: string) => Promise<void>;
     load: (filePath: string) => Promise<{ url?: string; name?: string; converted?: boolean; error?: string }>;
     play: () => Promise<void>;
     pause: () => Promise<void>;
@@ -216,6 +234,25 @@ export interface IElectronAPI {
     version: () => Promise<string>;
     update: () => Promise<{ success: boolean; version?: string; error?: string }>;
     getStreamUrl: (videoUrl: string) => Promise<{ url: string; error?: string }>;
+  };
+  youtube: {
+    getPlaylist: () => Promise<YouTubeEntry[]>;
+    add: (url: string, title?: string) => Promise<{ entry?: YouTubeEntry; error?: string }>;
+    updateTitle: (id: string, title: string) => Promise<void>;
+    remove: (id: string) => Promise<void>;
+    delete: (id: string) => Promise<void>;
+    reorder: (orderedIds: string[]) => Promise<void>;
+    retryDownload: (id: string) => Promise<void>;
+    getFileUrl: (id: string) => Promise<{ url?: string; name?: string; error?: string }>;
+    onProgress: (cb: (id: string, percent: number, line: string) => void) => void;
+    offProgress: () => void;
+    onStatus: (cb: (id: string, status: string, error: string) => void) => void;
+    offStatus: () => void;
+  };
+  playlist: {
+    addLocal: (url: string, name: string) => Promise<{ entry?: YouTubeEntry; error?: string }>;
+    getFileUrl: (id: string) => Promise<{ url?: string; name?: string; error?: string }>;
+    getDownloadFolder: () => Promise<string>;
   };
 }
 

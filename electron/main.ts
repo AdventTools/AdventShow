@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -52,6 +52,21 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 let win: BrowserWindow | null
 let projectionWin: BrowserWindow | null = null
 
+// Promise that resolves when the projection renderer signals it's ready
+let projectionReadyResolve: (() => void) | null = null
+let projectionReadyPromise: Promise<void> | null = null
+
+function resetProjectionReady() {
+  projectionReadyPromise = new Promise<void>((resolve) => {
+    projectionReadyResolve = resolve
+  })
+}
+
+function waitForProjectionReady(): Promise<void> {
+  if (!projectionReadyPromise) resetProjectionReady()
+  return projectionReadyPromise!
+}
+
 // ── App settings ──────────────────────────────────────────────────────────────
 
 interface AppSettings {
@@ -66,7 +81,27 @@ interface AppSettings {
   adminPasswordHash?: string
   projectionFontSize?: number
   audioOutputDeviceId?: string
+  debugLog?: boolean
+  downloadFolder?: string  // custom folder for YouTube downloads
   windowBounds?: { x: number; y: number; width: number; height: number }
+}
+
+// ── Debug Logger ──────────────────────────────────────────────────────────────
+
+function getLogPath() {
+  return path.join(app.getPath('userData'), 'adventshow-debug.log')
+}
+
+function debugLog(...args: unknown[]) {
+  const settings = readSettings()
+  if (!settings.debugLog) return
+  const timestamp = new Date().toISOString()
+  const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ')
+  const line = `[${timestamp}] ${message}\n`
+  try {
+    fs.appendFileSync(getLogPath(), line, 'utf-8')
+  } catch { /* ignore */ }
+  console.log('[DEBUG]', ...args)
 }
 
 function getSettingsPath() {
@@ -292,28 +327,161 @@ async function updateYtDlp(): Promise<{ success: boolean; version?: string; erro
 function getYouTubeStreamUrl(videoUrl: string): Promise<{ url: string; error?: string }> {
   return new Promise((resolve) => {
     if (!isYtDlpInstalled()) {
-      resolve({ url: '', error: 'yt-dlp nu este instalat. Instalează-l din Setări.' })
+      resolve({ url: '', error: 'yt-dlp nu este instalat. Apasă butonul „Instalează yt-dlp" de mai jos.' })
       return
     }
+    const ytdlpBin = getYtDlpPath()
     const args = [
       '--get-url',
       '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
       '--no-playlist',
       videoUrl,
     ]
-    execFile(getYtDlpPath(), args, { timeout: 30000 }, (err, stdout, stderr) => {
+    debugLog('[yt-dlp] Running:', ytdlpBin, args.join(' '))
+    execFile(ytdlpBin, args, { timeout: 30000 }, (err, stdout, stderr) => {
       if (err) {
-        console.error('[yt-dlp] Stream URL failed:', stderr || err.message)
+        const errorDetail = stderr?.trim() || err.message || 'Unknown error'
+        debugLog('[yt-dlp] Stream URL failed. stderr:', stderr, 'err:', err.message)
+        console.error('[yt-dlp] Stream URL failed:', errorDetail)
         resolve({
           url: '',
-          error: 'Nu s-a putut obține video-ul. YouTube poate bloca temporar această funcție. Încearcă din nou mai târziu sau descarcă video-ul manual.',
+          error: `Eroare yt-dlp: ${errorDetail.length > 200 ? errorDetail.substring(0, 200) + '...' : errorDetail}`,
         })
         return
       }
       // yt-dlp may return multiple URLs (video + audio) on separate lines; take the first
       const urls = stdout.trim().split('\n').filter(Boolean)
+      debugLog('[yt-dlp] Got', urls.length, 'URL(s), first:', urls[0]?.substring(0, 80))
       resolve({ url: urls[0] ?? '' })
     })
+  })
+}
+
+// ── YouTube Playlist ──────────────────────────────────────────────────────────
+
+interface YouTubeEntry {
+  id: string
+  url: string
+  title: string
+  fileName: string
+  status: 'downloading' | 'ready' | 'error'
+  error?: string
+  addedAt: string
+}
+
+function getYouTubeDir(): string {
+  const settings = readSettings()
+  if (settings.downloadFolder && fs.existsSync(settings.downloadFolder)) {
+    return settings.downloadFolder
+  }
+  return path.join(app.getPath('userData'), 'youtube-videos')
+}
+
+function getYouTubePlaylistPath(): string {
+  return path.join(app.getPath('userData'), 'youtube-playlist.json')
+}
+
+function ensureYouTubeDir() {
+  const dir = getYouTubeDir()
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+}
+
+function readYouTubePlaylist(): YouTubeEntry[] {
+  try {
+    return JSON.parse(fs.readFileSync(getYouTubePlaylistPath(), 'utf-8'))
+  } catch { return [] }
+}
+
+function writeYouTubePlaylist(playlist: YouTubeEntry[]) {
+  fs.writeFileSync(getYouTubePlaylistPath(), JSON.stringify(playlist, null, 2), 'utf-8')
+}
+
+function getYouTubeTitle(videoUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    if (!isYtDlpInstalled()) { resolve('YouTube video'); return }
+    execFile(getYtDlpPath(), ['--get-title', '--no-playlist', videoUrl], { timeout: 15000 }, (err, stdout) => {
+      if (err) { resolve('YouTube video'); return }
+      resolve(stdout.trim() || 'YouTube video')
+    })
+  })
+}
+
+function startYouTubeDownload(entry: YouTubeEntry) {
+  ensureYouTubeDir()
+  const ytdlpBin = getYtDlpPath()
+  const outputTemplate = path.join(getYouTubeDir(), `${entry.id}.%(ext)s`)
+  const args = [
+    '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+    '--merge-output-format', 'mp4',
+    '-o', outputTemplate,
+    '--newline',
+    '--no-playlist',
+    entry.url,
+  ]
+  debugLog('[yt-dlp-download] Starting:', ytdlpBin, args.join(' '))
+
+  const proc = spawn(ytdlpBin, args)
+
+  const onData = (data: Buffer) => {
+    const line = data.toString().trim()
+    debugLog('[yt-dlp-download] output:', line)
+    // Parse progress lines: [download]  45.2% of ~123.45MiB ...
+    if (line.includes('%')) {
+      const match = line.match(/([\d.]+)%/)
+      if (match) {
+        win?.webContents.send('youtube:progress', entry.id, parseFloat(match[1]), line)
+      }
+    }
+  }
+
+  proc.stdout.on('data', onData)
+  proc.stderr.on('data', onData)
+
+  proc.on('close', (code) => {
+    debugLog('[yt-dlp-download] Process exited with code:', code)
+    const playlist = readYouTubePlaylist()
+    const idx = playlist.findIndex(e => e.id === entry.id)
+    if (idx === -1) return
+
+    if (code === 0) {
+      // Find the downloaded file — prefer merged .mp4 over intermediate fragments
+      const files = fs.readdirSync(getYouTubeDir()).filter(f => f.startsWith(entry.id + '.'))
+      debugLog('[yt-dlp-download] Downloaded files:', files)
+      // Priority: exact id.mp4 (merged) > .mp4 > .webm > .mkv > anything not audio-only
+      const audioOnly = ['.m4a', '.opus', '.ogg', '.aac', '.mp3']
+      const downloadedFile =
+        files.find(f => f === entry.id + '.mp4') ||
+        files.find(f => f.endsWith('.mp4') && !f.includes('.f')) ||
+        files.find(f => f.endsWith('.mp4')) ||
+        files.find(f => f.endsWith('.webm') || f.endsWith('.mkv')) ||
+        files.find(f => !audioOnly.some(ext => f.endsWith(ext))) ||
+        files[0]
+      if (downloadedFile) {
+        playlist[idx].fileName = downloadedFile
+        playlist[idx].status = 'ready'
+        playlist[idx].error = undefined
+      } else {
+        playlist[idx].status = 'error'
+        playlist[idx].error = 'Fișierul descărcat nu a fost găsit'
+      }
+    } else {
+      playlist[idx].status = 'error'
+      playlist[idx].error = `yt-dlp a returnat codul ${code}`
+    }
+    writeYouTubePlaylist(playlist)
+    win?.webContents.send('youtube:status', entry.id, playlist[idx].status, playlist[idx].error ?? '')
+  })
+
+  proc.on('error', (err) => {
+    debugLog('[yt-dlp-download] spawn error:', err.message)
+    const playlist = readYouTubePlaylist()
+    const idx = playlist.findIndex(e => e.id === entry.id)
+    if (idx !== -1) {
+      playlist[idx].status = 'error'
+      playlist[idx].error = err.message
+      writeYouTubePlaylist(playlist)
+      win?.webContents.send('youtube:status', entry.id, 'error', err.message)
+    }
   })
 }
 
@@ -404,9 +572,12 @@ function createProjectionWindow() {
   projectionWin.on('closed', () => {
     projectionWin = null
     projState = null
+    projectionReadyResolve = null
+    projectionReadyPromise = null
     win?.webContents.send('projection:closed')
   })
 
+  resetProjectionReady()
   return projectionWin
 }
 
@@ -503,7 +674,11 @@ app.whenReady().then(() => {
   protocol.handle('localfile', (request) => {
     const raw = request.url.slice('localfile://'.length)
     const filePath = decodeURIComponent(raw.startsWith('/') ? raw : '/' + raw)
-    return net.fetch(`file://${filePath}`, {
+    debugLog('[localfile] request:', request.url.substring(0, 120), '-> filePath:', filePath.substring(0, 120))
+    // Use pathToFileURL to properly encode file path (handles spaces, special chars)
+    const fileUrl = `file://${encodeURI(filePath).replace(/#/g, '%23')}`
+    debugLog('[localfile] fetching:', fileUrl.substring(0, 120))
+    return net.fetch(fileUrl, {
       headers: Object.fromEntries(request.headers.entries()),
     })
   })
@@ -673,19 +848,18 @@ app.whenReady().then(() => {
 
   // ── Projection ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('projection:open', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
+  ipcMain.handle('projection:open', async (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
     const idx = typeof startIndex === 'number' ? startIndex : 0
     projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
     if (projectionWin) {
       projectionWin.focus()
+      // Already open & ready: send immediately
+      sendSlideToProjection(idx)
     } else {
       createProjectionWindow()
-    }
-    const sendInitial = () => sendSlideToProjection(idx)
-    if (projectionWin?.webContents.isLoading()) {
-      projectionWin.webContents.once('did-finish-load', sendInitial)
-    } else {
-      setTimeout(sendInitial, 300)
+      // Wait for the projection renderer to fully mount
+      await waitForProjectionReady()
+      sendSlideToProjection(idx)
     }
   })
 
@@ -712,6 +886,14 @@ app.whenReady().then(() => {
       ? Math.min(projState.currentIndex + 1, projState.sections.length - 1)
       : Math.max(projState.currentIndex - 1, minIndex)
     sendSlideToProjection(newIndex)
+  })
+
+  // Projection renderer signals it has mounted and IPC listeners are registered
+  ipcMain.on('projection:renderer-ready', () => {
+    debugLog('[projection:renderer-ready] Renderer is ready!')
+    if (projectionReadyResolve) {
+      projectionReadyResolve()
+    }
   })
 
   ipcMain.handle('projection:close', () => {
@@ -749,7 +931,51 @@ app.whenReady().then(() => {
     return result.filePaths[0]
   })
 
+  // Prepare video (convert if needed) without opening projection
+  ipcMain.handle('video:prepare', async (_e, filePath: string) => {
+    debugLog('[video:prepare] Preparing file:', filePath)
+    let servePath = filePath
+    let converted = false
+    if (needsConversion(filePath)) {
+      try {
+        debugLog('[video:prepare] Needs conversion, starting FFmpeg...')
+        win?.webContents.send('video:converting', true)
+        const result = await convertToMp4(filePath)
+        servePath = result.outputPath
+        converted = true
+        debugLog('[video:prepare] Conversion done:', servePath)
+      } catch (err: any) {
+        debugLog('[video:prepare] Conversion failed:', err.message)
+        win?.webContents.send('video:converting', false)
+        return { error: err.message ?? 'Conversia video a eșuat' }
+      } finally {
+        win?.webContents.send('video:converting', false)
+      }
+    }
+    const videoUrl = `file://${encodeURI(servePath).replace(/#/g, '%23')}`
+    debugLog('[video:prepare] Prepared URL:', videoUrl)
+    return { url: videoUrl, name: path.basename(filePath), converted }
+  })
+
+  // Open projection and start playback
+  ipcMain.handle('video:start-playback', async (_e, url: string, name: string) => {
+    debugLog('[video:start-playback] Starting playback:', url.substring(0, 100), 'name:', name)
+    if (!projectionWin) {
+      debugLog('[video:start-playback] Creating projection window...')
+      createProjectionWindow()
+    }
+    // Wait for the projection renderer to signal it's ready (React mounted, IPC listeners registered)
+    debugLog('[video:start-playback] Waiting for projection renderer ready...')
+    await waitForProjectionReady()
+    debugLog('[video:start-playback] Projection ready! Sending video:load + video:play')
+    projectionWin?.webContents.send('video:load', url, name)
+    // Small delay for the <video> element to mount after state change
+    setTimeout(() => projectionWin?.webContents.send('video:play'), 200)
+  })
+
+  // Legacy load (kept for backward compat)
   ipcMain.handle('video:load', async (_e, filePath: string) => {
+    debugLog('[video:load] Loading file:', filePath)
     let servePath = filePath
     let converted = false
     if (needsConversion(filePath)) {
@@ -765,33 +991,232 @@ app.whenReady().then(() => {
         win?.webContents.send('video:converting', false)
       }
     }
-    const videoUrl = `localfile://${servePath.replace(/#/g, '%23')}`
-    projectionWin?.webContents.send('video:load', videoUrl, path.basename(filePath))
+    const videoUrl = `localfile://${encodeURI(servePath).replace(/#/g, '%23')}`
+    if (!projectionWin) createProjectionWindow()
+    const sendVideo = () => {
+      projectionWin?.webContents.send('video:load', videoUrl, path.basename(filePath))
+    }
+    if (projectionWin?.webContents.isLoading()) {
+      projectionWin.webContents.once('did-finish-load', sendVideo)
+    } else {
+      setTimeout(sendVideo, 300)
+    }
     return { url: videoUrl, name: path.basename(filePath), converted }
   })
 
-  ipcMain.handle('video:play', () => projectionWin?.webContents.send('video:play'))
-  ipcMain.handle('video:pause', () => projectionWin?.webContents.send('video:pause'))
-  ipcMain.handle('video:stop', () => projectionWin?.webContents.send('video:stop'))
+  ipcMain.handle('video:play', () => {
+    debugLog('[video:play] Sending play to projection')
+    projectionWin?.webContents.send('video:play')
+  })
+  ipcMain.handle('video:pause', () => {
+    debugLog('[video:pause] Sending pause to projection')
+    projectionWin?.webContents.send('video:pause')
+  })
+  ipcMain.handle('video:stop', () => {
+    debugLog('[video:stop] Sending stop to projection')
+    projectionWin?.webContents.send('video:stop')
+  })
   ipcMain.handle('video:seek', (_e, time: number) => projectionWin?.webContents.send('video:seek', time))
   ipcMain.handle('video:volume', (_e, vol: number) => projectionWin?.webContents.send('video:volume', vol))
 
+  // Legacy load-url (kept for backward compat)
   ipcMain.handle('video:load-url', (_e, url: string) => {
-    projectionWin?.webContents.send('video:load', url, 'YouTube')
+    debugLog('[video:load-url] Loading URL:', url.substring(0, 120) + '...')
+    if (!projectionWin) createProjectionWindow()
+    const sendVideo = () => {
+      projectionWin?.webContents.send('video:load', url, 'YouTube')
+    }
+    if (projectionWin?.webContents.isLoading()) {
+      projectionWin.webContents.once('did-finish-load', sendVideo)
+    } else {
+      setTimeout(sendVideo, 300)
+    }
     return { url, name: 'YouTube' }
   })
 
   // ── yt-dlp ──────────────────────────────────────────────────────────────────
-  ipcMain.handle('ytdlp:is-installed', () => isYtDlpInstalled())
-  ipcMain.handle('ytdlp:install', () => downloadYtDlp())
+  ipcMain.handle('ytdlp:is-installed', () => {
+    const installed = isYtDlpInstalled()
+    debugLog('[ytdlp:is-installed]', installed, 'path:', getYtDlpPath())
+    return installed
+  })
+  ipcMain.handle('ytdlp:install', async () => {
+    debugLog('[ytdlp:install] Starting download...')
+    const result = await downloadYtDlp()
+    debugLog('[ytdlp:install] Result:', result)
+    return result
+  })
   ipcMain.handle('ytdlp:version', () => getYtDlpVersion())
   ipcMain.handle('ytdlp:update', () => updateYtDlp())
   ipcMain.handle('ytdlp:get-stream-url', async (_e, videoUrl: string) => {
+    debugLog('[ytdlp:get-stream-url] URL:', videoUrl)
     if (!isYtDlpInstalled()) {
+      debugLog('[ytdlp:get-stream-url] yt-dlp not installed, auto-installing...')
       const dl = await downloadYtDlp()
+      debugLog('[ytdlp:get-stream-url] Install result:', dl)
       if (!dl.success) return { url: '', error: 'Nu s-a putut instala yt-dlp: ' + (dl.error ?? '') }
     }
-    return getYouTubeStreamUrl(videoUrl)
+    const result = await getYouTubeStreamUrl(videoUrl)
+    debugLog('[ytdlp:get-stream-url] Result:', { url: result.url ? result.url.substring(0, 80) + '...' : '', error: result.error })
+    return result
+  })
+
+  // ── YouTube Playlist ────────────────────────────────────────────────────────
+  ipcMain.handle('youtube:get-playlist', () => {
+    return readYouTubePlaylist()
+  })
+
+  ipcMain.handle('youtube:add', async (_e, url: string, userTitle?: string) => {
+    debugLog('[youtube:add] URL:', url, 'title:', userTitle)
+    if (!isYtDlpInstalled()) {
+      debugLog('[youtube:add] yt-dlp not installed, auto-installing...')
+      const dl = await downloadYtDlp()
+      if (!dl.success) return { error: 'Nu s-a putut instala yt-dlp: ' + (dl.error ?? '') }
+    }
+    ensureYouTubeDir()
+    const id = Date.now().toString()
+
+    // Get title
+    let title = userTitle || ''
+    if (!title) {
+      try {
+        title = await getYouTubeTitle(url)
+      } catch {
+        title = 'YouTube video'
+      }
+    }
+
+    const entry: YouTubeEntry = {
+      id,
+      url,
+      title,
+      fileName: '',
+      status: 'downloading',
+      addedAt: new Date().toISOString(),
+    }
+
+    const playlist = readYouTubePlaylist()
+    playlist.push(entry)
+    writeYouTubePlaylist(playlist)
+
+    // Start download in background
+    startYouTubeDownload(entry)
+
+    return { entry }
+  })
+
+  ipcMain.handle('youtube:update-title', (_e, id: string, title: string) => {
+    const playlist = readYouTubePlaylist()
+    const idx = playlist.findIndex(e => e.id === id)
+    if (idx !== -1) {
+      playlist[idx].title = title
+      writeYouTubePlaylist(playlist)
+    }
+  })
+
+  ipcMain.handle('youtube:remove', (_e, id: string) => {
+    debugLog('[youtube:remove] Removing entry:', id)
+    const playlist = readYouTubePlaylist()
+    const filtered = playlist.filter(e => e.id !== id)
+    writeYouTubePlaylist(filtered)
+  })
+
+  ipcMain.handle('youtube:delete', (_e, id: string) => {
+    debugLog('[youtube:delete] Deleting entry + file:', id)
+    const playlist = readYouTubePlaylist()
+    const entry = playlist.find(e => e.id === id)
+    if (entry?.fileName) {
+      const filePath = path.join(getYouTubeDir(), entry.fileName)
+      try { fs.unlinkSync(filePath) } catch { /* ignore */ }
+    }
+    writeYouTubePlaylist(playlist.filter(e => e.id !== id))
+  })
+
+  ipcMain.handle('youtube:reorder', (_e, orderedIds: string[]) => {
+    const playlist = readYouTubePlaylist()
+    const map = new Map(playlist.map(e => [e.id, e]))
+    const reordered = orderedIds.map(id => map.get(id)).filter(Boolean) as YouTubeEntry[]
+    // Add any entries that weren't in orderedIds (safety)
+    for (const e of playlist) {
+      if (!orderedIds.includes(e.id)) reordered.push(e)
+    }
+    writeYouTubePlaylist(reordered)
+  })
+
+  ipcMain.handle('youtube:retry-download', (_e, id: string) => {
+    debugLog('[youtube:retry-download] Retrying:', id)
+    const playlist = readYouTubePlaylist()
+    const idx = playlist.findIndex(e => e.id === id)
+    if (idx === -1) return
+    playlist[idx].status = 'downloading'
+    playlist[idx].error = undefined
+    writeYouTubePlaylist(playlist)
+    startYouTubeDownload(playlist[idx])
+  })
+
+  ipcMain.handle('youtube:get-download-folder', () => {
+    return getYouTubeDir()
+  })
+
+  ipcMain.handle('playlist:add-local', (_e, url: string, name: string) => {
+    const playlist = readYouTubePlaylist()
+    const entry: YouTubeEntry = {
+      id: Date.now().toString(),
+      url: '',  // local file, no remote URL
+      title: name,
+      fileName: '',  // not in youtube dir, url serves directly
+      status: 'ready',
+      addedAt: new Date().toISOString(),
+    }
+      // Store the localfile URL in a special field
+      ; (entry as any).localUrl = url
+    playlist.push(entry)
+    writeYouTubePlaylist(playlist)
+    return { entry: { ...entry, localUrl: url } }
+  })
+
+  ipcMain.handle('playlist:get-file-url', (_e, id: string) => {
+    const playlist = readYouTubePlaylist()
+    const entry = playlist.find(e => e.id === id) as any
+    if (!entry) return { error: 'Intrarea nu a fost găsită' }
+    // Local file: has localUrl
+    if (entry.localUrl) {
+      return { url: entry.localUrl, name: entry.title }
+    }
+    // YouTube downloaded file
+    if (!entry.fileName) return { error: 'Fișierul nu este disponibil' }
+    let filePath = path.join(getYouTubeDir(), entry.fileName)
+    // If stored file doesn't exist, try to find a better match (e.g. merged .mp4 vs audio-only .m4a)
+    if (!fs.existsSync(filePath)) {
+      const audioOnly = ['.m4a', '.opus', '.ogg', '.aac', '.mp3']
+      const files = fs.readdirSync(getYouTubeDir()).filter(f => f.startsWith(entry.id + '.'))
+      const better =
+        files.find(f => f === entry.id + '.mp4') ||
+        files.find(f => f.endsWith('.mp4')) ||
+        files.find(f => f.endsWith('.webm') || f.endsWith('.mkv')) ||
+        files.find(f => !audioOnly.some(ext => f.endsWith(ext))) ||
+        files[0]
+      if (better) {
+        filePath = path.join(getYouTubeDir(), better)
+        // Update playlist entry for future lookups
+        const pl = readYouTubePlaylist()
+        const pi = pl.findIndex(e => e.id === entry.id)
+        if (pi !== -1) { pl[pi].fileName = better; writeYouTubePlaylist(pl) }
+      }
+    }
+    if (!fs.existsSync(filePath)) return { error: 'Fișierul nu mai există pe disc' }
+    const fileUrl = `file://${encodeURI(filePath).replace(/#/g, '%23')}`
+    return { url: fileUrl, name: entry.title }
+  })
+
+  ipcMain.handle('youtube:get-file-url', (_e, id: string) => {
+    const playlist = readYouTubePlaylist()
+    const entry = playlist.find(e => e.id === id)
+    if (!entry?.fileName) return { error: 'Fișierul nu este disponibil' }
+    const filePath = path.join(getYouTubeDir(), entry.fileName)
+    if (!fs.existsSync(filePath)) return { error: 'Fișierul nu mai există pe disc' }
+    const url = `file://${encodeURI(filePath).replace(/#/g, '%23')}`
+    return { url, name: entry.title }
   })
 
   // Relay video status from projection window to main window

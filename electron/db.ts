@@ -283,9 +283,9 @@ export function searchHymns(query: string, categoryId?: number) {
 
 export function getAllHymnsWithSnippets(categoryId?: number) {
   const snippetSubquery = `
-    (SELECT s.text FROM hymn_sections s
+    (SELECT GROUP_CONCAT(s.text, ' ') FROM hymn_sections s
      WHERE s.hymn_id = h.id AND s.type = 'strofa'
-     ORDER BY s.order_index LIMIT 1) AS snippet
+     ORDER BY s.order_index) AS snippet
   `;
   if (categoryId !== undefined) {
     return getDb()
@@ -318,9 +318,9 @@ export function searchHymnsContent(query: string, categoryId?: number) {
   const normalizedPattern = `%${normalizeSearchText(query)}%`;
   const originalPattern = `%${query}%`;
   const snippetSubquery = `
-    (SELECT s.text FROM hymn_sections s
+    (SELECT GROUP_CONCAT(s.text, ' ') FROM hymn_sections s
      WHERE s.hymn_id = h.id AND s.type = 'strofa'
-     ORDER BY s.order_index LIMIT 1) AS snippet
+     ORDER BY s.order_index) AS snippet
   `;
   if (categoryId !== undefined) {
     return getDb()
@@ -871,7 +871,6 @@ export function searchBible(query: string, bookId?: number, chapter?: number) {
       JOIN bible_books bb ON bb.id = bv.book_id
       WHERE ${whereClause}
       ORDER BY bv.book_id, bv.chapter, bv.verse
-      LIMIT 200
     `)
     .all(...params);
 }

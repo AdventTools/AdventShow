@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.4-green)
+![version](https://img.shields.io/badge/versiune-1.1.5-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -50,13 +50,15 @@ AdventShow este distribuit gratuit și nu deține un certificat de semnare. Sist
 - **922 de imnuri** din colecția „Imnuri Creștine", organizate pe categorii
 - Fiecare imn are strofe și refren clar delimitate
 - Căutare instantanee după **număr**, **titlu** sau **cuvinte din text**
+- Previzualizare text complet pe un singur rând pentru fiecare imn din listă
 - Import suplimentar din fișiere PowerPoint (`.pptx`)
 - Editor integrat — adaugă, editează, reordonează strofe și refrene
 
 ### 📖 Biblia Cornilescu
 - **66 de cărți**, **31.102 versete** — Biblia Cornilescu completă
-- Navigare pe cărți → capitole → versete
+- Navigare pe cărți → capitole → versete, cu capitolele mereu vizibile la selectarea unui capitol
 - Căutare inteligentă: tastezi `gen 1`, `ps 23`, `1cor 13 4-7` și se încarcă direct
+- Căutare în text se declanșează la **Enter** (nu în timp real), fără limită de rezultate
 - Proiecție cu text mare și referința versetului afișată dedesubt
 
 ### 🖥️ Proiecție pe ecran secundar
@@ -70,11 +72,13 @@ AdventShow este distribuit gratuit și nu deține un certificat de semnare. Sist
 ### 🎬 Redare Video
 - Redă fișiere video direct pe ecranul de proiecție (**MP4**, **WebM**, **MOV**, **MKV**, **AVI**)
 - Conversie automată a formatelor nesuportate (MKV, AVI) în MP4 via FFmpeg
+- **Previzualizare video sincronizată** — videoul rulează simultan în panoul de previzualizare (muted) și pe proiecție
 - Controale: play, pauză, stop, bară de progres, volum
 - Selectare ieșire audio din Setări
 - **Suport YouTube** — lipește un link YouTube și se redă direct pe proiecție (necesită yt-dlp, se instalează din Setări)
 
 ### 🔄 Altele
+- **Layout redimensionabil** — marginile dintre coloane (sidebar, conținut, previzualizare) se trag cu mouse-ul; pozițiile se salvează automat
 - **Verificare actualizări** — la pornire, aplicația verifică dacă există o versiune nouă și afișează un buton de descărcare
 - **Schimbare fluidă** — treci de la un imn la altul fără a opri proiecția
 - **Memorie fereastră** — poziția și dimensiunea ferestrei se rețin între sesiuni
