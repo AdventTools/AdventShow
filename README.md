@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.3-green)
+![version](https://img.shields.io/badge/versiune-1.1.4-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -67,7 +67,15 @@ AdventShow este distribuit gratuit și nu deține un certificat de semnare. Sist
 - Navigare între strofe cu **săgeți** sau **clic**
 - Indicatori de poziție în partea de jos a ecranului
 
+### 🎬 Redare Video
+- Redă fișiere video direct pe ecranul de proiecție (**MP4**, **WebM**, **MOV**, **MKV**, **AVI**)
+- Conversie automată a formatelor nesuportate (MKV, AVI) în MP4 via FFmpeg
+- Controale: play, pauză, stop, bară de progres, volum
+- Selectare ieșire audio din Setări
+- **Suport YouTube** — lipește un link YouTube și se redă direct pe proiecție (necesită yt-dlp, se instalează din Setări)
+
 ### 🔄 Altele
+- **Verificare actualizări** — la pornire, aplicația verifică dacă există o versiune nouă și afișează un buton de descărcare
 - **Schimbare fluidă** — treci de la un imn la altul fără a opri proiecția
 - **Memorie fereastră** — poziția și dimensiunea ferestrei se rețin între sesiuni
 - **Previne hibernarea** — PC-ul nu intră în sleep cât timp aplicația e pornită

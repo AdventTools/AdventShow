@@ -89,8 +89,8 @@ contextBridge.exposeInMainWorld('electron', {
     getChapters: (bookId: number) => ipcRenderer.invoke('bible:get-chapters', bookId),
     getVerses: (bookId: number, chapter: number) =>
       ipcRenderer.invoke('bible:get-verses', bookId, chapter),
-    search: (query: string, bookId?: number) =>
-      ipcRenderer.invoke('bible:search', query, bookId),
+    search: (query: string, bookId?: number, chapter?: number) =>
+      ipcRenderer.invoke('bible:search', query, bookId, chapter),
     getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) =>
       ipcRenderer.invoke('bible:get-verse-range', bookId, chapter, startVerse, endVerse),
     hasData: () => ipcRenderer.invoke('bible:has-data'),
@@ -115,5 +115,54 @@ contextBridge.exposeInMainWorld('electron', {
     onClosed: (cb: () => void) =>
       ipcRenderer.on('projection:closed', () => cb()),
     offClosed: () => ipcRenderer.removeAllListeners('projection:closed'),
+  },
+
+  update: {
+    check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string; changelog?: string; downloadUrl?: string }>,
+    openDownload: (url: string) => ipcRenderer.invoke('update:open-download', url),
+  },
+
+  video: {
+    pickFile: () => ipcRenderer.invoke('video:pick-file') as Promise<string | undefined>,
+    load: (filePath: string) => ipcRenderer.invoke('video:load', filePath) as Promise<{ url?: string; name?: string; converted?: boolean; error?: string }>,
+    play: () => ipcRenderer.invoke('video:play'),
+    pause: () => ipcRenderer.invoke('video:pause'),
+    stop: () => ipcRenderer.invoke('video:stop'),
+    seek: (time: number) => ipcRenderer.invoke('video:seek', time),
+    volume: (vol: number) => ipcRenderer.invoke('video:volume', vol),
+    loadUrl: (url: string) => ipcRenderer.invoke('video:load-url', url) as Promise<{ url: string; name: string }>,
+    // Events from projection → main → renderer
+    onStatus: (cb: (data: { currentTime: number; duration: number; paused: boolean }) => void) =>
+      ipcRenderer.on('video:status', (_e, data) => cb(data)),
+    offStatus: () => ipcRenderer.removeAllListeners('video:status'),
+    // Events from projection window
+    onLoad: (cb: (url: string, name: string) => void) =>
+      ipcRenderer.on('video:load', (_e, url, name) => cb(url, name)),
+    offLoad: () => ipcRenderer.removeAllListeners('video:load'),
+    onPlay: (cb: () => void) => ipcRenderer.on('video:play', () => cb()),
+    offPlay: () => ipcRenderer.removeAllListeners('video:play'),
+    onPause: (cb: () => void) => ipcRenderer.on('video:pause', () => cb()),
+    offPause: () => ipcRenderer.removeAllListeners('video:pause'),
+    onStop: (cb: () => void) => ipcRenderer.on('video:stop', () => cb()),
+    offStop: () => ipcRenderer.removeAllListeners('video:stop'),
+    onSeek: (cb: (time: number) => void) => ipcRenderer.on('video:seek', (_e, time) => cb(time)),
+    offSeek: () => ipcRenderer.removeAllListeners('video:seek'),
+    onVolume: (cb: (vol: number) => void) => ipcRenderer.on('video:volume', (_e, vol) => cb(vol)),
+    offVolume: () => ipcRenderer.removeAllListeners('video:volume'),
+    onConverting: (cb: (converting: boolean) => void) => ipcRenderer.on('video:converting', (_e, v) => cb(v)),
+    offConverting: () => ipcRenderer.removeAllListeners('video:converting'),
+    onConvertProgress: (cb: (line: string) => void) => ipcRenderer.on('video:convert-progress', (_e, line) => cb(line)),
+    offConvertProgress: () => ipcRenderer.removeAllListeners('video:convert-progress'),
+    // Send status back from projection
+    sendStatus: (data: { currentTime: number; duration: number; paused: boolean }) =>
+      ipcRenderer.send('video:status-from-projection', data),
+  },
+
+  ytdlp: {
+    isInstalled: () => ipcRenderer.invoke('ytdlp:is-installed') as Promise<boolean>,
+    install: () => ipcRenderer.invoke('ytdlp:install') as Promise<{ success: boolean; error?: string }>,
+    version: () => ipcRenderer.invoke('ytdlp:version') as Promise<string>,
+    update: () => ipcRenderer.invoke('ytdlp:update') as Promise<{ success: boolean; version?: string; error?: string }>,
+    getStreamUrl: (videoUrl: string) => ipcRenderer.invoke('ytdlp:get-stream-url', videoUrl) as Promise<{ url: string; error?: string }>,
   },
 })
