@@ -792,12 +792,38 @@ export function initBibleTables() {
       book_id INTEGER NOT NULL REFERENCES bible_books(id),
       chapter INTEGER NOT NULL,
       verse INTEGER NOT NULL,
-      text TEXT NOT NULL
+      text TEXT NOT NULL,
+      search_text TEXT NOT NULL DEFAULT ''
     );
 
     CREATE INDEX IF NOT EXISTS idx_bible_verses_book_chapter
       ON bible_verses(book_id, chapter);
   `);
+
+  // Migration: add search_text column if missing and populate it
+  migrateBibleSearchText(db);
+}
+
+function migrateBibleSearchText(db: any) {
+  const cols = db.prepare("PRAGMA table_info('bible_verses')").all() as { name: string }[];
+  const hasSearchText = cols.some((c: { name: string }) => c.name === 'search_text');
+  if (!hasSearchText) {
+    db.exec("ALTER TABLE bible_verses ADD COLUMN search_text TEXT NOT NULL DEFAULT ''");
+  }
+  // Populate search_text for rows that haven't been normalized yet
+  const empty = db.prepare("SELECT count(*) as cnt FROM bible_verses WHERE search_text = '' AND text != ''").get() as { cnt: number };
+  if (empty.cnt > 0) {
+    console.log(`[Bible] Populating search_text for ${empty.cnt} verses...`);
+    const rows = db.prepare("SELECT id, text FROM bible_verses WHERE search_text = '' AND text != ''").all() as { id: number; text: string }[];
+    const update = db.prepare("UPDATE bible_verses SET search_text = ? WHERE id = ?");
+    const tx = db.transaction(() => {
+      for (const row of rows) {
+        update.run(normalizeSearchText(row.text), row.id);
+      }
+    });
+    tx();
+    console.log(`[Bible] search_text populated for ${rows.length} verses`);
+  }
 }
 
 // ── Bible queries ─────────────────────────────────────────────────────────────
@@ -821,32 +847,33 @@ export function getBibleVerses(bookId: number, chapter: number) {
     .all(bookId, chapter);
 }
 
-export function searchBible(query: string, bookId?: number) {
-  const pattern = `%${query}%`;
+export function searchBible(query: string, bookId?: number, chapter?: number) {
+  const normalizedPattern = `%${normalizeSearchText(query)}%`;
+  const originalPattern = `%${query}%`;
+
+  let whereClause = '(bv.search_text LIKE ? OR bv.text LIKE ?)';
+  const params: any[] = [normalizedPattern, originalPattern];
+
   if (bookId !== undefined) {
-    return getDb()
-      .prepare(`
-        SELECT bv.book_id, bv.chapter, bv.verse, bv.text,
-               bb.name as book_name, bb.abbreviation
-        FROM bible_verses bv
-        JOIN bible_books bb ON bb.id = bv.book_id
-        WHERE bv.book_id = ? AND bv.text LIKE ?
-        ORDER BY bv.book_id, bv.chapter, bv.verse
-        LIMIT 100
-      `)
-      .all(bookId, pattern);
+    whereClause += ' AND bv.book_id = ?';
+    params.push(bookId);
   }
+  if (chapter !== undefined) {
+    whereClause += ' AND bv.chapter = ?';
+    params.push(chapter);
+  }
+
   return getDb()
     .prepare(`
       SELECT bv.book_id, bv.chapter, bv.verse, bv.text,
              bb.name as book_name, bb.abbreviation
       FROM bible_verses bv
       JOIN bible_books bb ON bb.id = bv.book_id
-      WHERE bv.text LIKE ?
+      WHERE ${whereClause}
       ORDER BY bv.book_id, bv.chapter, bv.verse
-      LIMIT 100
+      LIMIT 200
     `)
-    .all(pattern);
+    .all(...params);
 }
 
 export function getBibleVerseRange(bookId: number, chapter: number, startVerse: number, endVerse: number) {
@@ -938,7 +965,7 @@ export function seedBibleFromJson() {
       'INSERT OR REPLACE INTO bible_books (id, name, abbreviation, testament, book_order, chapter_count) VALUES (?, ?, ?, ?, ?, ?)'
     );
     const insertVerse = db.prepare(
-      'INSERT INTO bible_verses (book_id, chapter, verse, text) VALUES (?, ?, ?, ?)'
+      'INSERT INTO bible_verses (book_id, chapter, verse, text, search_text) VALUES (?, ?, ?, ?, ?)'
     );
 
     const tx = db.transaction(() => {
@@ -953,7 +980,8 @@ export function seedBibleFromJson() {
 
         for (const ch of chapters) {
           for (const v of (ch.verses ?? [])) {
-            insertVerse.run(nr, ch.chapter, v.verse, (v.text ?? '').trim());
+            const text = (v.text ?? '').trim();
+            insertVerse.run(nr, ch.chapter, v.verse, text, normalizeSearchText(text));
             totalVerses++;
           }
         }

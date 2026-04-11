@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -64,6 +65,7 @@ interface AppSettings {
   contentTextColor?: string
   adminPasswordHash?: string
   projectionFontSize?: number
+  audioOutputDeviceId?: string
   windowBounds?: { x: number; y: number; width: number; height: number }
 }
 
@@ -78,6 +80,241 @@ function readSettings(): AppSettings {
 
 function writeSettings(settings: AppSettings) {
   fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
+}
+
+// ── GitHub Update Checker ─────────────────────────────────────────────────────
+
+const GITHUB_REPO = 'AdventTools/AdventShow'
+const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+
+interface UpdateInfo {
+  available: boolean
+  version?: string
+  changelog?: string
+  downloadUrl?: string
+}
+
+function compareVersions(local: string, remote: string): number {
+  const a = local.replace(/^v/, '').split('.').map(Number)
+  const b = remote.replace(/^v/, '').split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((b[i] ?? 0) > (a[i] ?? 0)) return 1
+    if ((b[i] ?? 0) < (a[i] ?? 0)) return -1
+  }
+  return 0
+}
+
+function getPlatformAssetPattern(): RegExp {
+  switch (process.platform) {
+    case 'win32': return /-Setup\.exe$/i
+    case 'darwin': return /\.dmg$/i
+    case 'linux': return /\.AppImage$/i
+    default: return /\.AppImage$/i
+  }
+}
+
+async function checkForUpdate(): Promise<UpdateInfo> {
+  try {
+    const response = await net.fetch(GITHUB_API_URL, {
+      headers: { 'User-Agent': 'AdventShow-Updater' }
+    })
+    if (!response.ok) {
+      console.warn(`[Update] GitHub API returned ${response.status}`)
+      return { available: false }
+    }
+    const data = await response.json() as {
+      tag_name: string
+      body?: string
+      assets?: { name: string; browser_download_url: string }[]
+    }
+
+    const remoteVersion = data.tag_name ?? ''
+    const localVersion = app.getVersion()
+
+    if (compareVersions(localVersion, remoteVersion) <= 0) {
+      return { available: false }
+    }
+
+    const pattern = getPlatformAssetPattern()
+    const asset = data.assets?.find(a => pattern.test(a.name))
+
+    return {
+      available: true,
+      version: remoteVersion,
+      changelog: data.body ?? '',
+      downloadUrl: asset?.browser_download_url ?? `https://github.com/${GITHUB_REPO}/releases/latest`,
+    }
+  } catch (err) {
+    console.warn('[Update] Check failed:', err)
+    return { available: false }
+  }
+}
+
+// ── Video conversion (FFmpeg) ─────────────────────────────────────────────────
+
+function getFFmpegPath(): string {
+  try {
+    // ffmpeg-static provides the binary path
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ffmpegStatic = require('ffmpeg-static') as string
+    // In packaged app, fix the path
+    if (app.isPackaged && ffmpegStatic.includes('app.asar')) {
+      return ffmpegStatic.replace('app.asar', 'app.asar.unpacked')
+    }
+    return ffmpegStatic
+  } catch {
+    return 'ffmpeg' // fallback to system ffmpeg
+  }
+}
+
+const NATIVE_VIDEO_EXTS = new Set(['.mp4', '.webm', '.ogg', '.mov'])
+
+function needsConversion(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase()
+  return !NATIVE_VIDEO_EXTS.has(ext)
+}
+
+function convertToMp4(inputPath: string): Promise<{ outputPath: string }> {
+  const outputPath = path.join(app.getPath('temp'), `adventshow-converted-${Date.now()}.mp4`)
+  const ffmpeg = getFFmpegPath()
+
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-i', inputPath,
+      '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+      '-c:a', 'aac', '-b:a', '192k',
+      '-movflags', '+faststart',
+      '-y', outputPath
+    ]
+    const proc = execFile(ffmpeg, args, { timeout: 300000 }, (err) => {
+      if (err) {
+        console.error('[FFmpeg] Conversion failed:', err)
+        reject(new Error('Conversia video a eșuat'))
+      } else {
+        console.log('[FFmpeg] Converted:', inputPath, '->', outputPath)
+        resolve({ outputPath })
+      }
+    })
+    proc.stderr?.on('data', (d: Buffer) => {
+      const line = d.toString()
+      // Send progress to renderer if it contains time info
+      if (line.includes('time=') && win) {
+        win.webContents.send('video:convert-progress', line.trim())
+      }
+    })
+  })
+}
+
+// ── yt-dlp (YouTube streaming) ────────────────────────────────────────────────
+
+function getYtDlpDir(): string {
+  return path.join(app.getPath('userData'), 'yt-dlp')
+}
+
+function getYtDlpBinaryName(): string {
+  return process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
+}
+
+function getYtDlpPath(): string {
+  return path.join(getYtDlpDir(), getYtDlpBinaryName())
+}
+
+function getYtDlpDownloadUrl(): string {
+  const base = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download'
+  switch (process.platform) {
+    case 'win32': return `${base}/yt-dlp.exe`
+    case 'darwin': return `${base}/yt-dlp_macos`
+    default: return `${base}/yt-dlp_linux`
+  }
+}
+
+function isYtDlpInstalled(): boolean {
+  return fs.existsSync(getYtDlpPath())
+}
+
+async function downloadYtDlp(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const dir = getYtDlpDir()
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+
+    const url = getYtDlpDownloadUrl()
+    console.log('[yt-dlp] Downloading from:', url)
+    const response = await net.fetch(url, { headers: { 'User-Agent': 'AdventShow' } })
+    if (!response.ok) return { success: false, error: `HTTP ${response.status}` }
+
+    const buffer = Buffer.from(await response.arrayBuffer())
+    const dest = getYtDlpPath()
+    fs.writeFileSync(dest, buffer)
+
+    // Make executable on Unix
+    if (process.platform !== 'win32') {
+      fs.chmodSync(dest, 0o755)
+    }
+    console.log('[yt-dlp] Downloaded to:', dest)
+    return { success: true }
+  } catch (err: any) {
+    console.error('[yt-dlp] Download failed:', err)
+    return { success: false, error: err.message ?? 'Descărcarea a eșuat' }
+  }
+}
+
+function getYtDlpVersion(): Promise<string> {
+  return new Promise((resolve) => {
+    if (!isYtDlpInstalled()) { resolve('Nu este instalat'); return }
+    execFile(getYtDlpPath(), ['--version'], { timeout: 10000 }, (err, stdout) => {
+      if (err) { resolve('Necunoscut'); return }
+      resolve(stdout.trim())
+    })
+  })
+}
+
+async function updateYtDlp(): Promise<{ success: boolean; version?: string; error?: string }> {
+  if (!isYtDlpInstalled()) {
+    const dl = await downloadYtDlp()
+    if (!dl.success) return { success: false, error: dl.error }
+  }
+  return new Promise((resolve) => {
+    execFile(getYtDlpPath(), ['--update'], { timeout: 60000 }, async (err) => {
+      if (err) {
+        // If --update fails, try re-downloading
+        const dl = await downloadYtDlp()
+        if (!dl.success) {
+          resolve({ success: false, error: 'Actualizarea a eșuat' })
+          return
+        }
+      }
+      const ver = await getYtDlpVersion()
+      resolve({ success: true, version: ver })
+    })
+  })
+}
+
+function getYouTubeStreamUrl(videoUrl: string): Promise<{ url: string; error?: string }> {
+  return new Promise((resolve) => {
+    if (!isYtDlpInstalled()) {
+      resolve({ url: '', error: 'yt-dlp nu este instalat. Instalează-l din Setări.' })
+      return
+    }
+    const args = [
+      '--get-url',
+      '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      '--no-playlist',
+      videoUrl,
+    ]
+    execFile(getYtDlpPath(), args, { timeout: 30000 }, (err, stdout, stderr) => {
+      if (err) {
+        console.error('[yt-dlp] Stream URL failed:', stderr || err.message)
+        resolve({
+          url: '',
+          error: 'Nu s-a putut obține video-ul. YouTube poate bloca temporar această funcție. Încearcă din nou mai târziu sau descarcă video-ul manual.',
+        })
+        return
+      }
+      // yt-dlp may return multiple URLs (video + audio) on separate lines; take the first
+      const urls = stdout.trim().split('\n').filter(Boolean)
+      resolve({ url: urls[0] ?? '' })
+    })
+  })
 }
 
 // ── Projection state ──────────────────────────────────────────────────────────
@@ -488,12 +725,79 @@ app.whenReady().then(() => {
   ipcMain.handle('bible:get-chapters', (_e, bookId: number) => getBibleChapters(bookId))
   ipcMain.handle('bible:get-verses', (_e, bookId: number, chapter: number) =>
     getBibleVerses(bookId, chapter))
-  ipcMain.handle('bible:search', (_e, query: string, bookId?: number) =>
-    searchBible(query, bookId))
+  ipcMain.handle('bible:search', (_e, query: string, bookId?: number, chapter?: number) =>
+    searchBible(query, bookId, chapter))
   ipcMain.handle('bible:get-verse-range',
     (_e, bookId: number, chapter: number, startVerse: number, endVerse: number) =>
       getBibleVerseRange(bookId, chapter, startVerse, endVerse))
   ipcMain.handle('bible:has-data', () => hasBibleData())
+
+  // ── Update ──────────────────────────────────────────────────────────────────
+  ipcMain.handle('update:check', () => checkForUpdate())
+  ipcMain.handle('update:open-download', async (_e, url: string) => {
+    if (url) await shell.openExternal(url)
+  })
+
+  // ── Video ───────────────────────────────────────────────────────────────────
+  ipcMain.handle('video:pick-file', async () => {
+    if (!win) return undefined
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      filters: [{ name: 'Videoclipuri', extensions: ['mp4', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg'] }],
+    })
+    if (result.canceled) return undefined
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('video:load', async (_e, filePath: string) => {
+    let servePath = filePath
+    let converted = false
+    if (needsConversion(filePath)) {
+      try {
+        win?.webContents.send('video:converting', true)
+        const result = await convertToMp4(filePath)
+        servePath = result.outputPath
+        converted = true
+      } catch (err: any) {
+        win?.webContents.send('video:converting', false)
+        return { error: err.message ?? 'Conversia video a eșuat' }
+      } finally {
+        win?.webContents.send('video:converting', false)
+      }
+    }
+    const videoUrl = `localfile://${servePath.replace(/#/g, '%23')}`
+    projectionWin?.webContents.send('video:load', videoUrl, path.basename(filePath))
+    return { url: videoUrl, name: path.basename(filePath), converted }
+  })
+
+  ipcMain.handle('video:play', () => projectionWin?.webContents.send('video:play'))
+  ipcMain.handle('video:pause', () => projectionWin?.webContents.send('video:pause'))
+  ipcMain.handle('video:stop', () => projectionWin?.webContents.send('video:stop'))
+  ipcMain.handle('video:seek', (_e, time: number) => projectionWin?.webContents.send('video:seek', time))
+  ipcMain.handle('video:volume', (_e, vol: number) => projectionWin?.webContents.send('video:volume', vol))
+
+  ipcMain.handle('video:load-url', (_e, url: string) => {
+    projectionWin?.webContents.send('video:load', url, 'YouTube')
+    return { url, name: 'YouTube' }
+  })
+
+  // ── yt-dlp ──────────────────────────────────────────────────────────────────
+  ipcMain.handle('ytdlp:is-installed', () => isYtDlpInstalled())
+  ipcMain.handle('ytdlp:install', () => downloadYtDlp())
+  ipcMain.handle('ytdlp:version', () => getYtDlpVersion())
+  ipcMain.handle('ytdlp:update', () => updateYtDlp())
+  ipcMain.handle('ytdlp:get-stream-url', async (_e, videoUrl: string) => {
+    if (!isYtDlpInstalled()) {
+      const dl = await downloadYtDlp()
+      if (!dl.success) return { url: '', error: 'Nu s-a putut instala yt-dlp: ' + (dl.error ?? '') }
+    }
+    return getYouTubeStreamUrl(videoUrl)
+  })
+
+  // Relay video status from projection window to main window
+  ipcMain.on('video:status-from-projection', (_e, data) => {
+    win?.webContents.send('video:status', data)
+  })
 
   createWindow()
 })
