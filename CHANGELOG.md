@@ -1,5 +1,21 @@
 # Changelog — AdventShow
 
+## v1.1.5 (11 Aprilie 2026)
+
+### Funcționalități noi
+- **Previzualizare video sincronizată** — videoul rulează simultan (muted) în panoul de previzualizare și pe proiecție, cu sincronizare automată a timpului
+- **Layout redimensionabil** — marginile dintre sidebar, conținut și previzualizare se trag cu mouse-ul; pozițiile se salvează automat între sesiuni
+- **Biblie: capitole + versete simultan** — la selectarea unui capitol, capitolele rămân vizibile în partea de sus, versetele apar dedesubt
+- **Previzualizare text complet per imn** — în lista de imnuri, textul preview afișează toate strofele pe un singur rând (nu doar prima strofă)
+
+### Îmbunătățiri
+- **Căutare Biblie la Enter** — căutarea în textul Bibliei se face doar la apăsarea tastei Enter (nu în timp real), pentru performanță mai bună
+- **Fără limită de rezultate** — căutarea în Biblie returnează toate rezultatele (anterior: maxim 200)
+- **Panou previzualizare mai lat** — lățimea implicită a panoului de previzualizare a fost dublată (640px)
+- **Build macOS pe GitHub Actions** — DMG-ul se compilează acum pe CI, nu doar local
+
+---
+
 ## v1.1.4 (12 Aprilie 2026)
 
 ### Funcționalități noi

@@ -82,6 +82,11 @@ export function ProjectionPage() {
     };
   }, []);
 
+  // Signal to main process that all IPC listeners are registered and ready
+  useEffect(() => {
+    window.electron.projection.signalReady();
+  }, []);
+
   // Start/stop status interval when video loads/unloads
   useEffect(() => {
     if (videoUrl) {
@@ -224,6 +229,9 @@ export function ProjectionPage() {
           className="absolute inset-0 w-full h-full object-contain z-20"
           style={{ background: '#000' }}
           autoPlay
+          onCanPlay={() => {
+            videoRef.current?.play().catch(() => { });
+          }}
           onEnded={sendVideoStatus}
           onPause={sendVideoStatus}
           onPlay={sendVideoStatus}

@@ -115,6 +115,7 @@ contextBridge.exposeInMainWorld('electron', {
     onClosed: (cb: () => void) =>
       ipcRenderer.on('projection:closed', () => cb()),
     offClosed: () => ipcRenderer.removeAllListeners('projection:closed'),
+    signalReady: () => ipcRenderer.send('projection:renderer-ready'),
   },
 
   update: {
@@ -124,6 +125,8 @@ contextBridge.exposeInMainWorld('electron', {
 
   video: {
     pickFile: () => ipcRenderer.invoke('video:pick-file') as Promise<string | undefined>,
+    prepare: (filePath: string) => ipcRenderer.invoke('video:prepare', filePath) as Promise<{ url?: string; name?: string; converted?: boolean; error?: string }>,
+    startPlayback: (url: string, name: string) => ipcRenderer.invoke('video:start-playback', url, name),
     load: (filePath: string) => ipcRenderer.invoke('video:load', filePath) as Promise<{ url?: string; name?: string; converted?: boolean; error?: string }>,
     play: () => ipcRenderer.invoke('video:play'),
     pause: () => ipcRenderer.invoke('video:pause'),
@@ -164,5 +167,28 @@ contextBridge.exposeInMainWorld('electron', {
     version: () => ipcRenderer.invoke('ytdlp:version') as Promise<string>,
     update: () => ipcRenderer.invoke('ytdlp:update') as Promise<{ success: boolean; version?: string; error?: string }>,
     getStreamUrl: (videoUrl: string) => ipcRenderer.invoke('ytdlp:get-stream-url', videoUrl) as Promise<{ url: string; error?: string }>,
+  },
+
+  youtube: {
+    getPlaylist: () => ipcRenderer.invoke('youtube:get-playlist'),
+    add: (url: string, title?: string) => ipcRenderer.invoke('youtube:add', url, title),
+    updateTitle: (id: string, title: string) => ipcRenderer.invoke('youtube:update-title', id, title),
+    remove: (id: string) => ipcRenderer.invoke('youtube:remove', id),
+    delete: (id: string) => ipcRenderer.invoke('youtube:delete', id),
+    reorder: (orderedIds: string[]) => ipcRenderer.invoke('youtube:reorder', orderedIds),
+    retryDownload: (id: string) => ipcRenderer.invoke('youtube:retry-download', id),
+    getFileUrl: (id: string) => ipcRenderer.invoke('youtube:get-file-url', id),
+    onProgress: (cb: (id: string, percent: number, line: string) => void) =>
+      ipcRenderer.on('youtube:progress', (_e, id, percent, line) => cb(id, percent, line)),
+    offProgress: () => ipcRenderer.removeAllListeners('youtube:progress'),
+    onStatus: (cb: (id: string, status: string, error: string) => void) =>
+      ipcRenderer.on('youtube:status', (_e, id, status, error) => cb(id, status, error)),
+    offStatus: () => ipcRenderer.removeAllListeners('youtube:status'),
+  },
+
+  playlist: {
+    addLocal: (url: string, name: string) => ipcRenderer.invoke('playlist:add-local', url, name),
+    getFileUrl: (id: string) => ipcRenderer.invoke('playlist:get-file-url', id),
+    getDownloadFolder: () => ipcRenderer.invoke('youtube:get-download-folder') as Promise<string>,
   },
 })

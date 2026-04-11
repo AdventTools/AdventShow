@@ -235,19 +235,32 @@
     margin-right: 4px;
 }
 
-/* ── Main Area (3-column) ── */
+/* ── Main Area (5-column with resize handles) ── */
 .main-area {
     display: grid;
-    grid-template-columns: 200px 1fr 320px;
+    grid-template-columns: 200px auto 1fr auto 640px;
     flex: 1;
     min-height: 0;
     overflow: hidden;
 }
 
+/* Drag handles between panels */
+.resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    background: var(--border);
+    transition: background 0.15s;
+    z-index: 5;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+    background: var(--accent);
+}
+
 /* ── Sidebar ── */
 .sidebar {
     background: var(--bg-sidebar);
-    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -558,6 +571,36 @@
     border-color: var(--accent);
 }
 
+.chapter-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+/* Bible split view: chapters top, verses bottom */
+.bible-split-view {
+    display: flex;
+    flex-direction: column;
+}
+
+.bible-chapters-section {
+    flex-shrink: 0;
+    overflow-y: auto;
+}
+
+.bible-chapters-section.compact {
+    max-height: 30%;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+}
+
+.bible-verses-section {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 .verse-list {
     display: flex;
     flex-direction: column;
@@ -617,10 +660,95 @@
 .video-controller {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 24px;
+    padding: 16px 20px;
+    gap: 12px;
     height: 100%;
+    overflow-y: auto;
+}
+
+.video-section {
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.video-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+}
+
+.video-section-header .yt-icon {
+    color: #f00;
+    font-size: 0.9rem;
+}
+
+.video-dropzone-compact {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: 1px dashed rgba(255 255 255 / 0.12);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+.video-dropzone-compact:hover {
+    border-color: rgba(99, 102, 241, 0.4);
+    background: rgba(99, 102, 241, 0.04);
+    color: var(--text-primary);
+}
+
+.video-prepared-file {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.video-prepared-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.video-prepared-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.video-btn-play {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: auto !important;
+    padding: 6px 16px !important;
+    background: #22c55e !important;
+    border-color: #22c55e !important;
+    color: white !important;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.video-btn-play:hover {
+    background: #16a34a !important;
+    border-color: #16a34a !important;
 }
 
 .video-dropzone {
@@ -681,6 +809,7 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    margin: 0 auto;
 }
 
 .video-player-name {
@@ -802,8 +931,8 @@
 
 /* --- YouTube Section --- */
 .video-youtube-section {
-    margin-top: 16px;
-    padding: 16px;
+    margin-top: 0;
+    padding: 14px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -816,6 +945,17 @@
     margin-bottom: 10px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.video-youtube-version {
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 .video-youtube-input-row {
@@ -844,12 +984,15 @@
 }
 
 .video-youtube-btn {
-    padding: 8px 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
     background: var(--accent-primary);
     color: #fff;
     border: none;
     border-radius: 8px;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.2s;
@@ -872,11 +1015,247 @@
 }
 
 .video-youtube-disclaimer {
-    margin-top: 10px;
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     line-height: 1.4;
-    opacity: 0.7;
+    opacity: 0.6;
+    margin-top: 4px;
+}
+
+.video-youtube-install {
+    text-align: center;
+    padding: 8px 0;
+}
+
+.video-youtube-footer {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.video-youtube-update-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: fit-content;
+}
+
+.video-youtube-update-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+}
+
+.video-youtube-update-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* --- YouTube Playlist --- */
+.yt-playlist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.yt-playlist-item {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    transition: border-color 0.2s;
+}
+
+.yt-playlist-item:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.yt-status-ready {
+    border-left: 3px solid #22c55e;
+}
+
+.yt-status-downloading {
+    border-left: 3px solid #3b82f6;
+}
+
+.yt-status-error {
+    border-left: 3px solid #f87171;
+}
+
+.yt-playlist-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.yt-playlist-title {
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    cursor: default;
+}
+
+.yt-playlist-title-input {
+    flex: 1;
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--accent-primary);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    outline: none;
+}
+
+.yt-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.yt-badge-ready {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.yt-badge-downloading {
+    color: #60a5fa;
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.yt-badge-error {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.1);
+}
+
+.yt-source-badge {
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+}
+
+.yt-badge-local {
+    color: #a78bfa;
+    background: rgba(167, 139, 250, 0.15);
+}
+
+.yt-badge-yt {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.12);
+}
+
+.yt-progress-bar {
+    height: 3px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.yt-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.yt-error-msg {
+    font-size: 0.72rem;
+    color: #f87171;
+    margin-top: 6px;
+    line-height: 1.3;
+}
+
+.yt-playlist-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.yt-play-btn {
+    font-size: 0.78rem !important;
+}
+
+.yt-retry-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: auto !important;
+    padding: 4px 12px !important;
+    font-size: 0.75rem;
+    color: #60a5fa !important;
+    border-color: rgba(96, 165, 250, 0.3) !important;
+}
+
+.yt-retry-btn:hover {
+    background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.yt-remove-btn {
+    width: 28px !important;
+    height: 28px !important;
+    margin-left: auto;
+    color: var(--text-muted) !important;
+}
+
+.yt-remove-btn:hover {
+    color: #f87171 !important;
+    background: rgba(248, 113, 113, 0.1) !important;
+}
+
+.yt-delete-confirm {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.yt-btn-small {
+    width: auto !important;
+    height: auto !important;
+    padding: 3px 10px !important;
+    font-size: 0.72rem;
+}
+
+.yt-btn-danger {
+    color: #f87171 !important;
+    border-color: rgba(248, 113, 113, 0.3) !important;
+}
+
+.yt-btn-danger:hover {
+    background: rgba(248, 113, 113, 0.1) !important;
+}
+
+.icon-xs {
+    width: 12px;
+    height: 12px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -885,7 +1264,6 @@
 
 .preview {
     background: var(--bg-preview);
-    border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
