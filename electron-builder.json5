@@ -2,6 +2,9 @@
 {
   "appId": "com.adventtools.adventshow",
   "asar": true,
+  "asarUnpack": [
+    "**/node_modules/ffmpeg-static/**"
+  ],
   "productName": "AdventShow",
   "icon": "build/icon.png",
   "directories": {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppSettings, HymnSection, ProjectionSlideData } from './vite-env';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -11,6 +11,11 @@ export function ProjectionPage() {
   const [bg, setBg] = useState<AppSettings>({});
   const [zoomLevel, setZoomLevel] = useState(1);
 
+  // ── Video state ──
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Load background settings once on mount
   useEffect(() => {
     window.electron.settings.get().then(s => setBg(s));
@@ -21,9 +26,74 @@ export function ProjectionPage() {
     window.electron.projection.onSlide((incoming) => {
       setData(incoming);
       setVisible(true);
+      // Stop video when hymn/bible projection starts
+      if (videoUrl) {
+        setVideoUrl(null);
+        if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ''; }
+      }
     });
     return () => { window.electron.projection.offSlide(); };
+  }, [videoUrl]);
+
+  // ── Video IPC listeners ──
+  const sendVideoStatus = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    window.electron.video.sendStatus({
+      currentTime: v.currentTime,
+      duration: v.duration || 0,
+      paused: v.paused,
+    });
   }, []);
+
+  useEffect(() => {
+    window.electron.video.onLoad((url, _name) => {
+      setVideoUrl(url);
+      setData(null); // hide hymn/bible content
+      // Audio output: use saved device if available
+      window.electron.settings.get().then(s => {
+        if (s.audioOutputDeviceId && videoRef.current) {
+          try {
+            (videoRef.current as any).setSinkId(s.audioOutputDeviceId);
+          } catch { /* ignore if not supported */ }
+        }
+      });
+    });
+    window.electron.video.onPlay(() => videoRef.current?.play());
+    window.electron.video.onPause(() => videoRef.current?.pause());
+    window.electron.video.onStop(() => {
+      if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ''; }
+      setVideoUrl(null);
+    });
+    window.electron.video.onSeek((time) => {
+      if (videoRef.current) videoRef.current.currentTime = time;
+    });
+    window.electron.video.onVolume((vol) => {
+      if (videoRef.current) videoRef.current.volume = vol;
+    });
+
+    return () => {
+      window.electron.video.offLoad();
+      window.electron.video.offPlay();
+      window.electron.video.offPause();
+      window.electron.video.offStop();
+      window.electron.video.offSeek();
+      window.electron.video.offVolume();
+    };
+  }, []);
+
+  // Start/stop status interval when video loads/unloads
+  useEffect(() => {
+    if (videoUrl) {
+      statusIntervalRef.current = setInterval(sendVideoStatus, 500);
+    } else {
+      if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
+      statusIntervalRef.current = null;
+    }
+    return () => {
+      if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
+    };
+  }, [videoUrl, sendVideoStatus]);
 
   // Keyboard control: arrows navigate, Escape closes — all via main process
   useEffect(() => {
@@ -146,10 +216,24 @@ export function ProjectionPage() {
         </>
       )}
 
-      {/* ── Content (above background) ── */}
+      {/* ── Video Player (fullscreen) ── */}
+      {videoUrl && (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="absolute inset-0 w-full h-full object-contain z-20"
+          style={{ background: '#000' }}
+          autoPlay
+          onEnded={sendVideoStatus}
+          onPause={sendVideoStatus}
+          onPlay={sendVideoStatus}
+        />
+      )}
+
+      {/* ── Content (above background, hidden when video is active) ── */}
 
       {/* Header — Hymn: number + title + section label, all on one bright line */}
-      {data && !isBible && data.currentIndex >= 0 && (
+      {!videoUrl && data && !isBible && data.currentIndex >= 0 && (
         <div
           className="absolute top-0 left-0 right-0 flex items-center gap-4 px-10 py-5"
           style={{ opacity: visible ? 0.85 : 0, transition: 'opacity 0.4s' }}
@@ -183,25 +267,92 @@ export function ProjectionPage() {
       )}
 
       {/* Main content — title slide, lyrics, or Bible verse */}
-      <div
-        className="relative z-10 px-16 text-center w-full max-w-full"
-        style={{
-          opacity: visible ? 1 : 0,
-          transform: visible ? 'translateY(0)' : 'translateY(12px)',
-          transition: 'opacity 0.35s ease, transform 0.35s ease',
-        }}
-      >
-        {data && isBible && section ? (
-          /* ── Bible verse slide ── */
-          <div className="flex flex-col items-center justify-center gap-8">
-            <div className="max-h-[65vh] overflow-y-auto px-3">
+      {!videoUrl && (
+        <div
+          className="relative z-10 px-16 text-center w-full max-w-full"
+          style={{
+            opacity: visible ? 1 : 0,
+            transform: visible ? 'translateY(0)' : 'translateY(12px)',
+            transition: 'opacity 0.35s ease, transform 0.35s ease',
+          }}
+        >
+          {data && isBible && section ? (
+            /* ── Bible verse slide ── */
+            <div className="flex flex-col items-center justify-center gap-8">
+              <div className="max-h-[65vh] overflow-y-auto px-3">
+                <p
+                  className="leading-relaxed"
+                  style={{
+                    color: contentTextColor,
+                    fontSize: dynamicFontSize,
+                    fontWeight: 700,
+                    lineHeight: 1.5,
+                    textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
+                    whiteSpace: 'pre-line',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {section.text}
+                </p>
+              </div>
+              {/* Bible reference below the text */}
+              {data.bibleRef && (
+                <p
+                  className="font-semibold uppercase tracking-widest"
+                  style={{
+                    color: hymnNumberColor,
+                    fontSize: 'clamp(1rem, 2.5vw, 2rem)',
+                    letterSpacing: '0.15em',
+                    textShadow: '0 2px 24px rgba(0,0,0,0.8)',
+                    opacity: 0.7,
+                  }}
+                >
+                  {data.bibleRef}
+                </p>
+              )}
+            </div>
+          ) : data && data.currentIndex === -1 ? (
+            /* ── Title slide ── */
+            <div className="flex flex-col items-center gap-6">
+              <span
+                className="font-black tabular-nums"
+                style={{
+                  color: hymnNumberColor,
+                  fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${fontSizeMultiplier})`,
+                  lineHeight: 1,
+                  textShadow: '0 4px 48px rgba(0,0,0,0.9)',
+                }}
+              >
+                {data.hymnNumber}.
+              </span>
+              <p
+                className="font-bold uppercase tracking-widest"
+                style={{
+                  color: contentTextColor,
+                  fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${fontSizeMultiplier})`,
+                  letterSpacing: '0.12em',
+                  textShadow: '0 2px 32px rgba(0,0,0,0.9)',
+                }}
+              >
+                {data.hymnTitle}
+              </p>
+              {/* <p
+              className="text-white/30 uppercase tracking-widest"
+              style={{ fontSize: 'clamp(0.6rem, 1.2vw, 0.9rem)', letterSpacing: '0.3em', marginTop: '1rem' }}
+            >
+              Apasă → pentru a începe
+            </p> */}
+            </div>
+          ) : section ? (
+            /* ── Lyrics slide ── */
+            <div className="max-h-[72vh] overflow-y-auto px-3">
               <p
                 className="leading-relaxed"
                 style={{
                   color: contentTextColor,
                   fontSize: dynamicFontSize,
                   fontWeight: 700,
-                  lineHeight: 1.5,
+                  lineHeight: 1.45,
                   textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
                   whiteSpace: 'pre-line',
                   overflowWrap: 'anywhere',
@@ -210,79 +361,14 @@ export function ProjectionPage() {
                 {section.text}
               </p>
             </div>
-            {/* Bible reference below the text */}
-            {data.bibleRef && (
-              <p
-                className="font-semibold uppercase tracking-widest"
-                style={{
-                  color: hymnNumberColor,
-                  fontSize: 'clamp(1rem, 2.5vw, 2rem)',
-                  letterSpacing: '0.15em',
-                  textShadow: '0 2px 24px rgba(0,0,0,0.8)',
-                  opacity: 0.7,
-                }}
-              >
-                {data.bibleRef}
-              </p>
-            )}
-          </div>
-        ) : data && data.currentIndex === -1 ? (
-          /* ── Title slide ── */
-          <div className="flex flex-col items-center gap-6">
-            <span
-              className="font-black tabular-nums"
-              style={{
-                color: hymnNumberColor,
-                fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${fontSizeMultiplier})`,
-                lineHeight: 1,
-                textShadow: '0 4px 48px rgba(0,0,0,0.9)',
-              }}
-            >
-              {data.hymnNumber}.
-            </span>
-            <p
-              className="font-bold uppercase tracking-widest"
-              style={{
-                color: contentTextColor,
-                fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${fontSizeMultiplier})`,
-                letterSpacing: '0.12em',
-                textShadow: '0 2px 32px rgba(0,0,0,0.9)',
-              }}
-            >
-              {data.hymnTitle}
-            </p>
-            {/* <p
-              className="text-white/30 uppercase tracking-widest"
-              style={{ fontSize: 'clamp(0.6rem, 1.2vw, 0.9rem)', letterSpacing: '0.3em', marginTop: '1rem' }}
-            >
-              Apasă → pentru a începe
-            </p> */}
-          </div>
-        ) : section ? (
-          /* ── Lyrics slide ── */
-          <div className="max-h-[72vh] overflow-y-auto px-3">
-            <p
-              className="leading-relaxed"
-              style={{
-                color: contentTextColor,
-                fontSize: dynamicFontSize,
-                fontWeight: 700,
-                lineHeight: 1.45,
-                textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
-                whiteSpace: 'pre-line',
-                overflowWrap: 'anywhere',
-              }}
-            >
-              {section.text}
-            </p>
-          </div>
-        ) : (
-          <p className="text-white/10 text-4xl font-thin">Se încarcă...</p>
-        )}
-      </div>
+          ) : (
+            <p className="text-white/10 text-4xl font-thin">Se încarcă...</p>
+          )}
+        </div>
+      )}
 
       {/* Slide position dots — bottom */}
-      {data && data.sections.length > 1 && data.currentIndex >= 0 && (
+      {!videoUrl && data && data.sections.length > 1 && data.currentIndex >= 0 && (
         <div
           className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 pb-8 z-10"
           style={{ opacity: visible ? 0.7 : 0, transition: 'opacity 0.4s' }}

@@ -4,9 +4,11 @@ import {
     ChevronRight,
     Download,
     Edit3,
+    Film,
     FolderOpen,
     Lock,
     Monitor,
+    Pause,
     Plus,
     Play,
     Search,
@@ -14,6 +16,7 @@ import {
     Square,
     Trash2,
     Upload,
+    Volume2,
     X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -218,7 +221,7 @@ function matchBibleBook(query: string, booksList: BibleBook[]): BibleBook | null
     return scored.length > 0 ? scored[0].book : null;
 }
 
-type Tab = 'imnuri' | 'biblia';
+type Tab = 'imnuri' | 'biblia' | 'video';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // App
@@ -255,6 +258,20 @@ function App() {
     // ── Projection state ──
     const [projecting, setProjecting] = useState(false);
     const [projSlideIndex, setProjSlideIndex] = useState(0);
+
+    // ── Update state ──
+    const [updateInfo, setUpdateInfo] = useState<{
+        available: boolean; version?: string; changelog?: string; downloadUrl?: string;
+    } | null>(null);
+
+    // ── Video state ──
+    const [videoStatus, setVideoStatus] = useState<{
+        currentTime: number; duration: number; paused: boolean;
+    } | null>(null);
+    const [videoName, setVideoName] = useState('');
+    const [videoLoading, setVideoLoading] = useState(false);
+    const [videoConverting, setVideoConverting] = useState(false);
+    const [videoVolume, setVideoVolume] = useState(1);
 
     // ── Modal state ──
     const [modalOpen, setModalOpen] = useState<string | null>(null);
@@ -320,6 +337,23 @@ function App() {
         });
     }, []);
 
+    // Check for updates on mount
+    useEffect(() => {
+        window.electron.update.check()
+            .then(info => { if (info.available) setUpdateInfo(info) })
+            .catch(() => { /* silently ignore */ });
+    }, []);
+
+    // Video status listener
+    useEffect(() => {
+        window.electron.video.onStatus((data) => setVideoStatus(data));
+        window.electron.video.onConverting((converting) => setVideoConverting(converting));
+        return () => {
+            window.electron.video.offStatus();
+            window.electron.video.offConverting();
+        };
+    }, []);
+
     useEffect(() => {
         loadCategories().then(cats => {
             const defaultCat = cats.find((c: Category) => c.name === 'Imnuri Creștine');
@@ -364,26 +398,19 @@ function App() {
         const cq = contentSearch.trim();
         if (cq.length >= 3) {
             const doSearch = async () => {
-                const norm = normalizeDiacritics(cq);
-                const results = await window.electron.bible.search(norm, selectedBookId ?? undefined);
-                let results2: BibleVerse[] = [];
-                if (norm !== cq.toLowerCase()) {
-                    results2 = await window.electron.bible.search(cq, selectedBookId ?? undefined);
-                }
-                const seen = new Set<string>();
-                const merged: BibleVerse[] = [];
-                for (const r of [...results, ...results2]) {
-                    const key = `${r.book_id}:${r.chapter}:${r.verse}`;
-                    if (!seen.has(key)) { seen.add(key); merged.push(r); }
-                }
-                setBibleSearchResults(merged);
+                const results = await window.electron.bible.search(
+                    cq,
+                    selectedBookId ?? undefined,
+                    selectedChapter ?? undefined,
+                );
+                setBibleSearchResults(results);
             };
             const t = setTimeout(doSearch, 300);
             return () => clearTimeout(t);
         } else {
             setBibleSearchResults(null);
         }
-    }, [contentSearch, tab, selectedBookId]);
+    }, [contentSearch, tab, selectedBookId, selectedChapter]);
 
     // ── Preview hymn ──
     const previewHymn = useCallback(async (id: number) => {
@@ -534,6 +561,39 @@ function App() {
             setProjSlideIndex(0);
         }
     }, [verses, selectedChapter, books, selectedBookId]);
+
+    // ── Video actions ──
+    const loadVideoFile = useCallback(async () => {
+        const filePath = await window.electron.video.pickFile();
+        if (!filePath) return;
+        setVideoLoading(true);
+        try {
+            const result = await window.electron.video.load(filePath);
+            if (result.error) {
+                console.error('Video load error:', result.error);
+                setVideoLoading(false);
+                return;
+            }
+            setVideoName(result.name ?? '');
+            setVideoStatus({ currentTime: 0, duration: 0, paused: true });
+        } catch (err) {
+            console.error('Video load failed:', err);
+        }
+        setVideoLoading(false);
+    }, []);
+
+    const videoPlay = useCallback(() => window.electron.video.play(), []);
+    const videoPause = useCallback(() => window.electron.video.pause(), []);
+    const videoStop = useCallback(() => {
+        window.electron.video.stop();
+        setVideoStatus(null);
+        setVideoName('');
+    }, []);
+    const videoSeek = useCallback((time: number) => window.electron.video.seek(time), []);
+    const videoSetVolume = useCallback((vol: number) => {
+        setVideoVolume(vol);
+        window.electron.video.volume(vol);
+    }, []);
 
     // ── Load Bible reference (Enter-triggered, BibleShow-style) ──
     const loadBibleReference = useCallback(async (): Promise<boolean> => {
@@ -836,31 +896,39 @@ function App() {
                     >
                         Biblia
                     </button>
+                    <button
+                        className={`tab-btn ${tab === 'video' ? 'active' : ''}`}
+                        onClick={() => switchTab('video')}
+                    >
+                        Video
+                    </button>
                 </div>
 
                 {/* Search boxes */}
                 <div className="search-area">
-                    <div className="search-box">
-                        <Search className="search-icon" />
-                        <input
-                            ref={refSearchRef}
-                            type="text"
-                            value={refSearch}
-                            onChange={e => setRefSearch(e.target.value)}
-                            onKeyDown={onSearchKeydown}
-                            placeholder={tab === 'imnuri' ? 'Nr. / Titlu imn...' : 'ex: deu 12 12, ps 23, gen 1:3'}
-                        />
-                    </div>
-                    <div className="search-box search-box-wide">
-                        <Search className="search-icon" />
-                        <input
-                            type="text"
-                            value={contentSearch}
-                            onChange={e => setContentSearch(e.target.value)}
-                            onKeyDown={onSearchKeydown}
-                            placeholder={tab === 'imnuri' ? 'Caută în text...' : 'Caută în Biblie...'}
-                        />
-                    </div>
+                    {tab !== 'video' && (<>
+                        <div className="search-box">
+                            <Search className="search-icon" />
+                            <input
+                                ref={refSearchRef}
+                                type="text"
+                                value={refSearch}
+                                onChange={e => setRefSearch(e.target.value)}
+                                onKeyDown={onSearchKeydown}
+                                placeholder={tab === 'imnuri' ? 'Nr. / Titlu imn...' : 'ex: deu 12 12, ps 23, gen 1:3'}
+                            />
+                        </div>
+                        <div className="search-box search-box-wide">
+                            <Search className="search-icon" />
+                            <input
+                                type="text"
+                                value={contentSearch}
+                                onChange={e => setContentSearch(e.target.value)}
+                                onKeyDown={onSearchKeydown}
+                                placeholder={tab === 'imnuri' ? 'Caută în text...' : 'Caută în Biblie...'}
+                            />
+                        </div>
+                    </>)}
                 </div>
 
                 {/* Add hymn button (only for Imnuri Speciale) */}
@@ -907,12 +975,36 @@ function App() {
                             activeCategoryId={activeCategoryId}
                             onSelect={setActiveCategoryId}
                         />
-                    ) : (
+                    ) : tab === 'biblia' ? (
                         <SidebarBibleBooks
                             books={books}
                             selectedBookId={selectedBookId}
                             onSelect={selectBook}
                         />
+                    ) : (
+                        <div className="sidebar-title">Video</div>
+                    )}
+                    {/* Update banner */}
+                    {updateInfo?.available && (
+                        <div className="update-banner">
+                            <div className="update-banner-title">
+                                <Download className="icon-sm" />
+                                Versiune nouă: {updateInfo.version}
+                            </div>
+                            {updateInfo.changelog && (
+                                <div className="update-banner-changelog">
+                                    {updateInfo.changelog.length > 200
+                                        ? updateInfo.changelog.slice(0, 200) + '…'
+                                        : updateInfo.changelog}
+                                </div>
+                            )}
+                            <button
+                                className="update-banner-btn"
+                                onClick={() => updateInfo.downloadUrl && window.electron.update.openDownload(updateInfo.downloadUrl)}
+                            >
+                                Descarcă
+                            </button>
+                        </div>
                     )}
                 </aside>
 
@@ -931,10 +1023,32 @@ function App() {
                             }}
                             listRef={hymnListRef}
                         />
+                    ) : tab === 'video' ? (
+                        <VideoController
+                            videoName={videoName}
+                            videoStatus={videoStatus}
+                            videoVolume={videoVolume}
+                            videoLoading={videoLoading}
+                            videoConverting={videoConverting}
+                            projecting={projecting}
+                            onPickFile={loadVideoFile}
+                            onPlay={videoPlay}
+                            onPause={videoPause}
+                            onStop={videoStop}
+                            onSeek={videoSeek}
+                            onVolume={videoSetVolume}
+                        />
                     ) : bibleSearchResults ? (
                         <BibleSearchResultsList
                             results={bibleSearchResults}
                             selectedIdx={selectedVerseIdx}
+                            searchScope={
+                                selectedBookName
+                                    ? selectedChapter
+                                        ? `${selectedBookName} ${selectedChapter}`
+                                        : selectedBookName
+                                    : undefined
+                            }
                             onSelect={(idx) => {
                                 setSelectedVerseIdx(idx);
                                 const verse = bibleSearchResults[idx];
@@ -1285,15 +1399,22 @@ function BibleContentArea({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function BibleSearchResultsList({
-    results, selectedIdx, onSelect,
+    results, selectedIdx, onSelect, searchScope,
 }: {
     results: BibleVerse[];
     selectedIdx: number;
     onSelect: (idx: number) => void;
+    searchScope?: string;
 }) {
     return (
         <div className="content-inner">
-            <div className="content-status">{results.length} rezultate</div>
+            <div className="content-status">
+                {results.length} rezultate
+                {searchScope
+                    ? <span className="search-scope-badge">în {searchScope}</span>
+                    : <span className="search-scope-badge">în toată Biblia</span>
+                }
+            </div>
             {results.length === 0 ? (
                 <div className="empty-state"><p>Niciun rezultat</p></div>
             ) : (
@@ -1310,6 +1431,186 @@ function BibleSearchResultsList({
                             <span className="verse-text">{v.text}</span>
                         </div>
                     ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Video Controller
+// ═════════════════════════════════════════════════════════════════════════════
+
+function formatTime(seconds: number): string {
+    if (!seconds || !isFinite(seconds)) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function VideoController({
+    videoName, videoStatus, videoVolume, videoLoading, videoConverting,
+    projecting,
+    onPickFile, onPlay, onPause, onStop, onSeek, onVolume,
+}: {
+    videoName: string;
+    videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
+    videoVolume: number;
+    videoLoading: boolean;
+    videoConverting: boolean;
+    projecting: boolean;
+    onPickFile: () => void;
+    onPlay: () => void;
+    onPause: () => void;
+    onStop: () => void;
+    onSeek: (time: number) => void;
+    onVolume: (vol: number) => void;
+}) {
+    const isActive = !!videoStatus;
+    const isPaused = videoStatus?.paused ?? true;
+    const currentTime = videoStatus?.currentTime ?? 0;
+    const duration = videoStatus?.duration ?? 0;
+
+    // YouTube state
+    const [ytUrl, setYtUrl] = useState('');
+    const [ytLoading, setYtLoading] = useState(false);
+    const [ytError, setYtError] = useState('');
+
+    const loadYouTube = async () => {
+        if (!ytUrl.trim()) return;
+        setYtLoading(true);
+        setYtError('');
+        try {
+            const result = await window.electron.ytdlp.getStreamUrl(ytUrl.trim());
+            if (result.error || !result.url) {
+                setYtError(result.error ?? 'Nu s-a putut obține stream-ul.');
+                setYtLoading(false);
+                return;
+            }
+            await window.electron.video.loadUrl(result.url);
+        } catch (err: any) {
+            setYtError(err.message ?? 'Eroare necunoscută');
+        }
+        setYtLoading(false);
+    };
+
+    return (
+        <div className="content-inner video-controller">
+            {/* Drop zone / file picker */}
+            {!isActive && !videoConverting && (
+                <div className="video-dropzone" onClick={onPickFile}>
+                    <Film className="icon-xl opacity-30" />
+                    <p className="video-dropzone-title">
+                        {videoLoading ? 'Se încarcă...' : 'Alege un fișier video'}
+                    </p>
+                    <p className="video-dropzone-sub">
+                        MP4, WebM, MOV, MKV, AVI — click sau drag & drop
+                    </p>
+                    {!projecting && (
+                        <p className="video-dropzone-hint">
+                            Fereastra de proiecție trebuie deschisă pentru redare
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* YouTube section */}
+            {!isActive && !videoConverting && (
+                <div className="video-youtube-section">
+                    <div className="video-youtube-header">
+                        <span>YouTube</span>
+                    </div>
+                    <div className="video-youtube-input-row">
+                        <input
+                            type="text"
+                            className="video-youtube-input"
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            value={ytUrl}
+                            onChange={(e) => setYtUrl(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') loadYouTube(); }}
+                        />
+                        <button
+                            className="video-youtube-btn"
+                            onClick={loadYouTube}
+                            disabled={ytLoading || !ytUrl.trim()}
+                        >
+                            {ytLoading ? '...' : 'Redă'}
+                        </button>
+                    </div>
+                    {ytError && <p className="video-youtube-error">{ytError}</p>}
+                    <p className="video-youtube-disclaimer">
+                        Funcția YouTube depinde de yt-dlp și poate să nu funcționeze temporar dacă YouTube
+                        își schimbă sistemul. Actualizează yt-dlp din Setări sau încearcă mai târziu.
+                    </p>
+                </div>
+            )}
+
+            {/* Converting indicator */}
+            {videoConverting && (
+                <div className="video-dropzone">
+                    <div className="video-converting-spinner" />
+                    <p className="video-dropzone-title">Se convertește video-ul...</p>
+                    <p className="video-dropzone-sub">Formatul nu e suportat nativ. Se convertește în MP4.</p>
+                </div>
+            )}
+
+            {/* Player controls */}
+            {isActive && !videoConverting && (
+                <div className="video-player-controls">
+                    <div className="video-player-name">
+                        <Film className="icon-sm opacity-50" />
+                        <span>{videoName}</span>
+                    </div>
+
+                    {/* Seekbar */}
+                    <div className="video-seekbar-container">
+                        <span className="video-time">{formatTime(currentTime)}</span>
+                        <input
+                            type="range"
+                            className="video-seekbar"
+                            min={0}
+                            max={duration || 1}
+                            step={0.1}
+                            value={currentTime}
+                            onChange={(e) => onSeek(Number(e.target.value))}
+                        />
+                        <span className="video-time">{formatTime(duration)}</span>
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="video-buttons">
+                        <button
+                            className="video-btn video-btn-main"
+                            onClick={isPaused ? onPlay : onPause}
+                            title={isPaused ? 'Redă' : 'Pauză'}
+                        >
+                            {isPaused
+                                ? <Play className="icon-sm" />
+                                : <Pause className="icon-sm" />
+                            }
+                        </button>
+                        <button
+                            className="video-btn"
+                            onClick={onStop}
+                            title="Oprește"
+                        >
+                            <Square className="icon-sm" />
+                        </button>
+
+                        {/* Volume */}
+                        <div className="video-volume-group">
+                            <Volume2 className="icon-sm opacity-50" />
+                            <input
+                                type="range"
+                                className="video-volume-slider"
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                value={videoVolume}
+                                onChange={(e) => onVolume(Number(e.target.value))}
+                            />
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
@@ -1427,7 +1728,7 @@ function PreviewPanel({
                     </>
                 ) : (
                     <>
-                        <button className="btn-project" onClick={() => onStartProjection()}>
+                        <button className="btn-project" onClick={() => onStartProjection(projSlideIndex)}>
                             <Play className="icon-xs" /> Proiectează
                         </button>
                         <button className="btn-clear" onClick={onClearPreview}>
@@ -1911,6 +2212,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                     onChange={e => saveSettings({ projectionFontSize: parseFloat(e.target.value) })}
                                 />
                             </div>
+                            <AudioOutputPicker settings={settings} onSave={saveSettings} />
                         </div>
                     )}
 
@@ -2022,6 +2324,8 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                     </a>
                                 </div>
                                 <div className="border-t border-white/10 w-full my-2" />
+                                <YtDlpSettings />
+                                <div className="border-t border-white/10 w-full my-2" />
                                 <p className="text-white/30 text-xs">
                                     Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
                                 </p>
@@ -2033,6 +2337,135 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                     )}
 
                 </div>
+            </div>
+        </div>
+    );
+}
+
+function YtDlpSettings() {
+    const [installed, setInstalled] = useState<boolean | null>(null);
+    const [version, setVersion] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [status, setStatus] = useState('');
+
+    useEffect(() => {
+        (async () => {
+            const inst = await window.electron.ytdlp.isInstalled();
+            setInstalled(inst);
+            if (inst) {
+                const v = await window.electron.ytdlp.version();
+                setVersion(v);
+            }
+        })();
+    }, []);
+
+    const install = async () => {
+        setLoading(true);
+        setStatus('Se descarcă yt-dlp...');
+        try {
+            await window.electron.ytdlp.install();
+            setInstalled(true);
+            const v = await window.electron.ytdlp.version();
+            setVersion(v);
+            setStatus('yt-dlp instalat cu succes!');
+        } catch (err: any) {
+            setStatus('Eroare: ' + (err.message ?? 'necunoscută'));
+        }
+        setLoading(false);
+    };
+
+    const update = async () => {
+        setLoading(true);
+        setStatus('Se actualizează yt-dlp...');
+        try {
+            await window.electron.ytdlp.update();
+            const v = await window.electron.ytdlp.version();
+            setVersion(v);
+            setStatus('yt-dlp actualizat!');
+        } catch (err: any) {
+            setStatus('Eroare: ' + (err.message ?? 'necunoscută'));
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="text-sm text-white/60 leading-relaxed w-full">
+            <p className="font-semibold text-white/80 mb-2">yt-dlp (YouTube)</p>
+            {installed === null && <p className="text-white/40 text-xs">Se verifică...</p>}
+            {installed === false && (
+                <div className="flex flex-col items-center gap-2">
+                    <p className="text-white/40 text-xs">yt-dlp nu este instalat</p>
+                    <button
+                        className="btn-sm"
+                        onClick={install}
+                        disabled={loading}
+                    >
+                        {loading ? 'Se instalează...' : 'Instalează yt-dlp'}
+                    </button>
+                </div>
+            )}
+            {installed === true && (
+                <div className="flex flex-col items-center gap-2">
+                    <p className="text-white/40 text-xs">Versiune: {version || '...'}</p>
+                    <button
+                        className="btn-sm"
+                        onClick={update}
+                        disabled={loading}
+                    >
+                        {loading ? 'Se actualizează...' : 'Actualizează yt-dlp'}
+                    </button>
+                </div>
+            )}
+            {status && <p className="text-white/50 text-xs mt-1">{status}</p>}
+        </div>
+    );
+}
+
+function AudioOutputPicker({ settings, onSave }: {
+    settings: AppSettings;
+    onSave: (p: Partial<AppSettings>) => void;
+}) {
+    const [devices, setDevices] = useState<{ deviceId: string; label: string }[]>([]);
+    const [loaded, setLoaded] = useState(false);
+
+    const loadDevices = async () => {
+        try {
+            const allDevices = await navigator.mediaDevices.enumerateDevices();
+            const outputs = allDevices
+                .filter(d => d.kind === 'audiooutput')
+                .map(d => ({ deviceId: d.deviceId, label: d.label || `Dispozitiv ${d.deviceId.slice(0, 8)}` }));
+            setDevices(outputs);
+            setLoaded(true);
+        } catch {
+            setDevices([]);
+            setLoaded(true);
+        }
+    };
+
+    return (
+        <div className="field">
+            <label>Ieșire Audio (Video)</label>
+            <div className="display-picker">
+                <button className="btn-sm" onClick={loadDevices}>Detectează dispozitive</button>
+                {loaded && (
+                    <div className="display-list">
+                        <button
+                            className={`display-btn ${!settings.audioOutputDeviceId ? 'active' : ''}`}
+                            onClick={() => onSave({ audioOutputDeviceId: '' })}
+                        >
+                            Implicit (sistem)
+                        </button>
+                        {devices.map(d => (
+                            <button
+                                key={d.deviceId}
+                                className={`display-btn ${settings.audioOutputDeviceId === d.deviceId ? 'active' : ''}`}
+                                onClick={() => onSave({ audioOutputDeviceId: d.deviceId })}
+                            >
+                                {d.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

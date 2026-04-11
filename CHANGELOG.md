@@ -1,5 +1,24 @@
 # Changelog — AdventShow
 
+## v1.1.4 (12 Aprilie 2026)
+
+### Funcționalități noi
+- **Redare video pe proiecție** — suport pentru fișiere MP4, WebM, MOV, MKV, AVI cu conversie automată în MP4 pentru formatele nesuportate nativ
+- **Suport YouTube** — lipește un link YouTube direct în aplicație și se redă pe ecranul de proiecție (necesită yt-dlp, se instalează din Setări)
+- **Verificare actualizări** — la pornire, aplicația verifică dacă există o versiune mai nouă pe GitHub și afișează un banner cu buton de descărcare
+- **Selectare ieșire audio** — alege dispozitivul audio pentru redarea video din Setări
+
+### Îmbunătățiri
+- **Căutare Biblie îmbunătățită** — caută corect și fără diacritice (ex: „har" găsește „har" și „hăr")
+- **Indicator strofă activă** — strofa care se proiectează este evidențiată vizual cu bară albastră și badge „● LIVE"
+- **Pornire proiecție din strofă** — butonul „Proiectează" pornește de la strofa selectată, nu de la prima
+- **Căutare în capitol** — căutarea de text funcționează și în cadrul unui capitol selectat
+
+### Corecții
+- Imnul 001 afișa o singură strofă — restaurate cele 4 strofe originale
+
+---
+
 ## v1.1.3 (11 Aprilie 2026)
 
 ### Curățenie

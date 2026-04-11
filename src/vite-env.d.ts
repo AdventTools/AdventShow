@@ -105,6 +105,7 @@ export interface AppSettings {
   contentTextColor?: string; // hex, e.g. '#ffffff'
   adminPasswordHash?: string; // bcrypt-like hash or empty
   projectionFontSize?: number; // font size multiplier, default 1.2
+  audioOutputDeviceId?: string; // audio output device id for video playback
   windowBounds?: { x: number; y: number; width: number; height: number };
 }
 
@@ -144,7 +145,7 @@ export interface IElectronAPI {
     getBooks: () => Promise<BibleBook[]>;
     getChapters: (bookId: number) => Promise<number[]>;
     getVerses: (bookId: number, chapter: number) => Promise<BibleVerse[]>;
-    search: (query: string, bookId?: number) => Promise<BibleVerse[]>;
+    search: (query: string, bookId?: number, chapter?: number) => Promise<BibleVerse[]>;
     getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) => Promise<BibleVerse[]>;
     hasData: () => Promise<boolean>;
   };
@@ -175,6 +176,46 @@ export interface IElectronAPI {
     offControllerSync: () => void;
     onClosed: (cb: () => void) => void;
     offClosed: () => void;
+  };
+  update: {
+    check: () => Promise<{ available: boolean; version?: string; changelog?: string; downloadUrl?: string }>;
+    openDownload: (url: string) => Promise<void>;
+  };
+  video: {
+    pickFile: () => Promise<string | undefined>;
+    load: (filePath: string) => Promise<{ url?: string; name?: string; converted?: boolean; error?: string }>;
+    play: () => Promise<void>;
+    pause: () => Promise<void>;
+    stop: () => Promise<void>;
+    seek: (time: number) => Promise<void>;
+    volume: (vol: number) => Promise<void>;
+    loadUrl: (url: string) => Promise<{ url: string; name: string }>;
+    onStatus: (cb: (data: { currentTime: number; duration: number; paused: boolean }) => void) => void;
+    offStatus: () => void;
+    onLoad: (cb: (url: string, name: string) => void) => void;
+    offLoad: () => void;
+    onPlay: (cb: () => void) => void;
+    offPlay: () => void;
+    onPause: (cb: () => void) => void;
+    offPause: () => void;
+    onStop: (cb: () => void) => void;
+    offStop: () => void;
+    onSeek: (cb: (time: number) => void) => void;
+    offSeek: () => void;
+    onVolume: (cb: (vol: number) => void) => void;
+    offVolume: () => void;
+    onConverting: (cb: (converting: boolean) => void) => void;
+    offConverting: () => void;
+    onConvertProgress: (cb: (line: string) => void) => void;
+    offConvertProgress: () => void;
+    sendStatus: (data: { currentTime: number; duration: number; paused: boolean }) => void;
+  };
+  ytdlp: {
+    isInstalled: () => Promise<boolean>;
+    install: () => Promise<{ success: boolean; error?: string }>;
+    version: () => Promise<string>;
+    update: () => Promise<{ success: boolean; version?: string; error?: string }>;
+    getStreamUrl: (videoUrl: string) => Promise<{ url: string; error?: string }>;
   };
 }
 
