@@ -521,20 +521,31 @@ function App() {
     }, [projecting]);
 
     // ── Preview bible search result ──
+    // Loads the full chapter into preview and navigates to the clicked verse
     const previewBibleResult = useCallback(async (verse: BibleVerse) => {
         if (!verse.book_id || !verse.chapter) return;
         const book = books.find(b => b.id === verse.book_id);
-        // Show ONLY the clicked verse in preview
-        const sec = {
-            text: verse.text,
+        // Load all verses of the chapter so user can navigate with arrows
+        const allVrs = await window.electron.bible.getVerses(verse.book_id, verse.chapter);
+        const secs = allVrs.map((v: BibleVerse) => ({
+            text: v.text,
             type: 'verse',
-            label: `v. ${verse.verse}`,
-        };
+            label: `v. ${v.verse}`,
+        }));
+        const idx = allVrs.findIndex((v: BibleVerse) => v.verse === verse.verse);
+        const safeIdx = Math.max(0, idx);
         setPreviewType('bible');
-        setPreviewSections([sec]);
-        setPreviewTitle(`${book?.name ?? verse.book_name ?? ''} ${verse.chapter}:${verse.verse}`);
+        setPreviewSections(secs);
+        setPreviewTitle(`${book?.name ?? verse.book_name ?? ''} ${verse.chapter}`);
         setPreviewNumber(book?.abbreviation ?? verse.abbreviation ?? '');
-        setProjSlideIndex(0);
+        setProjSlideIndex(safeIdx);
+        setSelectedVerseIdx(safeIdx);
+        // Also sync sidebar to this chapter
+        setSelectedBookId(verse.book_id);
+        setSelectedBookName(book?.name ?? verse.book_name ?? '');
+        setSelectedChapter(verse.chapter);
+        skipAutoPreviewRef.current = true;
+        setVerses(allVrs);
     }, [books]);
 
     // ── Clear preview ──
@@ -634,7 +645,7 @@ function App() {
         setSelectedVerseIdx(0);
     }, [selectedBookId]);
 
-    // When a chapter is selected and verses load, show the first verse in preview
+    // When a chapter is selected and verses load, show ALL verses in preview
     useEffect(() => {
         if (skipAutoPreviewRef.current) {
             skipAutoPreviewRef.current = false;
@@ -642,14 +653,14 @@ function App() {
         }
         if (verses.length > 0 && selectedChapter) {
             const book = books.find(b => b.id === selectedBookId);
-            const v = verses[0];
-            setPreviewType('bible');
-            setPreviewSections([{
+            const secs = verses.map((v: BibleVerse) => ({
                 text: v.text,
                 type: 'verse',
                 label: `v. ${v.verse}`,
-            }]);
-            setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
+            }));
+            setPreviewType('bible');
+            setPreviewSections(secs);
+            setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}`);
             setPreviewNumber(book?.abbreviation ?? '');
             setProjSlideIndex(0);
             setSelectedVerseIdx(0);
@@ -783,22 +794,22 @@ function App() {
         setVerses(vrs);
 
         if (ref.verse) {
-            // Full reference (book + chapter + verse) → show ONLY that verse in preview
+            // Full reference (book + chapter + verse) → load all verses, navigate to specific one
             const verseIdx = vrs.findIndex((v: BibleVerse) => v.verse === ref.verse);
             const idx = Math.max(0, verseIdx);
-            const v = vrs[idx];
+            const secs = vrs.map((v: BibleVerse) => ({ text: v.text, type: 'verse', label: `v. ${v.verse}` }));
             setPreviewType('bible');
-            setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
-            setPreviewTitle(`${book.name} ${ref.chapter}:${v.verse}`);
+            setPreviewSections(secs);
+            setPreviewTitle(`${book.name} ${ref.chapter}`);
             setPreviewNumber(book.abbreviation);
-            setProjSlideIndex(0);
+            setProjSlideIndex(idx);
             setSelectedVerseIdx(idx);
         } else {
-            // Chapter only → show first verse in preview
-            const v = vrs[0];
+            // Chapter only → load all verses, start at first
+            const secs = vrs.map((v: BibleVerse) => ({ text: v.text, type: 'verse', label: `v. ${v.verse}` }));
             setPreviewType('bible');
-            setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
-            setPreviewTitle(`${book.name} ${ref.chapter}:${v.verse}`);
+            setPreviewSections(secs);
+            setPreviewTitle(`${book.name} ${ref.chapter}`);
             setPreviewNumber(book.abbreviation);
             setProjSlideIndex(0);
             setSelectedVerseIdx(0);
@@ -922,15 +933,7 @@ function App() {
                         ? Math.min(selectedVerseIdx + 1, verses.length - 1)
                         : Math.max(selectedVerseIdx - 1, 0);
                     setSelectedVerseIdx(newIdx);
-                    const v = verses[newIdx];
-                    if (v) {
-                        const book = books.find(b => b.id === selectedBookId);
-                        setPreviewType('bible');
-                        setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
-                        setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
-                        setPreviewNumber(book?.abbreviation ?? '');
-                        setProjSlideIndex(0);
-                    }
+                    setProjSlideIndex(newIdx);
                 }
                 return;
             }
@@ -1042,15 +1045,7 @@ function App() {
             } else if (tab === 'biblia' && verses.length > 0) {
                 const newIdx = Math.min(selectedVerseIdx + 1, verses.length - 1);
                 setSelectedVerseIdx(newIdx);
-                const v = verses[newIdx];
-                if (v) {
-                    const book = books.find(b => b.id === selectedBookId);
-                    setPreviewType('bible');
-                    setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
-                    setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
-                    setPreviewNumber(book?.abbreviation ?? '');
-                    setProjSlideIndex(0);
-                }
+                setProjSlideIndex(newIdx);
             }
             return;
         }
@@ -1066,15 +1061,7 @@ function App() {
             } else if (tab === 'biblia' && verses.length > 0) {
                 const newIdx = Math.max(selectedVerseIdx - 1, 0);
                 setSelectedVerseIdx(newIdx);
-                const v = verses[newIdx];
-                if (v) {
-                    const book = books.find(b => b.id === selectedBookId);
-                    setPreviewType('bible');
-                    setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
-                    setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
-                    setPreviewNumber(book?.abbreviation ?? '');
-                    setProjSlideIndex(0);
-                }
+                setProjSlideIndex(newIdx);
             }
             return;
         }
@@ -1350,15 +1337,7 @@ function App() {
                             onSelectChapter={selectChapter}
                             onSelectVerse={(idx) => {
                                 setSelectedVerseIdx(idx);
-                                const v = verses[idx];
-                                if (v) {
-                                    const book = books.find(b => b.id === selectedBookId);
-                                    setPreviewType('bible');
-                                    setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
-                                    setPreviewTitle(`${book?.name ?? selectedBookName} ${selectedChapter}:${v.verse}`);
-                                    setPreviewNumber(book?.abbreviation ?? '');
-                                    setProjSlideIndex(0);
-                                }
+                                setProjSlideIndex(idx);
                             }}
                             onBackToChapters={() => { setSelectedChapter(null); setVerses([]); }}
                         />
