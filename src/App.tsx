@@ -388,9 +388,6 @@ function App() {
             .then(info => { if (info.available) setUpdateInfo(info) })
             .catch(() => { /* silently ignore */ });
 
-        window.electron.update.onAvailable((data) => {
-            setUpdateInfo({ available: true, version: data.version });
-        });
         window.electron.update.onProgress((data) => {
             setUpdateProgress(data.percent);
         });
@@ -404,7 +401,6 @@ function App() {
         });
 
         return () => {
-            window.electron.update.offAvailable();
             window.electron.update.offProgress();
             window.electron.update.offDownloaded();
             window.electron.update.offError();
@@ -3056,9 +3052,9 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                         <div className="settings-content">
                             <div className="flex flex-col items-center gap-4 py-6 text-center">
                                 <h2 className="text-2xl font-black text-primary tracking-wide">AdventShow</h2>
-                                <p className="text-white/50 text-sm">Versiunea {import.meta.env.VITE_APP_VERSION ?? '1.1.0'}</p>
+                                <p className="text-white/50 text-sm">Versiunea {import.meta.env.VITE_APP_VERSION ?? '1.0.0'}</p>
                                 <p className="text-white/70 text-sm leading-relaxed max-w-md">
-                                    Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici adventiste.
+                                    Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici.
                                 </p>
                                 <div className="border-t border-white/10 w-full my-2" />
                                 <div className="text-sm text-white/60 leading-relaxed max-w-md">
@@ -3069,26 +3065,17 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                         <li>Proiecție fullscreen pe ecran secundar cu fundal personalizabil</li>
                                         <li>Redare video (fișiere locale + YouTube) pe proiecție</li>
                                         <li>Import/Export imnuri, editor integrat, căutare inteligentă</li>
-                                        <li>Verificare automată de actualizări</li>
+                                        <li>Actualizări automate — descarcă doar codul modificat (delta update)</li>
                                     </ul>
                                 </div>
                                 <div className="border-t border-white/10 w-full my-2" />
                                 <div className="text-sm text-white/60 leading-relaxed">
                                     <p className="font-semibold text-white/80 mb-2">Dezvoltatori</p>
-                                    <div className="flex flex-col gap-2">
-                                        <div>
-                                            <p className="text-white/80 font-medium">Ovidius Zanfir</p>
-                                            <p className="text-white/40 text-xs">Autor original — concept, interfață, baza de date cu imnuri</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-white/80 font-medium">Samy Balasa</p>
-                                            <p className="text-white/40 text-xs">Redare video, YouTube, auto-update, Biblia Cornilescu, funcționalități noi</p>
-                                        </div>
-                                    </div>
+                                    <p className="text-white/80">Ovidius Zanfir</p>
+                                    <p className="text-white/80">Samy Balasa</p>
                                 </div>
                                 <div className="border-t border-white/10 w-full my-2" />
                                 <div className="text-sm text-white/60 leading-relaxed">
-                                    <p className="font-semibold text-white/80 mb-1">Organizație</p>
                                     <a
                                         href="https://github.com/AdventTools"
                                         target="_blank"
@@ -3098,25 +3085,11 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                         github.com/AdventTools
                                     </a>
                                 </div>
-                                <div className="text-sm text-white/60 leading-relaxed">
-                                    <p className="font-semibold text-white/80 mb-1">Cod sursă</p>
-                                    <a
-                                        href="https://github.com/AdventTools/AdventShow"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-primary hover:underline"
-                                    >
-                                        github.com/AdventTools/AdventShow
-                                    </a>
-                                </div>
                                 <div className="border-t border-white/10 w-full my-2" />
                                 <YtDlpSettings />
                                 <div className="border-t border-white/10 w-full my-2" />
                                 <p className="text-white/30 text-xs">
                                     Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
-                                </p>
-                                <p className="text-white/20 text-[10px]">
-                                    Electron · React · TypeScript · TailwindCSS · DaisyUI
                                 </p>
                             </div>
                         </div>

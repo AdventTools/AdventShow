@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import { createHash } from 'node:crypto'
 import { execFile, execSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
+import https from 'node:https'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -125,99 +126,299 @@ function writeSettings(settings: AppSettings) {
   fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
 }
 
-// ── Auto-Updater (electron-updater) ───────────────────────────────────────────
+// ── Delta Update System ───────────────────────────────────────────────────────
+// Downloads only app.asar (~2MB) instead of the full Electron bundle (~150MB).
+// Falls back to full update only when the Electron version changes.
+// Works on all platforms without code signing issues because the Electron
+// framework stays untouched — only the app code is replaced.
 
-autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = process.platform !== 'darwin' // macOS uses manual install
+const GITHUB_OWNER = 'AdventTools'
+const GITHUB_REPO = 'AdventShow'
+const ELECTRON_VERSION = process.versions.electron // e.g. "30.5.1"
 
-let cachedUpdateZipPath: string | null = null
+interface UpdateManifest {
+  version: string
+  electronVersion: string
+  asarSha256: string
+  asarSize: number
+}
 
-function setupAutoUpdater() {
-  autoUpdater.on('update-available', (info) => {
-    // Skip if the "update" is actually the same version we're running
-    if (info.version === app.getVersion()) {
-      debugLog('[AutoUpdater] Skipping update-available for same version:', info.version)
-      return
-    }
-    debugLog('[AutoUpdater] Update available:', info.version)
-    win?.webContents.send('update:available', {
-      version: info.version,
-      releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
+interface UpdateState {
+  manifest: UpdateManifest | null
+  downloadedAsarPath: string | null
+  isDelta: boolean
+}
+
+const updateState: UpdateState = {
+  manifest: null,
+  downloadedAsarPath: null,
+  isDelta: false,
+}
+
+// Fetch JSON from GitHub API or raw URL
+function fetchJson<T>(url: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, {
+      headers: { 'User-Agent': 'AdventShow-Updater', Accept: 'application/json' },
+    }, (res) => {
+      // Follow redirects
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        fetchJson<T>(res.headers.location).then(resolve, reject)
+        return
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`HTTP ${res.statusCode}`))
+        return
+      }
+      let data = ''
+      res.on('data', (chunk) => { data += chunk })
+      res.on('end', () => {
+        try { resolve(JSON.parse(data) as T) }
+        catch (e) { reject(e) }
+      })
     })
-  })
-
-  autoUpdater.on('download-progress', (progress) => {
-    win?.webContents.send('update:download-progress', {
-      percent: Math.round(progress.percent),
-      bytesPerSecond: progress.bytesPerSecond,
-      transferred: progress.transferred,
-      total: progress.total,
-    })
-  })
-
-  autoUpdater.on('update-downloaded', (info) => {
-    // Store the downloaded file path for manual macOS installation
-    const downloaded = (info as { downloadedFile?: string }).downloadedFile
-    if (downloaded) cachedUpdateZipPath = downloaded
-    debugLog('[AutoUpdater] Update downloaded:', info.version, 'path:', cachedUpdateZipPath)
-    win?.webContents.send('update:downloaded', { version: info.version })
-  })
-
-  autoUpdater.on('error', (err) => {
-    debugLog('[AutoUpdater] Error:', err.message)
-    win?.webContents.send('update:error', err.message)
+    request.on('error', reject)
+    request.setTimeout(15000, () => { request.destroy(); reject(new Error('Timeout')) })
   })
 }
 
-// ── Manual macOS update (bypasses Squirrel/ShipIt code signature validation) ──
+// Download a file from URL with progress reporting
+function downloadFile(url: string, dest: string, onProgress?: (percent: number, transferred: number, total: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, {
+      headers: { 'User-Agent': 'AdventShow-Updater', Accept: 'application/octet-stream' },
+    }, (res) => {
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        downloadFile(res.headers.location, dest, onProgress).then(resolve, reject)
+        return
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`HTTP ${res.statusCode}`))
+        return
+      }
+      const total = parseInt(res.headers['content-length'] || '0', 10)
+      let transferred = 0
+      const file = fs.createWriteStream(dest)
+      res.on('data', (chunk: Buffer) => {
+        transferred += chunk.length
+        if (onProgress && total > 0) {
+          onProgress(Math.round((transferred / total) * 100), transferred, total)
+        }
+      })
+      res.pipe(file)
+      file.on('finish', () => { file.close(); resolve() })
+      file.on('error', (err) => { fs.unlinkSync(dest); reject(err) })
+    })
+    request.on('error', reject)
+    request.setTimeout(120000, () => { request.destroy(); reject(new Error('Download timeout')) })
+  })
+}
 
-async function installMacOSUpdate(): Promise<void> {
-  if (!cachedUpdateZipPath || !fs.existsSync(cachedUpdateZipPath)) {
-    throw new Error('Update zip not found')
+// Check for updates by fetching the update manifest from the latest release
+async function checkForUpdate(): Promise<{ available: boolean; version?: string; isDelta?: boolean }> {
+  try {
+    const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+    const release = await fetchJson<{ tag_name: string; assets: { name: string; browser_download_url: string }[] }>(releaseUrl)
+
+    const manifestAsset = release.assets.find(a => a.name === 'update-manifest.json')
+    if (!manifestAsset) {
+      debugLog('[DeltaUpdate] No update-manifest.json found in latest release')
+      return { available: false }
+    }
+
+    const manifest = await fetchJson<UpdateManifest>(manifestAsset.browser_download_url)
+    const current = app.getVersion()
+
+    if (manifest.version === current) {
+      debugLog(`[DeltaUpdate] Already up to date: ${current}`)
+      return { available: false }
+    }
+
+    // Can we do a delta update? Only if Electron version matches
+    const isDelta = manifest.electronVersion === ELECTRON_VERSION
+    updateState.manifest = manifest
+    updateState.isDelta = isDelta
+
+    debugLog(`[DeltaUpdate] Update available: ${current} → ${manifest.version} (delta: ${isDelta})`)
+    return { available: true, version: manifest.version, isDelta }
+  } catch (err: any) {
+    debugLog('[DeltaUpdate] Check failed:', err.message)
+    return { available: false }
   }
+}
+
+// Download the update (either delta asar or full zip)
+async function downloadUpdate(): Promise<void> {
+  if (!updateState.manifest) throw new Error('No update available')
+
+  const { version } = updateState.manifest
+  const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+  const release = await fetchJson<{ assets: { name: string; browser_download_url: string }[] }>(releaseUrl)
+
+  const assetName = updateState.isDelta ? 'app-update.asar' : getFullUpdateAssetName()
+  const asset = release.assets.find(a => a.name === assetName)
+  if (!asset) throw new Error(`Asset ${assetName} not found in release`)
 
   const tempDir = path.join(app.getPath('temp'), `adventshow-update-${Date.now()}`)
   fs.mkdirSync(tempDir, { recursive: true })
+  const destFile = path.join(tempDir, assetName)
 
-  debugLog('[MacUpdate] Extracting', cachedUpdateZipPath, 'to', tempDir)
+  debugLog(`[DeltaUpdate] Downloading ${assetName} (${updateState.isDelta ? 'delta' : 'full'})...`)
 
-  // Extract the zip using ditto (macOS built-in, preserves .app bundles correctly)
-  execSync(`ditto -xk "${cachedUpdateZipPath}" "${tempDir}"`, { encoding: 'utf8' })
+  await downloadFile(asset.browser_download_url, destFile, (percent, transferred, total) => {
+    win?.webContents.send('update:download-progress', {
+      percent,
+      bytesPerSecond: 0,
+      transferred,
+      total,
+    })
+  })
 
-  // Find the .app bundle in the extracted directory
-  const items = fs.readdirSync(tempDir)
-  const appBundle = items.find(i => i.endsWith('.app'))
-  if (!appBundle) throw new Error('No .app bundle found in update zip')
+  // Verify SHA256 for delta updates
+  if (updateState.isDelta && updateState.manifest.asarSha256) {
+    const hash = createHash('sha256')
+    hash.update(fs.readFileSync(destFile))
+    const actual = hash.digest('hex')
+    if (actual !== updateState.manifest.asarSha256) {
+      fs.unlinkSync(destFile)
+      throw new Error('SHA256 mismatch — download may be corrupted')
+    }
+    debugLog('[DeltaUpdate] SHA256 verified ✓')
+  }
 
-  const newAppPath = path.join(tempDir, appBundle)
-  // process.execPath = /path/to/App.app/Contents/MacOS/AppName
-  const currentAppPath = path.resolve(process.execPath, '..', '..', '..')
+  updateState.downloadedAsarPath = destFile
+  debugLog(`[DeltaUpdate] Downloaded to ${destFile}`)
+  win?.webContents.send('update:downloaded', { version })
+}
 
-  debugLog('[MacUpdate] Replacing', currentAppPath, 'with', newAppPath)
+function getFullUpdateAssetName(): string {
+  const version = updateState.manifest?.version || ''
+  switch (process.platform) {
+    case 'darwin': return `AdventShow-Mac-${version}-Installer.zip`
+    case 'win32': return `AdventShow-Windows-${version}-Setup.exe`
+    case 'linux': return `AdventShow-Linux-${version}.AppImage`
+    default: return `AdventShow-Linux-${version}.AppImage`
+  }
+}
 
-  // Create a shell script that runs AFTER the app quits:
-  // 1. Waits for the process to exit
-  // 2. Removes the old app
-  // 3. Moves the new app into place
-  // 4. Strips quarantine (we downloaded it programmatically)
-  // 5. Launches the new app
-  // 6. Cleans up the temp dir
-  const script = path.join(tempDir, 'update.sh')
-  fs.writeFileSync(script, [
-    '#!/bin/bash',
-    'sleep 2',
-    `rm -rf "${currentAppPath}"`,
-    `mv "${newAppPath}" "${currentAppPath}"`,
-    `xattr -rd com.apple.quarantine "${currentAppPath}" 2>/dev/null || true`,
-    `open "${currentAppPath}"`,
-    `rm -rf "${tempDir}"`,
-  ].join('\n'), { mode: 0o755 })
+// Install delta update: replace app.asar and restart
+async function installDeltaUpdate(): Promise<void> {
+  if (!updateState.downloadedAsarPath || !fs.existsSync(updateState.downloadedAsarPath)) {
+    throw new Error('Downloaded asar not found')
+  }
 
-  // Launch the script detached so it survives our quit
-  spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
+  const newAsar = updateState.downloadedAsarPath
+  const tempDir = path.dirname(newAsar)
 
-  debugLog('[MacUpdate] Update script launched, quitting app…')
-  app.quit()
+  // Determine app.asar location
+  let resourcesDir: string
+  if (process.platform === 'darwin') {
+    // /path/to/App.app/Contents/MacOS/AppName → /path/to/App.app/Contents/Resources
+    resourcesDir = path.resolve(process.execPath, '..', '..', 'Resources')
+  } else if (process.platform === 'win32') {
+    // /path/to/app/AppName.exe → /path/to/app/resources
+    resourcesDir = path.join(path.dirname(process.execPath), 'resources')
+  } else {
+    // Linux AppImage: mounted read-only, can't delta update
+    throw new Error('Delta update not supported on Linux AppImage')
+  }
+
+  const targetAsar = path.join(resourcesDir, 'app.asar')
+  debugLog(`[DeltaUpdate] Installing delta: ${newAsar} → ${targetAsar}`)
+
+  if (process.platform === 'darwin') {
+    // macOS: use a shell script that runs after the app quits
+    const appPath = path.resolve(process.execPath, '..', '..', '..')
+    const script = path.join(tempDir, 'delta-update.sh')
+    fs.writeFileSync(script, [
+      '#!/bin/bash',
+      'sleep 2',
+      `cp -f "${newAsar}" "${targetAsar}"`,
+      // Re-sign the app ad-hoc so Gatekeeper stays happy
+      `codesign --force --sign - "${appPath}" 2>/dev/null || true`,
+      `xattr -rd com.apple.quarantine "${appPath}" 2>/dev/null || true`,
+      `open "${appPath}"`,
+      `rm -rf "${tempDir}"`,
+    ].join('\n'), { mode: 0o755 })
+
+    spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
+    debugLog('[DeltaUpdate] Delta update script launched, quitting…')
+    app.quit()
+  } else if (process.platform === 'win32') {
+    // Windows: use a batch script that runs after the app quits
+    const appExe = process.execPath
+    const script = path.join(tempDir, 'delta-update.bat')
+    fs.writeFileSync(script, [
+      '@echo off',
+      'timeout /t 3 /nobreak >nul',
+      `copy /Y "${newAsar.replace(/\//g, '\\')}" "${targetAsar.replace(/\//g, '\\')}"`,
+      `start "" "${appExe.replace(/\//g, '\\')}"`,
+      `rmdir /s /q "${tempDir.replace(/\//g, '\\')}"`,
+    ].join('\r\n'))
+
+    spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+    debugLog('[DeltaUpdate] Delta update script launched, quitting…')
+    app.quit()
+  }
+}
+
+// Install full update (non-delta) — download was a full installer/zip
+async function installFullUpdate(): Promise<void> {
+  if (!updateState.downloadedAsarPath || !fs.existsSync(updateState.downloadedAsarPath)) {
+    throw new Error('Downloaded update file not found')
+  }
+
+  const downloaded = updateState.downloadedAsarPath
+  const tempDir = path.dirname(downloaded)
+
+  if (process.platform === 'darwin') {
+    // Extract zip, replace .app, restart
+    const extractDir = path.join(tempDir, 'extracted')
+    fs.mkdirSync(extractDir, { recursive: true })
+    execSync(`ditto -xk "${downloaded}" "${extractDir}"`, { encoding: 'utf8' })
+
+    const items = fs.readdirSync(extractDir)
+    const appBundle = items.find(i => i.endsWith('.app'))
+    if (!appBundle) throw new Error('No .app bundle found in update zip')
+
+    const newAppPath = path.join(extractDir, appBundle)
+    const currentAppPath = path.resolve(process.execPath, '..', '..', '..')
+
+    const script = path.join(tempDir, 'full-update.sh')
+    fs.writeFileSync(script, [
+      '#!/bin/bash',
+      'sleep 2',
+      `rm -rf "${currentAppPath}"`,
+      `mv "${newAppPath}" "${currentAppPath}"`,
+      `xattr -rd com.apple.quarantine "${currentAppPath}" 2>/dev/null || true`,
+      `open "${currentAppPath}"`,
+      `rm -rf "${tempDir}"`,
+    ].join('\n'), { mode: 0o755 })
+
+    spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
+    app.quit()
+  } else if (process.platform === 'win32') {
+    // Run the NSIS installer
+    spawn(downloaded, ['/S'], { detached: true, stdio: 'ignore' }).unref()
+    app.quit()
+  } else {
+    // Linux: replace the AppImage
+    const currentPath = process.env.APPIMAGE
+    if (currentPath) {
+      const script = path.join(tempDir, 'full-update.sh')
+      fs.writeFileSync(script, [
+        '#!/bin/bash',
+        'sleep 2',
+        `cp -f "${downloaded}" "${currentPath}"`,
+        `chmod +x "${currentPath}"`,
+        `"${currentPath}" &`,
+        `rm -rf "${tempDir}"`,
+      ].join('\n'), { mode: 0o755 })
+
+      spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
+      app.quit()
+    }
+  }
 }
 
 // ── Video conversion (FFmpeg) ─────────────────────────────────────────────────
@@ -701,13 +902,13 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.whenReady().then(() => {
-  // Configure native macOS About panel with developer credits
+  // Configure native macOS About panel
   app.setAboutPanelOptions({
     applicationName: 'AdventShow',
     applicationVersion: app.getVersion(),
     copyright: '© 2025 AdventTools',
-    credits: 'Ovidius Zanfir — concept, interfață, baza de date imnuri\nSamy Balasa — video, YouTube, auto-update, Biblie',
-    website: 'https://github.com/AdventTools/AdventShow',
+    credits: 'Ovidius Zanfir\nSamy Balasa',
+    website: 'https://github.com/AdventTools',
   })
 
   // Prevent system sleep / screensaver / hibernate while the app is running
@@ -730,7 +931,6 @@ app.whenReady().then(() => {
   copySeedDbIfNeeded()
   initDB()
   seedBibleFromJson()
-  setupAutoUpdater()
 
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => readSettings())
@@ -959,31 +1159,34 @@ app.whenReady().then(() => {
       getBibleVerseRange(bookId, chapter, startVerse, endVerse))
   ipcMain.handle('bible:has-data', () => hasBibleData())
 
-  // ── Update ──────────────────────────────────────────────────────────────────
+  // ── Update (Delta) ──────────────────────────────────────────────────────────
   ipcMain.handle('update:check', async () => {
     try {
-      const result = await autoUpdater.checkForUpdates()
-      const latest = result?.updateInfo?.version
-      const current = app.getVersion()
-      const available = !!latest && latest !== current
-      debugLog(`[AutoUpdater] check: current=${current} latest=${latest} available=${available}`)
-      return { available, version: latest }
+      const result = await checkForUpdate()
+      debugLog(`[Update] check: ${JSON.stringify(result)}`)
+      return result
     } catch {
       return { available: false }
     }
   })
   ipcMain.handle('update:download', async () => {
-    const paths = await autoUpdater.downloadUpdate()
-    // Store the downloaded zip path (backup in case update-downloaded event didn't fire yet)
-    if (paths && paths.length > 0) cachedUpdateZipPath = cachedUpdateZipPath || paths[0]
-    debugLog('[AutoUpdater] downloadUpdate returned:', paths)
+    try {
+      await downloadUpdate()
+    } catch (err: any) {
+      debugLog('[Update] Download error:', err.message)
+      win?.webContents.send('update:error', err.message)
+    }
   })
   ipcMain.handle('update:install', async () => {
-    if (process.platform === 'darwin') {
-      // Bypass Squirrel/ShipIt — manual extraction + replace + restart
-      await installMacOSUpdate()
-    } else {
-      autoUpdater.quitAndInstall(false, true)
+    try {
+      if (updateState.isDelta) {
+        await installDeltaUpdate()
+      } else {
+        await installFullUpdate()
+      }
+    } catch (err: any) {
+      debugLog('[Update] Install error:', err.message)
+      win?.webContents.send('update:error', err.message)
     }
   })
 
