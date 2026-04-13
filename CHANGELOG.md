@@ -1,5 +1,16 @@
 # Changelog — AdventShow
 
+## v1.1.8 (13 Aprilie 2026)
+
+### Corecții
+- **Fix build Windows pe CI** — eliminată semnarea cu certificat self-signed care bloca build-ul pe GitHub Actions; eliminat macOS din CI (se face local)
+- **Biblie: font auto-resize în previzualizare** — fontul versetului biblic se redimensionează automat la lățimea panoului (interval 12–28px), nu mai rămâne mic și greu de citit
+
+### Îmbunătățiri
+- **Secțiunea Despre completată** — afișează lista de funcționalități, numele și contribuțiile fiecărui dezvoltator, link-uri către organizație și cod sursă
+
+---
+
 ## v1.1.7 (13 Aprilie 2026)
 
 ### Corecții

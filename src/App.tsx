@@ -2285,7 +2285,8 @@ function PreviewPanel({
     }, []);
 
     const fontSize = useMemo(() => {
-        if (!containerWidth || !previewSections.length || previewType !== 'hymn') return null;
+        if (!containerWidth || !previewSections.length) return null;
+        if (previewType !== 'hymn' && previewType !== 'bible') return null;
         const availWidth = containerWidth - 36; // padding + borders
         if (availWidth <= 0) return null;
         const canvas = document.createElement('canvas');
@@ -2309,7 +2310,10 @@ function PreviewPanel({
 
         const scale = availWidth / maxLineWidth;
         const ideal = baseMeasure * scale;
-        // Clamp between 9px and 22px
+        // Hymns: clamp 9-22px | Bible: clamp 12-28px (single verse, allow larger)
+        if (previewType === 'bible') {
+            return Math.min(Math.max(ideal, 12), 28);
+        }
         return Math.min(Math.max(ideal, 9), 22);
     }, [containerWidth, previewSections, previewType]);
 
@@ -3075,14 +3079,35 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 <h2 className="text-2xl font-black text-primary tracking-wide">AdventShow</h2>
                                 <p className="text-white/50 text-sm">Versiunea {import.meta.env.VITE_APP_VERSION ?? '1.1.0'}</p>
                                 <p className="text-white/70 text-sm leading-relaxed max-w-md">
-                                    Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserică.
-                                    Include 922 imnuri din „Imnuri Creștine" și Biblia Cornilescu completă (31.102 versete).
+                                    Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici adventiste.
                                 </p>
                                 <div className="border-t border-white/10 w-full my-2" />
-                                <div className="text-sm text-white/60 leading-relaxed">
-                                    <p className="font-semibold text-white/80 mb-1">Dezvoltatori</p>
-                                    <p>Ovidius Zanfir &amp; Samy Balasa</p>
+                                <div className="text-sm text-white/60 leading-relaxed max-w-md">
+                                    <p className="font-semibold text-white/80 mb-2">Ce include</p>
+                                    <ul className="text-left list-disc list-inside space-y-1">
+                                        <li><strong>922 imnuri</strong> din colecția „Imnuri Creștine", organizate pe categorii</li>
+                                        <li><strong>Biblia Cornilescu</strong> completă — 66 cărți, 31.102 versete</li>
+                                        <li>Proiecție fullscreen pe ecran secundar cu fundal personalizabil</li>
+                                        <li>Redare video (fișiere locale + YouTube) pe proiecție</li>
+                                        <li>Import/Export imnuri, editor integrat, căutare inteligentă</li>
+                                        <li>Verificare automată de actualizări</li>
+                                    </ul>
                                 </div>
+                                <div className="border-t border-white/10 w-full my-2" />
+                                <div className="text-sm text-white/60 leading-relaxed">
+                                    <p className="font-semibold text-white/80 mb-2">Dezvoltatori</p>
+                                    <div className="flex flex-col gap-2">
+                                        <div>
+                                            <p className="text-white/80 font-medium">Ovidius Zanfir</p>
+                                            <p className="text-white/40 text-xs">Autor original — concept, interfață, baza de date cu imnuri</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-white/80 font-medium">Samy Balasa</p>
+                                            <p className="text-white/40 text-xs">Redare video, YouTube, auto-update, Biblia Cornilescu, funcționalități noi</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="border-t border-white/10 w-full my-2" />
                                 <div className="text-sm text-white/60 leading-relaxed">
                                     <p className="font-semibold text-white/80 mb-1">Organizație</p>
                                     <a
@@ -3112,7 +3137,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                     Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
                                 </p>
                                 <p className="text-white/20 text-[10px]">
-                                    Electron + React + TypeScript + TailwindCSS
+                                    Electron · React · TypeScript · TailwindCSS · DaisyUI
                                 </p>
                             </div>
                         </div>
