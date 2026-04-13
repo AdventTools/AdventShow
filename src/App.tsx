@@ -3050,45 +3050,69 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
 
                     {activeTab === 'about' && (
                         <div className="settings-content">
-                            <div className="flex flex-col items-center gap-4 py-6 text-center">
-                                <h2 className="text-2xl font-black text-primary tracking-wide">AdventShow</h2>
-                                <p className="text-white/50 text-sm">Versiunea {import.meta.env.VITE_APP_VERSION ?? '1.0.0'}</p>
-                                <p className="text-white/70 text-sm leading-relaxed max-w-md">
+                            <div className="flex flex-col items-center gap-5 py-6 text-center">
+
+                                {/* Logo + versiune */}
+                                <h2 className="text-3xl font-black text-primary tracking-wide">AdventShow</h2>
+                                <p className="text-white/40 text-xs -mt-3">versiunea {import.meta.env.VITE_APP_VERSION ?? '1.0.0'}</p>
+
+                                {/* Descriere */}
+                                <p className="text-white/70 text-sm leading-relaxed max-w-sm">
                                     Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici.
                                 </p>
-                                <div className="border-t border-white/10 w-full my-2" />
-                                <div className="text-sm text-white/60 leading-relaxed max-w-md">
-                                    <p className="font-semibold text-white/80 mb-2">Ce include</p>
-                                    <ul className="text-left list-disc list-inside space-y-1">
-                                        <li><strong>922 imnuri</strong> din colecția „Imnuri Creștine", organizate pe categorii</li>
-                                        <li><strong>Biblia Cornilescu</strong> completă — 66 cărți, 31.102 versete</li>
-                                        <li>Proiecție fullscreen pe ecran secundar cu fundal personalizabil</li>
-                                        <li>Redare video (fișiere locale + YouTube) pe proiecție</li>
-                                        <li>Import/Export imnuri, editor integrat, căutare inteligentă</li>
-                                        <li>Actualizări automate — descarcă doar codul modificat (delta update)</li>
+
+                                <div className="border-t border-white/10 w-full" />
+
+                                {/* Ce include */}
+                                <div className="text-sm text-white/60 leading-relaxed max-w-sm w-full text-left">
+                                    <p className="font-semibold text-white/80 mb-2 text-center">Ce include</p>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li><strong>922 imnuri</strong> din colecția „Imnuri Creștine"</li>
+                                        <li><strong>Biblia Cornilescu</strong> — 66 cărți, 31.102 versete</li>
+                                        <li>Proiecție fullscreen pe ecran secundar</li>
+                                        <li>Redare video — fișiere locale și YouTube</li>
+                                        <li>Editor integrat, import PowerPoint, căutare</li>
+                                        <li>Actualizări automate delta — descarcă doar codul nou</li>
                                     </ul>
                                 </div>
-                                <div className="border-t border-white/10 w-full my-2" />
-                                <div className="text-sm text-white/60 leading-relaxed">
-                                    <p className="font-semibold text-white/80 mb-2">Dezvoltatori</p>
-                                    <p className="text-white/80">Ovidius Zanfir</p>
-                                    <p className="text-white/80">Samy Balasa</p>
+
+                                <div className="border-t border-white/10 w-full" />
+
+                                {/* Dezvoltatori */}
+                                <div className="w-full max-w-sm">
+                                    <p className="font-semibold text-white/80 mb-3 text-center text-sm">Dezvoltatori</p>
+                                    <div className="flex flex-col gap-2">
+                                        <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
+                                            <p className="text-white/90 font-semibold text-sm">Ovidius Zanfir</p>
+                                            <p className="text-white/40 text-xs mt-0.5">Concept, design interfață, baza de date imnuri</p>
+                                        </div>
+                                        <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
+                                            <p className="text-white/90 font-semibold text-sm">Samy Balasa</p>
+                                            <p className="text-white/40 text-xs mt-0.5">Video, YouTube, Biblie, auto-update, release pipeline</p>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="border-t border-white/10 w-full my-2" />
-                                <div className="text-sm text-white/60 leading-relaxed">
-                                    <a
-                                        href="https://github.com/AdventTools"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-primary hover:underline"
-                                    >
-                                        github.com/AdventTools
-                                    </a>
-                                </div>
-                                <div className="border-t border-white/10 w-full my-2" />
+
+                                <div className="border-t border-white/10 w-full" />
+
+                                {/* Link GitHub */}
+                                <a
+                                    href="https://github.com/AdventTools"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-primary hover:text-primary/80 text-sm font-medium transition-colors"
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.026 2.747-1.026.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.741 0 .267.18.578.688.48C19.138 20.2 22 16.447 22 12.021 22 6.484 17.522 2 12 2z" />
+                                    </svg>
+                                    github.com/AdventTools
+                                </a>
+
+                                <div className="border-t border-white/10 w-full" />
                                 <YtDlpSettings />
-                                <div className="border-t border-white/10 w-full my-2" />
-                                <p className="text-white/30 text-xs">
+                                <div className="border-t border-white/10 w-full" />
+
+                                <p className="text-white/25 text-xs">
                                     Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
                                 </p>
                             </div>

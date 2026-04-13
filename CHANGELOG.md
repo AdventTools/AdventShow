@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.15 (13 Aprilie 2026)
+
+### Modificări
+- Fix crash la download update, fix CI ffmpeg-static timeout, redesign secțiune Despre
+
+---
+
+
 ## v1.1.14 (13 Aprilie 2026)
 
 ### Modificări

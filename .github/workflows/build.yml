@@ -27,11 +27,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+        env:
+          # ffmpeg-static uneori 504 la prima încercare pe GitHub CDN — retry automat
+          npm_config_fetch_retry_mintimeout: 20000
+          npm_config_fetch_retries: 3
+          npm_config_fetch_retry_maxtimeout: 120000
 
       - name: Build
         run: ${{ matrix.cmd }}
