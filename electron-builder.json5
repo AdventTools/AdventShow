@@ -34,6 +34,11 @@
       "from": "scripts/cornilescu.json",
       "to": "cornilescu.json",
       "filter": ["**/*"]
+    },
+    {
+      "from": "electron/certs/adventshow.crt",
+      "to": "adventshow.crt",
+      "filter": ["**/*"]
     }
   ],
   "afterPack": "./scripts/afterPack.cjs",
@@ -48,6 +53,9 @@
   },
   "win": {
     "icon": "build/icons/win/icon.ico",
+    "signingHashAlgorithms": ["sha256"],
+    "certificateFile": "electron/certs/adventshow.pfx",
+    "certificatePassword": "adventshow",
     "target": [
       {
         "target": "nsis",
@@ -71,7 +79,8 @@
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "AdventShow"
+    "shortcutName": "AdventShow",
+    "include": "build/installer.nsh"
   },
   "linux": {
     "icon": "build/icons/png",

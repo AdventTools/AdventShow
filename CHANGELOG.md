@@ -1,16 +1,23 @@
 # Changelog — AdventShow
 
+## v1.1.7 (13 Aprilie 2026)
+
+### Corecții
+- **Biblie: previzualizare un singur verset** — previzualizarea afișează doar versetul selectat, nu tot capitolul. Navigare cu săgeți între versete
+- **Imnuri: font uniform pe toate strofele** — fontul din panoul de previzualizare se calculează pe baza celui mai lung rând din toate secțiunile și se aplică identic peste tot
+- **Video: filtre în sidebar** — bara laterală conține acum butoane de filtrare (Toate / YouTube / Local) cu contoare. Playlist-ul rămâne în zona de conținut
+- **Locație fișier clickabilă** — click pe calea fișierului din playlist deschide folderul în Finder / Explorer
+
+### Noutăți
+- **Certificat SSL auto-import** — aplicația include un certificat self-signed; pe Windows, installerul NSIS îl importă automat în Trusted Root, eliminând avertismentul SmartScreen
+
+---
+
 ## v1.1.6 (12 Aprilie 2026)
 
 ### Funcționalități noi
 - **Configurare inițială completă** — la prima pornire, aplicația cere și setarea folderului de descărcare pentru videouri (nu doar parola)
-- **Playlist video în sidebar** — toate videoclipurile (locale și YouTube) apar acum în bara laterală, ca și imnurile sau Biblia
-- **Locație fișier clickabilă** — fiecare videoclip din playlist afișează calea fișierului; click pe ea deschide folderul în Finder / Explorer
-- **Previzualizare text auto-resize** — fontul din panoul de previzualizare se ajustează automat la lățimea panoului (row-fit pentru imnuri, verse-fit cu limită pentru Biblie)
-
-### Îmbunătățiri
 - **Import / Export mai clar** — secțiunea de Import / Export este acum etichetată explicit ca fiind pentru imnuri, cu descrieri și butoane clare
-- **Video Controller simplificat** — zona de conținut afișează doar controlul de adăugare surse; playlist-ul a fost mutat în sidebar
 
 ---
 
