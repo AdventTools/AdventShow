@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.14 (13 Aprilie 2026)
+
+### Modificări
+- Test delta update
+
+---
+
+
 ## v1.1.13 (13 Aprilie 2026)
 
 ### Modificări
