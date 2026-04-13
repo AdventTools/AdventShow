@@ -17,8 +17,6 @@ jobs:
             cmd: npm run build:win
           - os: ubuntu-latest
             cmd: npm run build:linux
-          - os: macos-latest
-            cmd: npm run build:mac
 
     runs-on: ${{ matrix.os }}
 
@@ -45,7 +43,7 @@ jobs:
         with:
           files: |
             release/**/*-Setup.exe
+            release/**/*-Portable.exe
             release/**/*.AppImage
-            release/**/*-Installer.dmg
           draft: false
           prerelease: false
