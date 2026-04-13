@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.6-green)
+![version](https://img.shields.io/badge/versiune-1.1.7-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -27,8 +27,8 @@ Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/
 AdventShow este distribuit gratuit și nu deține un certificat de semnare. Sistemele de operare pot afișa un avertisment la prima rulare.
 
 #### Windows
-1. La mesajul **„Windows protected your PC"** (SmartScreen), apasă **„More info"**
-2. Apoi apasă **„Run anyway"**
+1. Installerul importă automat certificatul AdventShow — în majoritatea cazurilor, SmartScreen nu va mai apărea
+2. Dacă totuși apare mesajul **„Windows protected your PC"**, apasă **„More info"** apoi **„Run anyway"**
 3. Acest pas este necesar doar la prima instalare
 
 #### macOS

@@ -1,4 +1,5 @@
 import {
+    AlertCircle,
     Book,
     ChevronLeft,
     ChevronRight,
@@ -285,6 +286,9 @@ function App() {
     // ── Modal state ──
     const [modalOpen, setModalOpen] = useState<string | null>(null);
 
+    // ── Video filter state ──
+    const [videoFilter, setVideoFilter] = useState<VideoFilter>('all');
+
     // ── Context menu state ──
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hymn: Hymn } | null>(null);
 
@@ -519,21 +523,18 @@ function App() {
     // ── Preview bible search result ──
     const previewBibleResult = useCallback(async (verse: BibleVerse) => {
         if (!verse.book_id || !verse.chapter) return;
-        // Load all verses from this chapter
-        const vrs = await window.electron.bible.getVerses(verse.book_id, verse.chapter);
         const book = books.find(b => b.id === verse.book_id);
-        const secs = vrs.map(v => ({
-            text: v.text,
+        // Show ONLY the clicked verse in preview
+        const sec = {
+            text: verse.text,
             type: 'verse',
-            label: `v. ${v.verse}`,
-        }));
+            label: `v. ${verse.verse}`,
+        };
         setPreviewType('bible');
-        setPreviewSections(secs);
-        setPreviewTitle(`${book?.name ?? verse.book_name ?? ''} ${verse.chapter}`);
+        setPreviewSections([sec]);
+        setPreviewTitle(`${book?.name ?? verse.book_name ?? ''} ${verse.chapter}:${verse.verse}`);
         setPreviewNumber(book?.abbreviation ?? verse.abbreviation ?? '');
-        // Find the index of the clicked verse
-        const idx = vrs.findIndex(v => v.verse === verse.verse);
-        setProjSlideIndex(Math.max(0, idx));
+        setProjSlideIndex(0);
     }, [books]);
 
     // ── Clear preview ──
@@ -633,7 +634,7 @@ function App() {
         setSelectedVerseIdx(0);
     }, [selectedBookId]);
 
-    // Auto-preview when verses load (from sidebar/chapter click, NOT from reference search)
+    // When a chapter is selected and verses load, show the first verse in preview
     useEffect(() => {
         if (skipAutoPreviewRef.current) {
             skipAutoPreviewRef.current = false;
@@ -641,16 +642,17 @@ function App() {
         }
         if (verses.length > 0 && selectedChapter) {
             const book = books.find(b => b.id === selectedBookId);
-            const secs = verses.map(v => ({
+            const v = verses[0];
+            setPreviewType('bible');
+            setPreviewSections([{
                 text: v.text,
                 type: 'verse',
                 label: `v. ${v.verse}`,
-            }));
-            setPreviewType('bible');
-            setPreviewSections(secs);
-            setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}`);
+            }]);
+            setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
             setPreviewNumber(book?.abbreviation ?? '');
             setProjSlideIndex(0);
+            setSelectedVerseIdx(0);
         }
     }, [verses, selectedChapter, books, selectedBookId]);
 
@@ -780,25 +782,24 @@ function App() {
         skipAutoPreviewRef.current = true; // prevent auto-preview from overriding our precise index
         setVerses(vrs);
 
-        // Build preview sections
-        const secs = vrs.map((v: BibleVerse) => ({
-            text: v.text,
-            type: 'verse',
-            label: `v. ${v.verse}`,
-        }));
-        setPreviewType('bible');
-        setPreviewSections(secs);
-        setPreviewTitle(`${book.name} ${ref.chapter}`);
-        setPreviewNumber(book.abbreviation);
-
         if (ref.verse) {
-            // Full reference (book + chapter + verse) → activate verse
+            // Full reference (book + chapter + verse) → show ONLY that verse in preview
             const verseIdx = vrs.findIndex((v: BibleVerse) => v.verse === ref.verse);
             const idx = Math.max(0, verseIdx);
-            setProjSlideIndex(idx);
+            const v = vrs[idx];
+            setPreviewType('bible');
+            setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
+            setPreviewTitle(`${book.name} ${ref.chapter}:${v.verse}`);
+            setPreviewNumber(book.abbreviation);
+            setProjSlideIndex(0);
             setSelectedVerseIdx(idx);
         } else {
-            // Chapter only → show chapter but no verse active
+            // Chapter only → show first verse in preview
+            const v = vrs[0];
+            setPreviewType('bible');
+            setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
+            setPreviewTitle(`${book.name} ${ref.chapter}:${v.verse}`);
+            setPreviewNumber(book.abbreviation);
             setProjSlideIndex(0);
             setSelectedVerseIdx(0);
         }
@@ -916,11 +917,19 @@ function App() {
                     if (hymns[nextIdx]) {
                         previewHymn(hymns[nextIdx].id);
                     }
-                } else if (tab === 'biblia' && previewSections.length > 0) {
-                    if (e.key === 'ArrowDown') {
-                        setProjSlideIndex(prev => Math.min(prev + 1, previewSections.length - 1));
-                    } else {
-                        setProjSlideIndex(prev => Math.max(prev - 1, 0));
+                } else if (tab === 'biblia' && verses.length > 0) {
+                    const newIdx = e.key === 'ArrowDown'
+                        ? Math.min(selectedVerseIdx + 1, verses.length - 1)
+                        : Math.max(selectedVerseIdx - 1, 0);
+                    setSelectedVerseIdx(newIdx);
+                    const v = verses[newIdx];
+                    if (v) {
+                        const book = books.find(b => b.id === selectedBookId);
+                        setPreviewType('bible');
+                        setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
+                        setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
+                        setPreviewNumber(book?.abbreviation ?? '');
+                        setProjSlideIndex(0);
                     }
                 }
                 return;
@@ -937,7 +946,7 @@ function App() {
         return () => window.removeEventListener('keydown', handler, true);
     }, [projecting, previewSections, modalOpen, hymnEditor, passwordModal, needsPasswordSetup,
         stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn,
-        videoStatus, videoStop]);
+        videoStatus, videoStop, verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
 
     // ── Resizable column drag handlers ──
     const onResizeMouseDown = useCallback((which: 'sidebar' | 'preview') => {
@@ -1030,8 +1039,18 @@ function App() {
                 const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
                 const nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : 0;
                 if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
-            } else if (tab === 'biblia' && previewSections.length > 0) {
-                setProjSlideIndex(prev => Math.min(prev + 1, previewSections.length - 1));
+            } else if (tab === 'biblia' && verses.length > 0) {
+                const newIdx = Math.min(selectedVerseIdx + 1, verses.length - 1);
+                setSelectedVerseIdx(newIdx);
+                const v = verses[newIdx];
+                if (v) {
+                    const book = books.find(b => b.id === selectedBookId);
+                    setPreviewType('bible');
+                    setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
+                    setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
+                    setPreviewNumber(book?.abbreviation ?? '');
+                    setProjSlideIndex(0);
+                }
             }
             return;
         }
@@ -1044,14 +1063,25 @@ function App() {
                 const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
                 const nextIdx = currentIdx > 0 ? currentIdx - 1 : hymns.length - 1;
                 if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
-            } else if (tab === 'biblia' && previewSections.length > 0) {
-                setProjSlideIndex(prev => Math.max(prev - 1, 0));
+            } else if (tab === 'biblia' && verses.length > 0) {
+                const newIdx = Math.max(selectedVerseIdx - 1, 0);
+                setSelectedVerseIdx(newIdx);
+                const v = verses[newIdx];
+                if (v) {
+                    const book = books.find(b => b.id === selectedBookId);
+                    setPreviewType('bible');
+                    setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
+                    setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}:${v.verse}`);
+                    setPreviewNumber(book?.abbreviation ?? '');
+                    setProjSlideIndex(0);
+                }
             }
             return;
         }
     }, [projecting, previewSections, projSlideIndex, startProjection, tab,
         selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
-        navigateSlide, contentSearch, doBibleContentSearch]);
+        navigateSlide, contentSearch, doBibleContentSearch,
+        verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
 
     // ── Close context menu on click elsewhere ──
     useEffect(() => {
@@ -1191,14 +1221,10 @@ function App() {
                             }}
                         />
                     ) : (
-                        <SidebarVideoPlaylist
+                        <SidebarVideoFilter
+                            filter={videoFilter}
+                            onFilter={setVideoFilter}
                             youtubePlaylist={youtubePlaylist}
-                            youtubeProgress={youtubeProgress}
-                            onPlay={youtubePlay}
-                            onRemove={youtubeRemove}
-                            onDelete={youtubeDelete}
-                            onRetry={youtubeRetry}
-                            onUpdateTitle={youtubeUpdateTitle}
                         />
                     )}
                     {/* Update banner */}
@@ -1281,6 +1307,8 @@ function App() {
                             videoLoading={videoLoading}
                             videoConverting={videoConverting}
                             youtubePlaylist={youtubePlaylist}
+                            youtubeProgress={youtubeProgress}
+                            videoFilter={videoFilter}
                             onPickFile={loadVideoFile}
                             onPlay={videoPlay}
                             onPause={videoPause}
@@ -1288,6 +1316,11 @@ function App() {
                             onSeek={videoSeek}
                             onVolume={videoSetVolume}
                             onYoutubeAdd={youtubeAdd}
+                            onYoutubeRemove={youtubeRemove}
+                            onYoutubeDelete={youtubeDelete}
+                            onYoutubePlay={youtubePlay}
+                            onYoutubeRetry={youtubeRetry}
+                            onYoutubeUpdateTitle={youtubeUpdateTitle}
                         />
                     ) : bibleSearchResults ? (
                         <BibleSearchResultsList
@@ -1317,7 +1350,15 @@ function App() {
                             onSelectChapter={selectChapter}
                             onSelectVerse={(idx) => {
                                 setSelectedVerseIdx(idx);
-                                setProjSlideIndex(idx);
+                                const v = verses[idx];
+                                if (v) {
+                                    const book = books.find(b => b.id === selectedBookId);
+                                    setPreviewType('bible');
+                                    setPreviewSections([{ text: v.text, type: 'verse', label: `v. ${v.verse}` }]);
+                                    setPreviewTitle(`${book?.name ?? selectedBookName} ${selectedChapter}:${v.verse}`);
+                                    setPreviewNumber(book?.abbreviation ?? '');
+                                    setProjSlideIndex(0);
+                                }
                             }}
                             onBackToChapters={() => { setSelectedChapter(null); setVerses([]); }}
                         />
@@ -1534,142 +1575,49 @@ function SidebarBibleBooks({
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Sidebar – Video Playlist
+// Sidebar – Video Filter
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SidebarVideoPlaylist({
-    youtubePlaylist, youtubeProgress,
-    onPlay, onRemove, onDelete, onRetry, onUpdateTitle,
-}: {
-    youtubePlaylist: YouTubeEntry[];
-    youtubeProgress: Record<string, number>;
-    onPlay: (id: string) => void;
-    onRemove: (id: string) => void;
-    onDelete: (id: string) => void;
-    onRetry: (id: string) => void;
-    onUpdateTitle: (id: string, title: string) => void;
-}) {
-    const [editingTitle, setEditingTitle] = useState<string | null>(null);
-    const [editTitleValue, setEditTitleValue] = useState('');
-    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-    const [filePaths, setFilePaths] = useState<Record<string, string>>({});
+type VideoFilter = 'all' | 'youtube' | 'local';
 
-    // Load file paths for all entries
-    useEffect(() => {
-        const loadPaths = async () => {
-            const paths: Record<string, string> = {};
-            for (const entry of youtubePlaylist) {
-                if (entry.status === 'ready') {
-                    const fp = await window.electron.playlist.getFilePath(entry.id);
-                    if (fp) paths[entry.id] = fp;
-                }
-            }
-            setFilePaths(paths);
-        };
-        loadPaths();
-    }, [youtubePlaylist]);
+function SidebarVideoFilter({
+    filter, onFilter, youtubePlaylist,
+}: {
+    filter: VideoFilter;
+    onFilter: (f: VideoFilter) => void;
+    youtubePlaylist: YouTubeEntry[];
+}) {
+    const localCount = youtubePlaylist.filter(e => !!(e as any).localUrl).length;
+    const ytCount = youtubePlaylist.filter(e => !(e as any).localUrl).length;
 
     return (
         <>
-            <div className="sidebar-title">Playlist Video</div>
+            <div className="sidebar-title">Categorii Video</div>
             <div className="sidebar-list">
-                {youtubePlaylist.length === 0 && (
-                    <div className="text-white/30 text-xs px-3 py-4 text-center">
-                        Playlist-ul este gol.<br />Adaugă un fișier local sau un link YouTube din panoul central.
-                    </div>
-                )}
-                {youtubePlaylist.map(entry => {
-                    const isLocal = !!(entry as any).localUrl;
-                    const fp = filePaths[entry.id];
-                    const shortPath = fp ? (fp.length > 40 ? '…' + fp.slice(-38) : fp) : '';
-
-                    return (
-                        <div key={entry.id} className="sidebar-video-item">
-                            <div className="sidebar-video-top">
-                                <span className={`yt-source-badge ${isLocal ? 'yt-badge-local' : 'yt-badge-yt'}`}>
-                                    {isLocal ? 'Local' : 'YT'}
-                                </span>
-                                {editingTitle === entry.id ? (
-                                    <input
-                                        className="yt-playlist-title-input"
-                                        value={editTitleValue}
-                                        onChange={(e) => setEditTitleValue(e.target.value)}
-                                        onBlur={() => { onUpdateTitle(entry.id, editTitleValue); setEditingTitle(null); }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') { onUpdateTitle(entry.id, editTitleValue); setEditingTitle(null); }
-                                            if (e.key === 'Escape') setEditingTitle(null);
-                                        }}
-                                        autoFocus
-                                    />
-                                ) : (
-                                    <span
-                                        className="sidebar-video-title"
-                                        onDoubleClick={() => { setEditingTitle(entry.id); setEditTitleValue(entry.title); }}
-                                        title={entry.title}
-                                    >
-                                        {entry.title}
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* File location */}
-                            {fp && (
-                                <div
-                                    className="sidebar-video-path"
-                                    onClick={() => window.electron.playlist.revealInFolder(fp)}
-                                    title={`Deschide în ${navigator.platform.includes('Mac') ? 'Finder' : 'Explorer'}: ${fp}`}
-                                >
-                                    <FolderOpen className="icon-xs" />
-                                    <span>{shortPath}</span>
-                                </div>
-                            )}
-
-                            {/* Progress bar */}
-                            {entry.status === 'downloading' && (
-                                <div className="yt-progress-bar" style={{ margin: '2px 0' }}>
-                                    <div className="yt-progress-fill" style={{ width: `${youtubeProgress[entry.id] ?? 0}%` }} />
-                                </div>
-                            )}
-
-                            {/* Status + actions */}
-                            <div className="sidebar-video-actions">
-                                {entry.status === 'downloading' && (
-                                    <span className="text-white/40 text-xs">
-                                        <Loader className="icon-xs animate-spin inline" /> {Math.round(youtubeProgress[entry.id] ?? 0)}%
-                                    </span>
-                                )}
-                                {entry.status === 'ready' && (
-                                    <button className="video-btn video-btn-play yt-play-btn" onClick={() => onPlay(entry.id)} title="Redă" style={{ padding: '2px 6px', fontSize: 11 }}>
-                                        <Play className="icon-xs" /> Redă
-                                    </button>
-                                )}
-                                {entry.status === 'error' && !isLocal && (
-                                    <button className="video-btn yt-retry-btn" onClick={() => onRetry(entry.id)} title="Reîncearcă" style={{ padding: '2px 6px', fontSize: 11 }}>
-                                        <RefreshCw className="icon-xs" /> Reîncearcă
-                                    </button>
-                                )}
-                                {entry.status === 'error' && (
-                                    <span className="text-red-400 text-xs" title={entry.error}>Eroare</span>
-                                )}
-                                <button className="video-btn yt-remove-btn" onClick={() => onRemove(entry.id)} title="Elimină din playlist" style={{ padding: '2px 4px' }}>
-                                    <X className="icon-xs" />
-                                </button>
-                                {entry.status === 'ready' && !isLocal && (
-                                    deleteConfirm === entry.id ? (
-                                        <div className="flex gap-1 items-center">
-                                            <button className="video-btn yt-btn-small yt-btn-danger" onClick={() => { onDelete(entry.id); setDeleteConfirm(null); }} style={{ fontSize: 10, padding: '1px 4px' }}>Șterge</button>
-                                            <button className="video-btn yt-btn-small" onClick={() => setDeleteConfirm(null)} style={{ fontSize: 10, padding: '1px 4px' }}>Nu</button>
-                                        </div>
-                                    ) : (
-                                        <button className="video-btn yt-btn-small yt-btn-danger" onClick={() => setDeleteConfirm(entry.id)} title="Șterge de pe disc" style={{ padding: '2px 4px' }}>
-                                            <Trash2 className="icon-xs" />
-                                        </button>
-                                    )
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
+                <button
+                    className={`sidebar-item ${filter === 'all' ? 'active' : ''}`}
+                    onClick={() => onFilter('all')}
+                >
+                    <span className="dot" />
+                    <span className="sidebar-item-name">Toate</span>
+                    {youtubePlaylist.length > 0 && <span className="count">{youtubePlaylist.length}</span>}
+                </button>
+                <button
+                    className={`sidebar-item ${filter === 'youtube' ? 'active' : ''}`}
+                    onClick={() => onFilter('youtube')}
+                >
+                    <span className="dot" />
+                    <span className="sidebar-item-name">YouTube</span>
+                    {ytCount > 0 && <span className="count">{ytCount}</span>}
+                </button>
+                <button
+                    className={`sidebar-item ${filter === 'local' ? 'active' : ''}`}
+                    onClick={() => onFilter('local')}
+                >
+                    <span className="dot" />
+                    <span className="sidebar-item-name">Locale</span>
+                    {localCount > 0 && <span className="count">{localCount}</span>}
+                </button>
             </div>
         </>
     );
@@ -1865,10 +1813,10 @@ function formatTime(seconds: number): string {
 
 function VideoController({
     videoName, videoStatus, videoVolume, videoLoading, videoConverting,
-    youtubePlaylist,
+    youtubePlaylist, youtubeProgress, videoFilter,
     onPickFile, onPlay, onPause, onStop,
     onSeek, onVolume,
-    onYoutubeAdd,
+    onYoutubeAdd, onYoutubeRemove, onYoutubeDelete, onYoutubePlay, onYoutubeRetry, onYoutubeUpdateTitle,
 }: {
     videoName: string;
     videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
@@ -1876,6 +1824,8 @@ function VideoController({
     videoLoading: boolean;
     videoConverting: boolean;
     youtubePlaylist: YouTubeEntry[];
+    youtubeProgress: Record<string, number>;
+    videoFilter: VideoFilter;
     onPickFile: () => void;
     onPlay: () => void;
     onPause: () => void;
@@ -1883,6 +1833,11 @@ function VideoController({
     onSeek: (time: number) => void;
     onVolume: (vol: number) => void;
     onYoutubeAdd: (url: string) => Promise<string | null>;
+    onYoutubeRemove: (id: string) => void;
+    onYoutubeDelete: (id: string) => void;
+    onYoutubePlay: (id: string) => void;
+    onYoutubeRetry: (id: string) => void;
+    onYoutubeUpdateTitle: (id: string, title: string) => void;
 }) {
     const isPlaying = !!videoStatus;
     const isPaused = videoStatus?.paused ?? true;
@@ -1897,6 +1852,38 @@ function VideoController({
     // yt-dlp install/update state
     const [ytdlpInstalled, setYtdlpInstalled] = useState<boolean | null>(null);
     const [ytdlpBusy, setYtdlpBusy] = useState(false);
+
+    // Playlist editing state
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState<string | null>(null);
+    const [editTitleValue, setEditTitleValue] = useState('');
+
+    // File paths for reveal in folder
+    const [filePaths, setFilePaths] = useState<Record<string, string>>({});
+
+    // Load file paths for entries
+    useEffect(() => {
+        const loadPaths = async () => {
+            const paths: Record<string, string> = {};
+            for (const entry of youtubePlaylist) {
+                if (entry.status === 'ready') {
+                    const fp = await window.electron.playlist.getFilePath(entry.id);
+                    if (fp) paths[entry.id] = fp;
+                }
+            }
+            setFilePaths(paths);
+        };
+        loadPaths();
+    }, [youtubePlaylist]);
+
+    // Filter playlist
+    const filteredPlaylist = useMemo(() => {
+        if (videoFilter === 'all') return youtubePlaylist;
+        return youtubePlaylist.filter(e => {
+            const isLocal = !!(e as any).localUrl;
+            return videoFilter === 'local' ? isLocal : !isLocal;
+        });
+    }, [youtubePlaylist, videoFilter]);
 
     useEffect(() => {
         (async () => {
@@ -2077,16 +2064,160 @@ function VideoController({
                 {ytError && <p className="video-youtube-error">{ytError}</p>}
             </div>
 
-            {youtubePlaylist.length === 0 && !videoLoading && (
-                <div className="empty-state" style={{ padding: '2rem 0' }}>
-                    <Film className="icon-lg opacity-20" />
-                    <p className="text-white/30 text-sm">Playlist-ul este gol. Adaugă un fișier sau un link YouTube.</p>
+            {/* ── Filtered Playlist ── */}
+            {filteredPlaylist.length > 0 && (
+                <div className="yt-playlist">
+                    {filteredPlaylist.map(entry => {
+                        const isLocal = !!(entry as any).localUrl;
+                        const fp = filePaths[entry.id];
+                        const shortPath = fp ? (fp.length > 60 ? '…' + fp.slice(-58) : fp) : '';
+                        return (
+                            <div key={entry.id} className={`yt-playlist-item yt-status-${entry.status}`}>
+                                <div className="yt-playlist-item-top">
+                                    <span className={`yt-source-badge ${isLocal ? 'yt-badge-local' : 'yt-badge-yt'}`}>
+                                        {isLocal ? 'Local' : 'YT'}
+                                    </span>
+                                    {editingTitle === entry.id ? (
+                                        <input
+                                            className="yt-playlist-title-input"
+                                            value={editTitleValue}
+                                            onChange={(e) => setEditTitleValue(e.target.value)}
+                                            onBlur={() => {
+                                                onYoutubeUpdateTitle(entry.id, editTitleValue);
+                                                setEditingTitle(null);
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    onYoutubeUpdateTitle(entry.id, editTitleValue);
+                                                    setEditingTitle(null);
+                                                }
+                                                if (e.key === 'Escape') setEditingTitle(null);
+                                            }}
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <span
+                                            className="yt-playlist-title"
+                                            onDoubleClick={() => {
+                                                setEditingTitle(entry.id);
+                                                setEditTitleValue(entry.title);
+                                            }}
+                                            title="Dublu-click pentru a edita titlul"
+                                        >
+                                            {entry.title}
+                                        </span>
+                                    )}
+                                    <span className={`yt-status-badge yt-badge-${entry.status}`}>
+                                        {entry.status === 'downloading' && <Loader className="icon-xs animate-spin" />}
+                                        {entry.status === 'ready' && '✓'}
+                                        {entry.status === 'error' && <AlertCircle className="icon-xs" />}
+                                        <span>
+                                            {entry.status === 'downloading' ? `${Math.round(youtubeProgress[entry.id] ?? 0)}%` :
+                                                entry.status === 'ready' ? 'Gata' : 'Eroare'}
+                                        </span>
+                                    </span>
+                                </div>
+
+                                {/* File location — clickable to open folder */}
+                                {fp && (
+                                    <div
+                                        className="yt-file-path"
+                                        onClick={() => window.electron.playlist.revealInFolder(fp)}
+                                        title={`Deschide în ${navigator.platform.includes('Mac') ? 'Finder' : 'Explorer'}: ${fp}`}
+                                    >
+                                        <FolderOpen className="icon-xs" />
+                                        <span>{shortPath}</span>
+                                    </div>
+                                )}
+
+                                {/* Progress bar for downloading */}
+                                {entry.status === 'downloading' && (
+                                    <div className="yt-progress-bar">
+                                        <div
+                                            className="yt-progress-fill"
+                                            style={{ width: `${youtubeProgress[entry.id] ?? 0}%` }}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Error message */}
+                                {entry.status === 'error' && entry.error && (
+                                    <p className="yt-error-msg">{entry.error}</p>
+                                )}
+
+                                {/* Action buttons */}
+                                <div className="yt-playlist-actions">
+                                    {entry.status === 'ready' && (
+                                        <button
+                                            className="video-btn video-btn-play yt-play-btn"
+                                            onClick={() => onYoutubePlay(entry.id)}
+                                            title="Redă"
+                                        >
+                                            <Play className="icon-sm" /> Redă
+                                        </button>
+                                    )}
+                                    {entry.status === 'error' && !isLocal && (
+                                        <button
+                                            className="video-btn yt-retry-btn"
+                                            onClick={() => onYoutubeRetry(entry.id)}
+                                            title="Reîncearcă descărcarea"
+                                        >
+                                            <RefreshCw className="icon-sm" /> Reîncearcă
+                                        </button>
+                                    )}
+
+                                    {/* Remove from playlist (always visible) */}
+                                    <button
+                                        className="video-btn yt-remove-btn"
+                                        onClick={() => onYoutubeRemove(entry.id)}
+                                        title="Elimină din playlist"
+                                    >
+                                        <X className="icon-sm" />
+                                    </button>
+
+                                    {/* Delete from disk (only for ready non-local entries) */}
+                                    {entry.status === 'ready' && !isLocal && (
+                                        deleteConfirm === entry.id ? (
+                                            <div className="yt-delete-confirm">
+                                                <span className="text-white/60 text-xs">Ștergi fișierul de pe disc?</span>
+                                                <button
+                                                    className="video-btn yt-btn-small yt-btn-danger"
+                                                    onClick={() => { onYoutubeDelete(entry.id); setDeleteConfirm(null); }}
+                                                >
+                                                    Da, șterge
+                                                </button>
+                                                <button
+                                                    className="video-btn yt-btn-small"
+                                                    onClick={() => setDeleteConfirm(null)}
+                                                >
+                                                    Anulează
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                className="video-btn yt-btn-small yt-btn-danger"
+                                                onClick={() => setDeleteConfirm(entry.id)}
+                                                title="Șterge fișierul de pe disc"
+                                            >
+                                                <Trash2 className="icon-sm" />
+                                            </button>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
-            {youtubePlaylist.length > 0 && !videoLoading && (
-                <div className="empty-state" style={{ padding: '1rem 0' }}>
-                    <p className="text-white/40 text-sm">Selectează un videoclip din bara laterală pentru a-l reda.</p>
+            {filteredPlaylist.length === 0 && !videoLoading && (
+                <div className="empty-state" style={{ padding: '2rem 0' }}>
+                    <Film className="icon-lg opacity-20" />
+                    <p className="text-white/30 text-sm">
+                        {youtubePlaylist.length === 0
+                            ? 'Playlist-ul este gol. Adaugă un fișier local sau un link YouTube.'
+                            : 'Niciun videoclip în această categorie.'}
+                    </p>
                 </div>
             )}
 
@@ -2153,35 +2284,33 @@ function PreviewPanel({
         return () => ro.disconnect();
     }, []);
 
-    const fontSizes = useMemo(() => {
-        if (!containerWidth || !previewSections.length || !previewType) return [];
+    const fontSize = useMemo(() => {
+        if (!containerWidth || !previewSections.length || previewType !== 'hymn') return null;
         const availWidth = containerWidth - 36; // padding + borders
-        if (availWidth <= 0) return [];
+        if (availWidth <= 0) return null;
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
-        if (!ctx) return [];
+        if (!ctx) return null;
 
         const fontFamily = getComputedStyle(document.documentElement).fontFamily || 'sans-serif';
         const baseMeasure = 14;
+        ctx.font = `${baseMeasure}px ${fontFamily}`;
 
-        return previewSections.map(sec => {
+        // Find the longest line across ALL sections
+        let maxLineWidth = 0;
+        for (const sec of previewSections) {
             const lines = sec.text.split('\n').filter(l => l.trim());
-            if (!lines.length) return 12;
-            ctx.font = `${baseMeasure}px ${fontFamily}`;
-            let maxLineWidth = 0;
             for (const line of lines) {
                 const w = ctx.measureText(line).width;
                 if (w > maxLineWidth) maxLineWidth = w;
             }
-            if (maxLineWidth <= 0) return 12;
-            const scale = availWidth / maxLineWidth;
-            const ideal = baseMeasure * scale;
-            if (previewType === 'hymn') {
-                return Math.min(Math.max(ideal, 9), 22);
-            } else {
-                return Math.min(Math.max(ideal, 9), 28);
-            }
-        });
+        }
+        if (maxLineWidth <= 0) return null;
+
+        const scale = availWidth / maxLineWidth;
+        const ideal = baseMeasure * scale;
+        // Clamp between 9px and 22px
+        return Math.min(Math.max(ideal, 9), 22);
     }, [containerWidth, previewSections, previewType]);
 
     // Scroll current/selected slide into view
@@ -2306,7 +2435,7 @@ function PreviewPanel({
                             }}
                         >
                             <div className={`sec-label ${sec.type}`}>{sec.label}</div>
-                            <div className="sec-text" style={fontSizes[i] ? { fontSize: `${fontSizes[i]}px` } : undefined}>{sec.text}</div>
+                            <div className="sec-text" style={fontSize ? { fontSize: `${fontSize}px` } : undefined}>{sec.text}</div>
                         </div>
                     );
                 })}
