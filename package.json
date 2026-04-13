@@ -1,7 +1,7 @@
 {
   "name": "adventshow",
   "private": true,
-  "version": "1.1.12",
+  "version": "1.1.13",
   "productName": "AdventShow",
   "description": "Aplicatie gratuita pentru proiectia imnurilor si versetelor biblice in biserica.",
   "author": "AdventTools",
@@ -21,7 +21,6 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "cfb": "^1.2.2",
-    "electron-updater": "^6.8.3",
     "ffmpeg-static": "^5.3.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.575.0",

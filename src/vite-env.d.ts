@@ -199,11 +199,9 @@ export interface IElectronAPI {
     signalReady: () => void;
   };
   update: {
-    check: () => Promise<{ available: boolean; version?: string }>;
+    check: () => Promise<{ available: boolean; version?: string; isDelta?: boolean }>;
     download: () => Promise<void>;
     install: () => void;
-    onAvailable: (cb: (data: { version: string; releaseNotes: string }) => void) => void;
-    offAvailable: () => void;
     onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => void;
     offProgress: () => void;
     onDownloaded: (cb: (data: { version: string }) => void) => void;

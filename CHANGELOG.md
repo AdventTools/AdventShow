@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.13 (13 Aprilie 2026)
+
+### Modificări
+- Delta update (descarcă doar codul, nu tot Electron), release script unificat, About simplificat
+
+---
+
+
 ## v1.1.12 (13 Aprilie 2026)
 
 ### Corecții

@@ -79,24 +79,29 @@ Repo: https://github.com/AdventTools/AdventShow
 - **macOS** — build-ul se face **local** pe mașina dezvoltatorului (este necesar macOS nativ pentru a genera `.dmg`)
 - **Windows și Linux** — build-urile se fac prin **GitHub Actions** (workflow CI/CD)
 
+### Auto-update (Delta Update)
+- **Nu folosim `electron-updater`**. Avem sistem propriu de delta update.
+- La update, aplicația descarcă doar `app.asar` (~2MB) în loc de tot Electron (~150MB)
+- Funcționează atâta timp cât versiunea Electron nu se schimbă
+- Dacă versiunea Electron s-a schimbat, se descarcă installerul complet (fallback)
+- Fiecare release include: `app-update.asar` + `update-manifest.json`
+- `update-manifest.json` conține: version, electronVersion, asarSha256, asarSize
+- Pe macOS, după înlocuirea app.asar, se re-semnează ad-hoc automat
+- Pe Windows, app.asar se înlocuiește direct (exe-ul rămâne neschimbat)
+
 ### Release-uri (OBLIGATORIU)
-- **La FIECARE modificare** care ajunge pe branch-ul `main`, trebuie creat un **GitHub Release** nou.
-- Release-ul trebuie să conțină **installerele** pentru toate platformele (Windows `.exe`, macOS `.dmg` + `.zip`, Linux `.AppImage`) plus fișierele `latest*.yml` necesare pentru auto-update.
-- Fără excepție: orice commit pe `main` care schimbă funcționalitatea, corectează bug-uri sau actualizează versiunea **trebuie** să fie însoțit de un release cu fișierele binare atașate.
-- Link-urile de descărcare din `README.md` trebuie să rămână mereu funcționale și să corespundă ultimului release.
-- La schimbarea versiunii, actualizează și numele fișierelor din tabelul de descărcare din `README.md`.
-- Tag-ul git pentru release este `v<MAJOR>.<MINOR>.<PATCH>` (ex: `v1.1.0`).
-- Procedura de release:
-  1. Actualizează `version` în `package.json`
-  2. Actualizează `CHANGELOG.md` cu modificările
-  3. Actualizează badge-ul de versiune și link-urile din `README.md`
-  4. Commit + push pe `main`
-  5. Creează tag: `git tag v<versiune>`
-  6. Push tag: `git push origin v<versiune>`
-  7. Build local macOS: `npm run build:mac`
-  8. Upload macOS: `./scripts/release-mac.sh` (încarcă `.dmg`, `.zip` și `latest-mac.yml`)
-  9. GitHub Actions construiește automat Windows + Linux și le atașează la release (inclusiv `latest.yml`, `latest-linux.yml`)
-  10. Verifică că toate link-urile de descărcare funcționează
+- **Un singur script**: `./scripts/release.sh "Descriere modificări" [patch|minor|major]`
+- Scriptul face totul automat:
+  1. Incrementează versiunea (patch implicit)
+  2. Actualizează `package.json`, `README.md`, `CHANGELOG.md`
+  3. Build macOS local (`npm run build:mac`)
+  4. Extrage `app.asar` + creează `update-manifest.json` pentru delta update
+  5. Commit + tag + push pe `main`
+  6. Creează GitHub Release
+  7. Uploadează: DMG, ZIP, latest-mac.yml, app-update.asar, update-manifest.json
+  8. GitHub Actions construiește automat Windows + Linux
+- Link-urile de descărcare din `README.md` trebuie să rămână mereu funcționale
+- Tag-ul git pentru release este `v<MAJOR>.<MINOR>.<PATCH>` (ex: `v1.1.0`)
 
 ### Git
 - Branch principal: `main`

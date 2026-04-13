@@ -119,12 +119,9 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   update: {
-    check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string }>,
+    check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string; isDelta?: boolean }>,
     download: () => ipcRenderer.invoke('update:download'),
     install: () => ipcRenderer.invoke('update:install'),
-    onAvailable: (cb: (data: { version: string; releaseNotes: string }) => void) =>
-      ipcRenderer.on('update:available', (_e, data) => cb(data)),
-    offAvailable: () => ipcRenderer.removeAllListeners('update:available'),
     onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) =>
       ipcRenderer.on('update:download-progress', (_e, data) => cb(data)),
     offProgress: () => ipcRenderer.removeAllListeners('update:download-progress'),
