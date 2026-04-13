@@ -8,14 +8,6 @@
   ],
   "productName": "AdventShow",
   "icon": "build/icon.png",
-  "electronLanguages": ["en", "ro"],
-  "publish": [
-    {
-      "provider": "github",
-      "owner": "AdventTools",
-      "repo": "AdventShow"
-    }
-  ],
   "directories": {
     "output": "release/${version}",
     "buildResources": "build"
