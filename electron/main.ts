@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -128,7 +128,9 @@ function writeSettings(settings: AppSettings) {
 // ── Auto-Updater (electron-updater) ───────────────────────────────────────────
 
 autoUpdater.autoDownload = false
-autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.autoInstallOnAppQuit = process.platform !== 'darwin' // macOS uses manual install
+
+let cachedUpdateZipPath: string | null = null
 
 function setupAutoUpdater() {
   autoUpdater.on('update-available', (info) => {
@@ -154,7 +156,10 @@ function setupAutoUpdater() {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    debugLog('[AutoUpdater] Update downloaded:', info.version)
+    // Store the downloaded file path for manual macOS installation
+    const downloaded = (info as { downloadedFile?: string }).downloadedFile
+    if (downloaded) cachedUpdateZipPath = downloaded
+    debugLog('[AutoUpdater] Update downloaded:', info.version, 'path:', cachedUpdateZipPath)
     win?.webContents.send('update:downloaded', { version: info.version })
   })
 
@@ -162,6 +167,57 @@ function setupAutoUpdater() {
     debugLog('[AutoUpdater] Error:', err.message)
     win?.webContents.send('update:error', err.message)
   })
+}
+
+// ── Manual macOS update (bypasses Squirrel/ShipIt code signature validation) ──
+
+async function installMacOSUpdate(): Promise<void> {
+  if (!cachedUpdateZipPath || !fs.existsSync(cachedUpdateZipPath)) {
+    throw new Error('Update zip not found')
+  }
+
+  const tempDir = path.join(app.getPath('temp'), `adventshow-update-${Date.now()}`)
+  fs.mkdirSync(tempDir, { recursive: true })
+
+  debugLog('[MacUpdate] Extracting', cachedUpdateZipPath, 'to', tempDir)
+
+  // Extract the zip using ditto (macOS built-in, preserves .app bundles correctly)
+  execSync(`ditto -xk "${cachedUpdateZipPath}" "${tempDir}"`, { encoding: 'utf8' })
+
+  // Find the .app bundle in the extracted directory
+  const items = fs.readdirSync(tempDir)
+  const appBundle = items.find(i => i.endsWith('.app'))
+  if (!appBundle) throw new Error('No .app bundle found in update zip')
+
+  const newAppPath = path.join(tempDir, appBundle)
+  // process.execPath = /path/to/App.app/Contents/MacOS/AppName
+  const currentAppPath = path.resolve(process.execPath, '..', '..', '..')
+
+  debugLog('[MacUpdate] Replacing', currentAppPath, 'with', newAppPath)
+
+  // Create a shell script that runs AFTER the app quits:
+  // 1. Waits for the process to exit
+  // 2. Removes the old app
+  // 3. Moves the new app into place
+  // 4. Strips quarantine (we downloaded it programmatically)
+  // 5. Launches the new app
+  // 6. Cleans up the temp dir
+  const script = path.join(tempDir, 'update.sh')
+  fs.writeFileSync(script, [
+    '#!/bin/bash',
+    'sleep 2',
+    `rm -rf "${currentAppPath}"`,
+    `mv "${newAppPath}" "${currentAppPath}"`,
+    `xattr -rd com.apple.quarantine "${currentAppPath}" 2>/dev/null || true`,
+    `open "${currentAppPath}"`,
+    `rm -rf "${tempDir}"`,
+  ].join('\n'), { mode: 0o755 })
+
+  // Launch the script detached so it survives our quit
+  spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
+
+  debugLog('[MacUpdate] Update script launched, quitting app…')
+  app.quit()
 }
 
 // ── Video conversion (FFmpeg) ─────────────────────────────────────────────────
@@ -916,8 +972,20 @@ app.whenReady().then(() => {
       return { available: false }
     }
   })
-  ipcMain.handle('update:download', () => autoUpdater.downloadUpdate())
-  ipcMain.handle('update:install', () => autoUpdater.quitAndInstall(false, true))
+  ipcMain.handle('update:download', async () => {
+    const paths = await autoUpdater.downloadUpdate()
+    // Store the downloaded zip path (backup in case update-downloaded event didn't fire yet)
+    if (paths && paths.length > 0) cachedUpdateZipPath = cachedUpdateZipPath || paths[0]
+    debugLog('[AutoUpdater] downloadUpdate returned:', paths)
+  })
+  ipcMain.handle('update:install', async () => {
+    if (process.platform === 'darwin') {
+      // Bypass Squirrel/ShipIt — manual extraction + replace + restart
+      await installMacOSUpdate()
+    } else {
+      autoUpdater.quitAndInstall(false, true)
+    }
+  })
 
   // ── Video ───────────────────────────────────────────────────────────────────
   ipcMain.handle('video:pick-file', async () => {
