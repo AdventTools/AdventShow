@@ -53,9 +53,6 @@
   },
   "win": {
     "icon": "build/icons/win/icon.ico",
-    "signingHashAlgorithms": ["sha256"],
-    "certificateFile": "electron/certs/adventshow.pfx",
-    "certificatePassword": "adventshow",
     "target": [
       {
         "target": "nsis",
