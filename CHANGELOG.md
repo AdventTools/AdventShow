@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.11 (13 Aprilie 2026)
+
+### Corecții
+- **Fix auto-update la aceeași versiune** — aplicația nu mai încearcă să se actualizeze la versiunea pe care o rulează deja; comparația corectă a versiunii curente cu cea din release
+- **Secțiunea Despre nativă macOS** — dialogul About din meniul aplicației afișează acum numele dezvoltatorilor și contribuțiile lor
+
+---
+
 ## v1.1.10 (13 Aprilie 2026)
 
 ### Corecții
