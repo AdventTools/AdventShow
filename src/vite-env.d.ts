@@ -109,8 +109,13 @@ export interface AppSettings {
   debugLog?: boolean; // enable detailed debug logging to file
   windowBounds?: { x: number; y: number; width: number; height: number };
   downloadFolder?: string; // custom download folder for YouTube videos
-  sidebarWidth?: number; // pixels, default 200
-  previewWidth?: number; // pixels, default 640
+  sidebarWidth?: number; // pixels, default 200 (deprecated — use layoutWidths)
+  previewWidth?: number; // pixels, default 640 (deprecated — use layoutWidths)
+  layoutWidths?: {
+    imnuri?: { sidebarWidth: number; previewWidth: number };
+    biblia?: { sidebarWidth: number; previewWidth: number };
+    video?: { sidebarWidth: number; previewWidth: number };
+  };
 }
 
 export interface YouTubeEntry {
@@ -194,8 +199,17 @@ export interface IElectronAPI {
     signalReady: () => void;
   };
   update: {
-    check: () => Promise<{ available: boolean; version?: string; changelog?: string; downloadUrl?: string }>;
-    openDownload: (url: string) => Promise<void>;
+    check: () => Promise<{ available: boolean; version?: string }>;
+    download: () => Promise<void>;
+    install: () => void;
+    onAvailable: (cb: (data: { version: string; releaseNotes: string }) => void) => void;
+    offAvailable: () => void;
+    onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => void;
+    offProgress: () => void;
+    onDownloaded: (cb: (data: { version: string }) => void) => void;
+    offDownloaded: () => void;
+    onError: (cb: (msg: string) => void) => void;
+    offError: () => void;
   };
   video: {
     pickFile: () => Promise<string | undefined>;
@@ -252,6 +266,8 @@ export interface IElectronAPI {
   playlist: {
     addLocal: (url: string, name: string) => Promise<{ entry?: YouTubeEntry; error?: string }>;
     getFileUrl: (id: string) => Promise<{ url?: string; name?: string; error?: string }>;
+    getFilePath: (id: string) => Promise<string | null>;
+    revealInFolder: (filePath: string) => Promise<void>;
     getDownloadFolder: () => Promise<string>;
   };
 }

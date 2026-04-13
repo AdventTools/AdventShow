@@ -3,10 +3,19 @@
   "appId": "com.adventtools.adventshow",
   "asar": true,
   "asarUnpack": [
-    "**/node_modules/ffmpeg-static/**"
+    "**/node_modules/ffmpeg-static/**",
+    "**/node_modules/better-sqlite3/**"
   ],
   "productName": "AdventShow",
   "icon": "build/icon.png",
+  "electronLanguages": ["en", "ro"],
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "AdventTools",
+      "repo": "AdventShow"
+    }
+  ],
   "directories": {
     "output": "release/${version}",
     "buildResources": "build"

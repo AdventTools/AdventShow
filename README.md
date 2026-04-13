@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.5-green)
+![version](https://img.shields.io/badge/versiune-1.1.6-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -116,8 +116,8 @@ AdventShow este distribuit gratuit și nu deține un certificat de semnare. Sist
 
 **AdventShow** este dezvoltat și distribuit **gratuit** de:
 
-- **Ovidius Zanfir** — autor original
-- **Samy Balasa** — interfață, integrare Biblie, funcționalități noi
+- **Ovidius Zanfir** — autor original, interfață
+- **Samy Balasa** — redare video, YouTube, auto-update, funcționalități noi, corecții
 
 Organizație: [**AdventTools**](https://github.com/AdventTools)
 

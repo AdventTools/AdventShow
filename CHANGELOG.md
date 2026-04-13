@@ -1,5 +1,19 @@
 # Changelog — AdventShow
 
+## v1.1.6 (12 Aprilie 2026)
+
+### Funcționalități noi
+- **Configurare inițială completă** — la prima pornire, aplicația cere și setarea folderului de descărcare pentru videouri (nu doar parola)
+- **Playlist video în sidebar** — toate videoclipurile (locale și YouTube) apar acum în bara laterală, ca și imnurile sau Biblia
+- **Locație fișier clickabilă** — fiecare videoclip din playlist afișează calea fișierului; click pe ea deschide folderul în Finder / Explorer
+- **Previzualizare text auto-resize** — fontul din panoul de previzualizare se ajustează automat la lățimea panoului (row-fit pentru imnuri, verse-fit cu limită pentru Biblie)
+
+### Îmbunătățiri
+- **Import / Export mai clar** — secțiunea de Import / Export este acum etichetată explicit ca fiind pentru imnuri, cu descrieri și butoane clare
+- **Video Controller simplificat** — zona de conținut afișează doar controlul de adăugare surse; playlist-ul a fost mutat în sidebar
+
+---
+
 ## v1.1.5 (11 Aprilie 2026)
 
 ### Funcționalități noi

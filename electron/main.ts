@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -84,6 +85,13 @@ interface AppSettings {
   debugLog?: boolean
   downloadFolder?: string  // custom folder for YouTube downloads
   windowBounds?: { x: number; y: number; width: number; height: number }
+  sidebarWidth?: number // deprecated — use layoutWidths
+  previewWidth?: number // deprecated — use layoutWidths
+  layoutWidths?: {
+    imnuri?: { sidebarWidth: number; previewWidth: number }
+    biblia?: { sidebarWidth: number; previewWidth: number }
+    video?: { sidebarWidth: number; previewWidth: number }
+  }
 }
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
@@ -117,72 +125,38 @@ function writeSettings(settings: AppSettings) {
   fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
 }
 
-// ── GitHub Update Checker ─────────────────────────────────────────────────────
+// ── Auto-Updater (electron-updater) ───────────────────────────────────────────
 
-const GITHUB_REPO = 'AdventTools/AdventShow'
-const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
 
-interface UpdateInfo {
-  available: boolean
-  version?: string
-  changelog?: string
-  downloadUrl?: string
-}
-
-function compareVersions(local: string, remote: string): number {
-  const a = local.replace(/^v/, '').split('.').map(Number)
-  const b = remote.replace(/^v/, '').split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
-    if ((b[i] ?? 0) > (a[i] ?? 0)) return 1
-    if ((b[i] ?? 0) < (a[i] ?? 0)) return -1
-  }
-  return 0
-}
-
-function getPlatformAssetPattern(): RegExp {
-  switch (process.platform) {
-    case 'win32': return /-Setup\.exe$/i
-    case 'darwin': return /\.dmg$/i
-    case 'linux': return /\.AppImage$/i
-    default: return /\.AppImage$/i
-  }
-}
-
-async function checkForUpdate(): Promise<UpdateInfo> {
-  try {
-    const response = await net.fetch(GITHUB_API_URL, {
-      headers: { 'User-Agent': 'AdventShow-Updater' }
+function setupAutoUpdater() {
+  autoUpdater.on('update-available', (info) => {
+    debugLog('[AutoUpdater] Update available:', info.version)
+    win?.webContents.send('update:available', {
+      version: info.version,
+      releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : '',
     })
-    if (!response.ok) {
-      console.warn(`[Update] GitHub API returned ${response.status}`)
-      return { available: false }
-    }
-    const data = await response.json() as {
-      tag_name: string
-      body?: string
-      assets?: { name: string; browser_download_url: string }[]
-    }
+  })
 
-    const remoteVersion = data.tag_name ?? ''
-    const localVersion = app.getVersion()
+  autoUpdater.on('download-progress', (progress) => {
+    win?.webContents.send('update:download-progress', {
+      percent: Math.round(progress.percent),
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total,
+    })
+  })
 
-    if (compareVersions(localVersion, remoteVersion) <= 0) {
-      return { available: false }
-    }
+  autoUpdater.on('update-downloaded', (info) => {
+    debugLog('[AutoUpdater] Update downloaded:', info.version)
+    win?.webContents.send('update:downloaded', { version: info.version })
+  })
 
-    const pattern = getPlatformAssetPattern()
-    const asset = data.assets?.find(a => pattern.test(a.name))
-
-    return {
-      available: true,
-      version: remoteVersion,
-      changelog: data.body ?? '',
-      downloadUrl: asset?.browser_download_url ?? `https://github.com/${GITHUB_REPO}/releases/latest`,
-    }
-  } catch (err) {
-    console.warn('[Update] Check failed:', err)
-    return { available: false }
-  }
+  autoUpdater.on('error', (err) => {
+    debugLog('[AutoUpdater] Error:', err.message)
+    win?.webContents.send('update:error', err.message)
+  })
 }
 
 // ── Video conversion (FFmpeg) ─────────────────────────────────────────────────
@@ -686,6 +660,7 @@ app.whenReady().then(() => {
   copySeedDbIfNeeded()
   initDB()
   seedBibleFromJson()
+  setupAutoUpdater()
 
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => readSettings())
@@ -915,10 +890,16 @@ app.whenReady().then(() => {
   ipcMain.handle('bible:has-data', () => hasBibleData())
 
   // ── Update ──────────────────────────────────────────────────────────────────
-  ipcMain.handle('update:check', () => checkForUpdate())
-  ipcMain.handle('update:open-download', async (_e, url: string) => {
-    if (url) await shell.openExternal(url)
+  ipcMain.handle('update:check', async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates()
+      return { available: !!result?.updateInfo, version: result?.updateInfo?.version }
+    } catch {
+      return { available: false }
+    }
   })
+  ipcMain.handle('update:download', () => autoUpdater.downloadUpdate())
+  ipcMain.handle('update:install', () => autoUpdater.quitAndInstall(false, true))
 
   // ── Video ───────────────────────────────────────────────────────────────────
   ipcMain.handle('video:pick-file', async () => {
@@ -1156,6 +1137,27 @@ app.whenReady().then(() => {
 
   ipcMain.handle('youtube:get-download-folder', () => {
     return getYouTubeDir()
+  })
+
+  ipcMain.handle('playlist:get-file-path', (_e, id: string) => {
+    const playlist = readYouTubePlaylist()
+    const entry = playlist.find(e => e.id === id) as any
+    if (!entry) return null
+    if (entry.localUrl) {
+      // localfile:///path → /path
+      const raw = (entry.localUrl as string).replace(/^localfile:\/\//, '')
+      return decodeURIComponent(raw)
+    }
+    if (entry.fileName) {
+      return path.join(getYouTubeDir(), entry.fileName)
+    }
+    return null
+  })
+
+  ipcMain.handle('playlist:reveal-in-folder', (_e, filePath: string) => {
+    if (filePath && fs.existsSync(filePath)) {
+      shell.showItemInFolder(filePath)
+    }
   })
 
   ipcMain.handle('playlist:add-local', (_e, url: string, name: string) => {

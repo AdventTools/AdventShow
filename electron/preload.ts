@@ -119,8 +119,21 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   update: {
-    check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string; changelog?: string; downloadUrl?: string }>,
-    openDownload: (url: string) => ipcRenderer.invoke('update:open-download', url),
+    check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string }>,
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onAvailable: (cb: (data: { version: string; releaseNotes: string }) => void) =>
+      ipcRenderer.on('update:available', (_e, data) => cb(data)),
+    offAvailable: () => ipcRenderer.removeAllListeners('update:available'),
+    onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) =>
+      ipcRenderer.on('update:download-progress', (_e, data) => cb(data)),
+    offProgress: () => ipcRenderer.removeAllListeners('update:download-progress'),
+    onDownloaded: (cb: (data: { version: string }) => void) =>
+      ipcRenderer.on('update:downloaded', (_e, data) => cb(data)),
+    offDownloaded: () => ipcRenderer.removeAllListeners('update:downloaded'),
+    onError: (cb: (msg: string) => void) =>
+      ipcRenderer.on('update:error', (_e, msg) => cb(msg)),
+    offError: () => ipcRenderer.removeAllListeners('update:error'),
   },
 
   video: {
@@ -189,6 +202,8 @@ contextBridge.exposeInMainWorld('electron', {
   playlist: {
     addLocal: (url: string, name: string) => ipcRenderer.invoke('playlist:add-local', url, name),
     getFileUrl: (id: string) => ipcRenderer.invoke('playlist:get-file-url', id),
+    getFilePath: (id: string) => ipcRenderer.invoke('playlist:get-file-path', id) as Promise<string | null>,
+    revealInFolder: (filePath: string) => ipcRenderer.invoke('playlist:reveal-in-folder', filePath),
     getDownloadFolder: () => ipcRenderer.invoke('youtube:get-download-folder') as Promise<string>,
   },
 })
