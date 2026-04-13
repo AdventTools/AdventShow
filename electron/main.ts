@@ -261,7 +261,12 @@ async function downloadUpdate(): Promise<void> {
 
   const tempDir = path.join(app.getPath('temp'), `adventshow-update-${Date.now()}`)
   fs.mkdirSync(tempDir, { recursive: true })
-  const destFile = path.join(tempDir, assetName)
+  // IMPORTANT: nu folosi extensia .asar pentru fișierul descărcat!
+  // Electron interceptează TOATE operațiunile fs pe căi care se termină în .asar
+  // (le tratează ca pachete, nu ca fișiere), ceea ce face ca WriteStream-ul să nu scrie nimic.
+  // Descărcăm în .tmp, iar scriptul de instalare copiază .tmp → app.asar.
+  const localFileName = updateState.isDelta ? 'update.tmp' : assetName
+  const destFile = path.join(tempDir, localFileName)
 
   debugLog(`[DeltaUpdate] Downloading ${assetName} (${updateState.isDelta ? 'delta' : 'full'})...`)
 

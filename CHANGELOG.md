@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.17 (13 Aprilie 2026)
+
+### Modificări
+- Fix critic: descărcare update nu funcționa (Electron intercepta fs pentru .asar)
+
+---
+
+
 ## v1.1.16 (13 Aprilie 2026)
 
 ### Modificări
