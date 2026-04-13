@@ -1,5 +1,21 @@
 # Changelog — AdventShow
 
+## v1.1.19 (13 Aprilie 2026)
+
+### Modificări
+- Îmbunătățire panou About nativ, test delta update
+
+---
+
+
+## v1.1.18 (13 Aprilie 2026)
+
+### Modificări
+- Îmbunătățire panou About nativ, test delta update
+
+---
+
+
 ## v1.1.17 (13 Aprilie 2026)
 
 ### Modificări
