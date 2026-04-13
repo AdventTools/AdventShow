@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.1.10 (13 Aprilie 2026)
+
+### Corecții
+- **Fix auto-update macOS** — eliminată semnarea ad-hoc care bloca actualizarea automată (macOS Squirrel/ShipIt valida semnătura și eșua). Aplicația rămâne nesemnată, ceea ce este corect pentru distribuție gratuită fără certificat Apple Developer.
+
+---
+
 ## v1.1.9 (13 Aprilie 2026)
 
 ### Corecții
