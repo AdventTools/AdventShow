@@ -81,7 +81,7 @@ Repo: https://github.com/AdventTools/AdventShow
 
 ### Release-uri (OBLIGATORIU)
 - **La FIECARE modificare** care ajunge pe branch-ul `main`, trebuie creat un **GitHub Release** nou.
-- Release-ul trebuie să conțină **installerele** pentru toate platformele (Windows `.exe`, macOS `.dmg`, Linux `.AppImage`).
+- Release-ul trebuie să conțină **installerele** pentru toate platformele (Windows `.exe`, macOS `.dmg` + `.zip`, Linux `.AppImage`) plus fișierele `latest*.yml` necesare pentru auto-update.
 - Fără excepție: orice commit pe `main` care schimbă funcționalitatea, corectează bug-uri sau actualizează versiunea **trebuie** să fie însoțit de un release cu fișierele binare atașate.
 - Link-urile de descărcare din `README.md` trebuie să rămână mereu funcționale și să corespundă ultimului release.
 - La schimbarea versiunii, actualizează și numele fișierelor din tabelul de descărcare din `README.md`.
@@ -93,9 +93,10 @@ Repo: https://github.com/AdventTools/AdventShow
   4. Commit + push pe `main`
   5. Creează tag: `git tag v<versiune>`
   6. Push tag: `git push origin v<versiune>`
-  7. Build local macOS: `npm run build:mac` → încarcă `.dmg` în release
-  8. GitHub Actions construiește automat Windows + Linux și le atașează la release
-  9. Verifică că toate link-urile de descărcare funcționează
+  7. Build local macOS: `npm run build:mac`
+  8. Upload macOS: `./scripts/release-mac.sh` (încarcă `.dmg`, `.zip` și `latest-mac.yml`)
+  9. GitHub Actions construiește automat Windows + Linux și le atașează la release (inclusiv `latest.yml`, `latest-linux.yml`)
+  10. Verifică că toate link-urile de descărcare funcționează
 
 ### Git
 - Branch principal: `main`
