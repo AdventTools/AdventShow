@@ -911,9 +911,20 @@ app.whenReady().then(() => {
   app.setAboutPanelOptions({
     applicationName: 'AdventShow',
     applicationVersion: app.getVersion(),
-    copyright: '© 2025 AdventTools',
-    credits: 'Ovidius Zanfir\nSamy Balasa',
-    website: 'https://github.com/AdventTools',
+    copyright: '© 2025 AdventTools  •  github.com/AdventTools',
+    credits: [
+      'Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici.',
+      '',
+      '── Dezvoltatori ──',
+      'Ovidius Zanfir — concept, design, baza de date imnuri',
+      'Samy Balasa — video, YouTube, Biblie, auto-update',
+      '',
+      '── Conținut ──',
+      '922 imnuri din colecția „Imnuri Creștine"',
+      'Biblia Cornilescu — 66 cărți, 31.102 versete',
+      '',
+      'github.com/AdventTools',
+    ].join('\n'),
   })
 
   // Prevent system sleep / screensaver / hibernate while the app is running
