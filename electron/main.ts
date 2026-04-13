@@ -207,7 +207,7 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
       })
       res.pipe(file)
       file.on('finish', () => { file.close(); resolve() })
-      file.on('error', (err) => { fs.unlinkSync(dest); reject(err) })
+      file.on('error', (err) => { try { fs.unlinkSync(dest) } catch { /* ignore — fișierul poate că nici nu a fost creat */ }; reject(err) })
     })
     request.on('error', reject)
     request.setTimeout(120000, () => { request.destroy(); reject(new Error('Download timeout')) })
