@@ -1,5 +1,4 @@
 import {
-    AlertCircle,
     Book,
     ChevronLeft,
     ChevronRight,
@@ -22,7 +21,7 @@ import {
     Volume2,
     X,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ProjectorController } from './ProjectorController';
 import type {
@@ -263,8 +262,12 @@ function App() {
 
     // ── Update state ──
     const [updateInfo, setUpdateInfo] = useState<{
-        available: boolean; version?: string; changelog?: string; downloadUrl?: string;
+        available: boolean; version?: string;
     } | null>(null);
+    const [updateDownloading, setUpdateDownloading] = useState(false);
+    const [updateProgress, setUpdateProgress] = useState(0);
+    const [updateReady, setUpdateReady] = useState(false);
+    const [updateError, setUpdateError] = useState<string | null>(null);
 
     // ── Video state ──
     const [videoStatus, setVideoStatus] = useState<{
@@ -315,6 +318,12 @@ function App() {
     const [previewWidth, setPreviewWidth] = useState(640);
     const draggingRef = useRef<'sidebar' | 'preview' | null>(null);
     const mainAreaRef = useRef<HTMLDivElement>(null);
+    const layoutWidthsRef = useRef<Record<Tab, { sidebarWidth: number; previewWidth: number }>>({
+        imnuri: { sidebarWidth: 200, previewWidth: 640 },
+        biblia: { sidebarWidth: 200, previewWidth: 640 },
+        video: { sidebarWidth: 200, previewWidth: 640 },
+    });
+    const tabRef = useRef<Tab>('imnuri');
 
     // Keep ref in sync
     useEffect(() => { projSlideIndexRef.current = projSlideIndex; }, [projSlideIndex]);
@@ -346,17 +355,56 @@ function App() {
             } else {
                 setNeedsPasswordSetup(true);
             }
-            // Restore saved layout widths
-            if (s.sidebarWidth) setSidebarWidth(s.sidebarWidth);
-            if (s.previewWidth) setPreviewWidth(s.previewWidth);
+            // Restore saved per-tab layout widths
+            if (s.layoutWidths) {
+                const lw = s.layoutWidths;
+                if (lw.imnuri) layoutWidthsRef.current.imnuri = lw.imnuri;
+                if (lw.biblia) layoutWidthsRef.current.biblia = lw.biblia;
+                if (lw.video) layoutWidthsRef.current.video = lw.video;
+            } else {
+                // Migrate old flat widths
+                if (s.sidebarWidth || s.previewWidth) {
+                    const sw = s.sidebarWidth ?? 200;
+                    const pw = s.previewWidth ?? 640;
+                    layoutWidthsRef.current.imnuri = { sidebarWidth: sw, previewWidth: pw };
+                    layoutWidthsRef.current.biblia = { sidebarWidth: sw, previewWidth: pw };
+                    layoutWidthsRef.current.video = { sidebarWidth: sw, previewWidth: pw };
+                }
+            }
+            // Apply widths for current tab (imnuri on mount)
+            const cur = layoutWidthsRef.current.imnuri;
+            setSidebarWidth(cur.sidebarWidth);
+            setPreviewWidth(cur.previewWidth);
         });
     }, []);
 
-    // Check for updates on mount
+    // Check for updates on mount + listen for auto-updater events
     useEffect(() => {
         window.electron.update.check()
             .then(info => { if (info.available) setUpdateInfo(info) })
             .catch(() => { /* silently ignore */ });
+
+        window.electron.update.onAvailable((data) => {
+            setUpdateInfo({ available: true, version: data.version });
+        });
+        window.electron.update.onProgress((data) => {
+            setUpdateProgress(data.percent);
+        });
+        window.electron.update.onDownloaded(() => {
+            setUpdateDownloading(false);
+            setUpdateReady(true);
+        });
+        window.electron.update.onError((msg) => {
+            setUpdateDownloading(false);
+            setUpdateError(msg);
+        });
+
+        return () => {
+            window.electron.update.offAvailable();
+            window.electron.update.offProgress();
+            window.electron.update.offDownloaded();
+            window.electron.update.offError();
+        };
     }, []);
 
     // Video status listener
@@ -550,12 +598,20 @@ function App() {
 
     // ── Tab switch ──
     const switchTab = useCallback((newTab: Tab) => {
+        // Save current tab widths
+        layoutWidthsRef.current[tabRef.current] = { sidebarWidth, previewWidth };
+        // Restore new tab widths
+        const nw = layoutWidthsRef.current[newTab];
+        setSidebarWidth(nw.sidebarWidth);
+        setPreviewWidth(nw.previewWidth);
+        tabRef.current = newTab;
+
         setTab(newTab);
         setRefSearch('');
         setContentSearch('');
         setBibleSearchResults(null);
         if (!projecting) clearPreview();
-    }, [projecting, clearPreview]);
+    }, [projecting, clearPreview, sidebarWidth, previewWidth]);
 
     // ── Bible navigation ──
     const selectBook = useCallback(async (book: BibleBook) => {
@@ -907,12 +963,12 @@ function App() {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
             draggingRef.current = null;
-            // Save layout widths
+            // Save per-tab layout widths
             setTimeout(() => {
-                window.electron.settings.set({
-                    sidebarWidth: document.querySelector<HTMLElement>('.sidebar')?.offsetWidth,
-                    previewWidth: document.querySelector<HTMLElement>('.preview')?.offsetWidth,
-                });
+                const sw = document.querySelector<HTMLElement>('.sidebar')?.offsetWidth ?? 200;
+                const pw = document.querySelector<HTMLElement>('.preview')?.offsetWidth ?? 640;
+                layoutWidthsRef.current[tabRef.current] = { sidebarWidth: sw, previewWidth: pw };
+                window.electron.settings.set({ layoutWidths: { ...layoutWidthsRef.current } });
             }, 50);
         };
 
@@ -1135,28 +1191,66 @@ function App() {
                             }}
                         />
                     ) : (
-                        <div className="sidebar-title">Video</div>
+                        <SidebarVideoPlaylist
+                            youtubePlaylist={youtubePlaylist}
+                            youtubeProgress={youtubeProgress}
+                            onPlay={youtubePlay}
+                            onRemove={youtubeRemove}
+                            onDelete={youtubeDelete}
+                            onRetry={youtubeRetry}
+                            onUpdateTitle={youtubeUpdateTitle}
+                        />
                     )}
                     {/* Update banner */}
-                    {updateInfo?.available && (
+                    {(updateInfo?.available || updateReady) && (
                         <div className="update-banner">
                             <div className="update-banner-title">
                                 <Download className="icon-sm" />
-                                Versiune nouă: {updateInfo.version}
+                                {updateReady
+                                    ? `Actualizare ${updateInfo?.version} descărcată`
+                                    : `Versiune nouă: ${updateInfo?.version}`}
                             </div>
-                            {updateInfo.changelog && (
-                                <div className="update-banner-changelog">
-                                    {updateInfo.changelog.length > 200
-                                        ? updateInfo.changelog.slice(0, 200) + '…'
-                                        : updateInfo.changelog}
+                            {updateError && (
+                                <div className="update-banner-changelog" style={{ color: '#f87171' }}>
+                                    Eroare: {updateError}
                                 </div>
                             )}
-                            <button
-                                className="update-banner-btn"
-                                onClick={() => updateInfo.downloadUrl && window.electron.update.openDownload(updateInfo.downloadUrl)}
-                            >
-                                Descarcă
-                            </button>
+                            {updateDownloading ? (
+                                <div style={{ width: '100%' }}>
+                                    <div style={{
+                                        height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.15)',
+                                        overflow: 'hidden', marginBottom: 4,
+                                    }}>
+                                        <div style={{
+                                            height: '100%', width: `${updateProgress}%`,
+                                            background: 'var(--accent)', borderRadius: 3,
+                                            transition: 'width 0.3s ease',
+                                        }} />
+                                    </div>
+                                    <div style={{ fontSize: 11, textAlign: 'center', opacity: 0.7 }}>
+                                        {updateProgress}%
+                                    </div>
+                                </div>
+                            ) : updateReady ? (
+                                <button
+                                    className="update-banner-btn"
+                                    onClick={() => window.electron.update.install()}
+                                >
+                                    Instalează și repornește
+                                </button>
+                            ) : (
+                                <button
+                                    className="update-banner-btn"
+                                    onClick={() => {
+                                        setUpdateDownloading(true);
+                                        setUpdateProgress(0);
+                                        setUpdateError(null);
+                                        window.electron.update.download();
+                                    }}
+                                >
+                                    Actualizează
+                                </button>
+                            )}
                         </div>
                     )}
                 </aside>
@@ -1187,7 +1281,6 @@ function App() {
                             videoLoading={videoLoading}
                             videoConverting={videoConverting}
                             youtubePlaylist={youtubePlaylist}
-                            youtubeProgress={youtubeProgress}
                             onPickFile={loadVideoFile}
                             onPlay={videoPlay}
                             onPause={videoPause}
@@ -1195,11 +1288,6 @@ function App() {
                             onSeek={videoSeek}
                             onVolume={videoSetVolume}
                             onYoutubeAdd={youtubeAdd}
-                            onYoutubeRemove={youtubeRemove}
-                            onYoutubeDelete={youtubeDelete}
-                            onYoutubePlay={youtubePlay}
-                            onYoutubeRetry={youtubeRetry}
-                            onYoutubeUpdateTitle={youtubeUpdateTitle}
                         />
                     ) : bibleSearchResults ? (
                         <BibleSearchResultsList
@@ -1330,10 +1418,12 @@ function App() {
             {/* ── First Launch Password Setup ── */}
             {needsPasswordSetup && (
                 <PasswordSetupModal
-                    onSave={async (pw) => {
+                    onSave={async (pw, folder) => {
                         const hash = hashPassword(pw);
                         setAdminPasswordHash(hash);
-                        await window.electron.settings.set({ adminPasswordHash: hash });
+                        const patch: Partial<AppSettings> = { adminPasswordHash: hash };
+                        if (folder) patch.downloadFolder = folder;
+                        await window.electron.settings.set(patch);
                         setNeedsPasswordSetup(false);
                     }}
                 />
@@ -1438,6 +1528,148 @@ function SidebarBibleBooks({
                         ))}
                     </>
                 )}
+            </div>
+        </>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Sidebar – Video Playlist
+// ═════════════════════════════════════════════════════════════════════════════
+
+function SidebarVideoPlaylist({
+    youtubePlaylist, youtubeProgress,
+    onPlay, onRemove, onDelete, onRetry, onUpdateTitle,
+}: {
+    youtubePlaylist: YouTubeEntry[];
+    youtubeProgress: Record<string, number>;
+    onPlay: (id: string) => void;
+    onRemove: (id: string) => void;
+    onDelete: (id: string) => void;
+    onRetry: (id: string) => void;
+    onUpdateTitle: (id: string, title: string) => void;
+}) {
+    const [editingTitle, setEditingTitle] = useState<string | null>(null);
+    const [editTitleValue, setEditTitleValue] = useState('');
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const [filePaths, setFilePaths] = useState<Record<string, string>>({});
+
+    // Load file paths for all entries
+    useEffect(() => {
+        const loadPaths = async () => {
+            const paths: Record<string, string> = {};
+            for (const entry of youtubePlaylist) {
+                if (entry.status === 'ready') {
+                    const fp = await window.electron.playlist.getFilePath(entry.id);
+                    if (fp) paths[entry.id] = fp;
+                }
+            }
+            setFilePaths(paths);
+        };
+        loadPaths();
+    }, [youtubePlaylist]);
+
+    return (
+        <>
+            <div className="sidebar-title">Playlist Video</div>
+            <div className="sidebar-list">
+                {youtubePlaylist.length === 0 && (
+                    <div className="text-white/30 text-xs px-3 py-4 text-center">
+                        Playlist-ul este gol.<br />Adaugă un fișier local sau un link YouTube din panoul central.
+                    </div>
+                )}
+                {youtubePlaylist.map(entry => {
+                    const isLocal = !!(entry as any).localUrl;
+                    const fp = filePaths[entry.id];
+                    const shortPath = fp ? (fp.length > 40 ? '…' + fp.slice(-38) : fp) : '';
+
+                    return (
+                        <div key={entry.id} className="sidebar-video-item">
+                            <div className="sidebar-video-top">
+                                <span className={`yt-source-badge ${isLocal ? 'yt-badge-local' : 'yt-badge-yt'}`}>
+                                    {isLocal ? 'Local' : 'YT'}
+                                </span>
+                                {editingTitle === entry.id ? (
+                                    <input
+                                        className="yt-playlist-title-input"
+                                        value={editTitleValue}
+                                        onChange={(e) => setEditTitleValue(e.target.value)}
+                                        onBlur={() => { onUpdateTitle(entry.id, editTitleValue); setEditingTitle(null); }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') { onUpdateTitle(entry.id, editTitleValue); setEditingTitle(null); }
+                                            if (e.key === 'Escape') setEditingTitle(null);
+                                        }}
+                                        autoFocus
+                                    />
+                                ) : (
+                                    <span
+                                        className="sidebar-video-title"
+                                        onDoubleClick={() => { setEditingTitle(entry.id); setEditTitleValue(entry.title); }}
+                                        title={entry.title}
+                                    >
+                                        {entry.title}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* File location */}
+                            {fp && (
+                                <div
+                                    className="sidebar-video-path"
+                                    onClick={() => window.electron.playlist.revealInFolder(fp)}
+                                    title={`Deschide în ${navigator.platform.includes('Mac') ? 'Finder' : 'Explorer'}: ${fp}`}
+                                >
+                                    <FolderOpen className="icon-xs" />
+                                    <span>{shortPath}</span>
+                                </div>
+                            )}
+
+                            {/* Progress bar */}
+                            {entry.status === 'downloading' && (
+                                <div className="yt-progress-bar" style={{ margin: '2px 0' }}>
+                                    <div className="yt-progress-fill" style={{ width: `${youtubeProgress[entry.id] ?? 0}%` }} />
+                                </div>
+                            )}
+
+                            {/* Status + actions */}
+                            <div className="sidebar-video-actions">
+                                {entry.status === 'downloading' && (
+                                    <span className="text-white/40 text-xs">
+                                        <Loader className="icon-xs animate-spin inline" /> {Math.round(youtubeProgress[entry.id] ?? 0)}%
+                                    </span>
+                                )}
+                                {entry.status === 'ready' && (
+                                    <button className="video-btn video-btn-play yt-play-btn" onClick={() => onPlay(entry.id)} title="Redă" style={{ padding: '2px 6px', fontSize: 11 }}>
+                                        <Play className="icon-xs" /> Redă
+                                    </button>
+                                )}
+                                {entry.status === 'error' && !isLocal && (
+                                    <button className="video-btn yt-retry-btn" onClick={() => onRetry(entry.id)} title="Reîncearcă" style={{ padding: '2px 6px', fontSize: 11 }}>
+                                        <RefreshCw className="icon-xs" /> Reîncearcă
+                                    </button>
+                                )}
+                                {entry.status === 'error' && (
+                                    <span className="text-red-400 text-xs" title={entry.error}>Eroare</span>
+                                )}
+                                <button className="video-btn yt-remove-btn" onClick={() => onRemove(entry.id)} title="Elimină din playlist" style={{ padding: '2px 4px' }}>
+                                    <X className="icon-xs" />
+                                </button>
+                                {entry.status === 'ready' && !isLocal && (
+                                    deleteConfirm === entry.id ? (
+                                        <div className="flex gap-1 items-center">
+                                            <button className="video-btn yt-btn-small yt-btn-danger" onClick={() => { onDelete(entry.id); setDeleteConfirm(null); }} style={{ fontSize: 10, padding: '1px 4px' }}>Șterge</button>
+                                            <button className="video-btn yt-btn-small" onClick={() => setDeleteConfirm(null)} style={{ fontSize: 10, padding: '1px 4px' }}>Nu</button>
+                                        </div>
+                                    ) : (
+                                        <button className="video-btn yt-btn-small yt-btn-danger" onClick={() => setDeleteConfirm(entry.id)} title="Șterge de pe disc" style={{ padding: '2px 4px' }}>
+                                            <Trash2 className="icon-xs" />
+                                        </button>
+                                    )
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </>
     );
@@ -1633,10 +1865,10 @@ function formatTime(seconds: number): string {
 
 function VideoController({
     videoName, videoStatus, videoVolume, videoLoading, videoConverting,
-    youtubePlaylist, youtubeProgress,
+    youtubePlaylist,
     onPickFile, onPlay, onPause, onStop,
     onSeek, onVolume,
-    onYoutubeAdd, onYoutubeRemove, onYoutubeDelete, onYoutubePlay, onYoutubeRetry, onYoutubeUpdateTitle,
+    onYoutubeAdd,
 }: {
     videoName: string;
     videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
@@ -1644,7 +1876,6 @@ function VideoController({
     videoLoading: boolean;
     videoConverting: boolean;
     youtubePlaylist: YouTubeEntry[];
-    youtubeProgress: Record<string, number>;
     onPickFile: () => void;
     onPlay: () => void;
     onPause: () => void;
@@ -1652,11 +1883,6 @@ function VideoController({
     onSeek: (time: number) => void;
     onVolume: (vol: number) => void;
     onYoutubeAdd: (url: string) => Promise<string | null>;
-    onYoutubeRemove: (id: string) => void;
-    onYoutubeDelete: (id: string) => void;
-    onYoutubePlay: (id: string) => void;
-    onYoutubeRetry: (id: string) => void;
-    onYoutubeUpdateTitle: (id: string, title: string) => void;
 }) {
     const isPlaying = !!videoStatus;
     const isPaused = videoStatus?.paused ?? true;
@@ -1671,13 +1897,6 @@ function VideoController({
     // yt-dlp install/update state
     const [ytdlpInstalled, setYtdlpInstalled] = useState<boolean | null>(null);
     const [ytdlpBusy, setYtdlpBusy] = useState(false);
-
-    // Delete confirmation
-    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
-    // Editing title
-    const [editingTitle, setEditingTitle] = useState<string | null>(null);
-    const [editTitleValue, setEditTitleValue] = useState('');
 
     useEffect(() => {
         (async () => {
@@ -1805,7 +2024,7 @@ function VideoController({
             <div className="video-section">
                 <div className="video-section-header">
                     <Film className="icon-sm opacity-60" />
-                    <span>Playlist Video</span>
+                    <span>Adaugă video în playlist</span>
                 </div>
 
                 {/* Local file picker */}
@@ -1858,142 +2077,16 @@ function VideoController({
                 {ytError && <p className="video-youtube-error">{ytError}</p>}
             </div>
 
-            {/* ── Unified Playlist ── */}
-            {youtubePlaylist.length > 0 && (
-                <div className="yt-playlist">
-                    {youtubePlaylist.map(entry => {
-                        const isLocal = !!entry.localUrl;
-                        return (
-                            <div key={entry.id} className={`yt-playlist-item yt-status-${entry.status}`}>
-                                <div className="yt-playlist-item-top">
-                                    <span className={`yt-source-badge ${isLocal ? 'yt-badge-local' : 'yt-badge-yt'}`}>
-                                        {isLocal ? 'Local' : 'YT'}
-                                    </span>
-                                    {editingTitle === entry.id ? (
-                                        <input
-                                            className="yt-playlist-title-input"
-                                            value={editTitleValue}
-                                            onChange={(e) => setEditTitleValue(e.target.value)}
-                                            onBlur={() => {
-                                                onYoutubeUpdateTitle(entry.id, editTitleValue);
-                                                setEditingTitle(null);
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    onYoutubeUpdateTitle(entry.id, editTitleValue);
-                                                    setEditingTitle(null);
-                                                }
-                                                if (e.key === 'Escape') setEditingTitle(null);
-                                            }}
-                                            autoFocus
-                                        />
-                                    ) : (
-                                        <span
-                                            className="yt-playlist-title"
-                                            onDoubleClick={() => {
-                                                setEditingTitle(entry.id);
-                                                setEditTitleValue(entry.title);
-                                            }}
-                                            title="Dublu-click pentru a edita titlul"
-                                        >
-                                            {entry.title}
-                                        </span>
-                                    )}
-                                    <span className={`yt-status-badge yt-badge-${entry.status}`}>
-                                        {entry.status === 'downloading' && <Loader className="icon-xs animate-spin" />}
-                                        {entry.status === 'ready' && '✓'}
-                                        {entry.status === 'error' && <AlertCircle className="icon-xs" />}
-                                        <span>
-                                            {entry.status === 'downloading' ? `${Math.round(youtubeProgress[entry.id] ?? 0)}%` :
-                                                entry.status === 'ready' ? 'Gata' : 'Eroare'}
-                                        </span>
-                                    </span>
-                                </div>
-
-                                {/* Progress bar for downloading */}
-                                {entry.status === 'downloading' && (
-                                    <div className="yt-progress-bar">
-                                        <div
-                                            className="yt-progress-fill"
-                                            style={{ width: `${youtubeProgress[entry.id] ?? 0}%` }}
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Error message */}
-                                {entry.status === 'error' && entry.error && (
-                                    <p className="yt-error-msg">{entry.error}</p>
-                                )}
-
-                                {/* Action buttons */}
-                                <div className="yt-playlist-actions">
-                                    {entry.status === 'ready' && (
-                                        <button
-                                            className="video-btn video-btn-play yt-play-btn"
-                                            onClick={() => onYoutubePlay(entry.id)}
-                                            title="Redă"
-                                        >
-                                            <Play className="icon-sm" /> Redă
-                                        </button>
-                                    )}
-                                    {entry.status === 'error' && !isLocal && (
-                                        <button
-                                            className="video-btn yt-retry-btn"
-                                            onClick={() => onYoutubeRetry(entry.id)}
-                                            title="Reîncearcă descărcarea"
-                                        >
-                                            <RefreshCw className="icon-sm" /> Reîncearcă
-                                        </button>
-                                    )}
-
-                                    {/* Remove from playlist (always visible) */}
-                                    <button
-                                        className="video-btn yt-remove-btn"
-                                        onClick={() => onYoutubeRemove(entry.id)}
-                                        title="Elimină din playlist"
-                                    >
-                                        <X className="icon-sm" />
-                                    </button>
-
-                                    {/* Delete from disk (only for ready non-local entries) */}
-                                    {entry.status === 'ready' && !isLocal && (
-                                        deleteConfirm === entry.id ? (
-                                            <div className="yt-delete-confirm">
-                                                <span className="text-white/60 text-xs">Ștergi fișierul de pe disc?</span>
-                                                <button
-                                                    className="video-btn yt-btn-small yt-btn-danger"
-                                                    onClick={() => { onYoutubeDelete(entry.id); setDeleteConfirm(null); }}
-                                                >
-                                                    Da, șterge
-                                                </button>
-                                                <button
-                                                    className="video-btn yt-btn-small"
-                                                    onClick={() => setDeleteConfirm(null)}
-                                                >
-                                                    Anulează
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                className="video-btn yt-btn-small yt-btn-danger"
-                                                onClick={() => setDeleteConfirm(entry.id)}
-                                                title="Șterge fișierul de pe disc"
-                                            >
-                                                <Trash2 className="icon-sm" />
-                                            </button>
-                                        )
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-
             {youtubePlaylist.length === 0 && !videoLoading && (
                 <div className="empty-state" style={{ padding: '2rem 0' }}>
                     <Film className="icon-lg opacity-20" />
-                    <p className="text-white/30 text-sm">Playlist-ul este gol. Adaugă un fișier local sau un link YouTube.</p>
+                    <p className="text-white/30 text-sm">Playlist-ul este gol. Adaugă un fișier sau un link YouTube.</p>
+                </div>
+            )}
+
+            {youtubePlaylist.length > 0 && !videoLoading && (
+                <div className="empty-state" style={{ padding: '1rem 0' }}>
+                    <p className="text-white/40 text-sm">Selectează un videoclip din bara laterală pentru a-l reda.</p>
                 </div>
             )}
 
@@ -2045,6 +2138,52 @@ function PreviewPanel({
     const bodyRef = useRef<HTMLDivElement>(null);
     const previewVideoRef = useRef<HTMLVideoElement>(null);
 
+    // ── Auto-resize font for preview sections ──
+    const [containerWidth, setContainerWidth] = useState(0);
+
+    useEffect(() => {
+        const body = bodyRef.current;
+        if (!body) return;
+        const ro = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                setContainerWidth(entry.contentRect.width);
+            }
+        });
+        ro.observe(body);
+        return () => ro.disconnect();
+    }, []);
+
+    const fontSizes = useMemo(() => {
+        if (!containerWidth || !previewSections.length || !previewType) return [];
+        const availWidth = containerWidth - 36; // padding + borders
+        if (availWidth <= 0) return [];
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return [];
+
+        const fontFamily = getComputedStyle(document.documentElement).fontFamily || 'sans-serif';
+        const baseMeasure = 14;
+
+        return previewSections.map(sec => {
+            const lines = sec.text.split('\n').filter(l => l.trim());
+            if (!lines.length) return 12;
+            ctx.font = `${baseMeasure}px ${fontFamily}`;
+            let maxLineWidth = 0;
+            for (const line of lines) {
+                const w = ctx.measureText(line).width;
+                if (w > maxLineWidth) maxLineWidth = w;
+            }
+            if (maxLineWidth <= 0) return 12;
+            const scale = availWidth / maxLineWidth;
+            const ideal = baseMeasure * scale;
+            if (previewType === 'hymn') {
+                return Math.min(Math.max(ideal, 9), 22);
+            } else {
+                return Math.min(Math.max(ideal, 9), 28);
+            }
+        });
+    }, [containerWidth, previewSections, previewType]);
+
     // Scroll current/selected slide into view
     useEffect(() => {
         if (bodyRef.current) {
@@ -2080,7 +2219,7 @@ function PreviewPanel({
     }, [videoUrl]);
 
     // If video is active, show video preview
-    if (videoUrl && videoStatus) {
+    if (videoUrl) {
         const fmt = (t: number) => {
             const m = Math.floor(t / 60);
             const s = Math.floor(t % 60);
@@ -2100,8 +2239,9 @@ function PreviewPanel({
                         style={{ width: '100%', flex: 1, minHeight: 0, objectFit: 'contain', background: '#000' }}
                     />
                     <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-dim)', textAlign: 'center' }}>
-                        {fmt(videoStatus.currentTime)} / {fmt(videoStatus.duration)}
-                        {videoStatus.paused ? ' — Pauză' : ' — Redare'}
+                        {videoStatus
+                            ? `${fmt(videoStatus.currentTime)} / ${fmt(videoStatus.duration)}${videoStatus.paused ? ' — Pauză' : ' — Redare'}`
+                            : 'Se încarcă…'}
                     </div>
                 </div>
             </div>
@@ -2166,7 +2306,7 @@ function PreviewPanel({
                             }}
                         >
                             <div className={`sec-label ${sec.type}`}>{sec.label}</div>
-                            <div className="sec-text">{sec.text}</div>
+                            <div className="sec-text" style={fontSizes[i] ? { fontSize: `${fontSizes[i]}px` } : undefined}>{sec.text}</div>
                         </div>
                     );
                 })}
@@ -2483,33 +2623,41 @@ function PasswordModal({
 // Password Setup Modal (first launch)
 // ═════════════════════════════════════════════════════════════════════════════
 
-function PasswordSetupModal({ onSave }: { onSave: (pw: string) => void }) {
+function PasswordSetupModal({ onSave }: { onSave: (pw: string, downloadFolder?: string) => void }) {
     const [pw, setPw] = useState('');
     const [confirm, setConfirm] = useState('');
+    const [downloadFolder, setDownloadFolder] = useState('');
+    const [defaultFolder, setDefaultFolder] = useState('');
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { inputRef.current?.focus(); }, []);
+    useEffect(() => {
+        window.electron.playlist.getDownloadFolder().then(f => {
+            setDefaultFolder(f);
+            setDownloadFolder(f);
+        });
+    }, []);
 
     const handleSave = () => {
         if (pw.length < 4) { setError('Parola trebuie să aibă cel puțin 4 caractere.'); return; }
         if (pw !== confirm) { setError('Parolele nu se potrivesc.'); return; }
-        onSave(pw);
+        if (!downloadFolder) { setError('Selectează un folder pentru descărcări video.'); return; }
+        onSave(pw, downloadFolder !== defaultFolder ? downloadFolder : undefined);
     };
 
     return (
         <div className="modal-overlay">
             <div className="modal-dialog modal-sm">
                 <div className="modal-header">
-                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />Configurare Parolă Admin</h3>
+                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />Configurare Inițială</h3>
                 </div>
                 <div className="modal-body">
                     <p className="setup-hint">
-                        Setați o parolă de administrare pentru a proteja editarea imnurilor.
-                        Aceasta va fi necesară pentru modificări după 24 de ore de la crearea unui imn.
+                        Bine ai venit în AdventShow! Configurează parola de administrare și folderul pentru videoclipuri descărcate.
                     </p>
                     <div className="field">
-                        <label>Parolă nouă</label>
+                        <label>Parolă admin</label>
                         <input
                             ref={inputRef}
                             type="password"
@@ -2531,6 +2679,21 @@ function PasswordSetupModal({ onSave }: { onSave: (pw: string) => void }) {
                             onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
                             placeholder="Repetă parola..."
                         />
+                    </div>
+                    <div className="field" style={{ marginTop: 8 }}>
+                        <label>Folder descărcări video</label>
+                        <div className="field-row">
+                            <span className="field-value" title={downloadFolder}>
+                                {downloadFolder ? downloadFolder.split('/').slice(-2).join('/') : 'Se detectează...'}
+                            </span>
+                            <button className="btn-sm" onClick={async () => {
+                                const p = await window.electron.dialog.selectFolder();
+                                if (p) setDownloadFolder(p);
+                            }}>Schimbă...</button>
+                        </div>
+                        <p className="text-white/40 text-xs mt-1">
+                            Aici se vor salva videoclipurile descărcate de pe YouTube.
+                        </p>
                     </div>
                     {error && <div className="editor-error">{error}</div>}
                     <div className="editor-actions" style={{ marginTop: 12 }}>
@@ -2589,7 +2752,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Import / Export' : 'Despre'}
+                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : 'Despre'}
                             </button>
                         ))}
                     </div>
@@ -2701,36 +2864,43 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
 
                     {activeTab === 'import' && (
                         <div className="settings-content">
+                            <p className="text-white/50 text-sm mb-4">
+                                Importă imnuri din fișiere PowerPoint (.pptx) sau gestionează backup-ul bazei de date cu imnuri.
+                            </p>
                             <div className="field">
-                                <label>Import din folder (PPTX)</label>
+                                <label>Import imnuri din folder cu fișiere PPTX</label>
                                 <button className="btn-action" onClick={async () => {
                                     const folder = await window.electron.dialog.selectFolder();
                                     if (!folder) return;
-                                    setImportStatus('Se importă...');
+                                    setImportStatus('Se importă imnurile...');
                                     const result = await window.electron.db.importPresentations(folder);
                                     onCategoriesChanged();
                                     onHymnsChanged();
-                                    setImportStatus(`Import: ${result.success} reușite, ${result.failed} eșuate`);
+                                    setImportStatus(`Import imnuri: ${result.success} reușite, ${result.failed} eșuate`);
                                 }}>
-                                    <FolderOpen className="icon-xs" /> Import din folder
+                                    <FolderOpen className="icon-xs" /> Alege folder cu PPTX
                                 </button>
                             </div>
                             <div className="field">
-                                <label>Import fișiere PPTX</label>
+                                <label>Import imnuri din fișiere PPTX individuale</label>
                                 <button className="btn-action" onClick={async () => {
                                     const files = await window.electron.dialog.selectPresentationFiles();
                                     if (!files?.length) return;
-                                    setImportStatus('Se importă...');
+                                    setImportStatus('Se importă imnurile...');
                                     const result = await window.electron.db.importPresentationFiles(files);
                                     onCategoriesChanged();
                                     onHymnsChanged();
-                                    setImportStatus(`Import: ${result.success} reușite, ${result.failed} eșuate`);
+                                    setImportStatus(`Import imnuri: ${result.success} reușite, ${result.failed} eșuate`);
                                 }}>
-                                    <Upload className="icon-xs" /> Import fișiere
+                                    <Upload className="icon-xs" /> Alege fișiere PPTX
                                 </button>
                             </div>
+                            <div className="border-t border-white/10 w-full my-3" />
                             <div className="field">
-                                <label>Export / Import JSON Backup</label>
+                                <label>Backup imnuri — Export / Import JSON</label>
+                                <p className="text-white/40 text-xs mb-2">
+                                    Exportă toate imnurile într-un fișier JSON pentru backup sau transfer pe alt calculator.
+                                </p>
                                 <div className="field-row">
                                     <button className="btn-action" onClick={async () => {
                                         const p = await window.electron.dialog.saveJsonFile('backup-imnuri.json');
@@ -2739,7 +2909,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                             setImportStatus(`Export reușit: ${r.hymns} imnuri, ${r.sections} secțiuni`);
                                         }
                                     }}>
-                                        <Download className="icon-xs" /> Export JSON
+                                        <Download className="icon-xs" /> Exportă imnuri (JSON)
                                     </button>
                                     <button className="btn-action" onClick={async () => {
                                         const p = await window.electron.dialog.selectJsonFile();
@@ -2747,20 +2917,20 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                             await window.electron.db.importJsonBackup(p);
                                             onCategoriesChanged();
                                             onHymnsChanged();
-                                            setImportStatus('Import JSON reușit!');
+                                            setImportStatus('Import imnuri din JSON reușit!');
                                         }
                                     }}>
-                                        <Upload className="icon-xs" /> Import JSON
+                                        <Upload className="icon-xs" /> Importă imnuri (JSON)
                                     </button>
                                 </div>
                             </div>
                             <div className="field">
-                                <label>Export Baza de Date</label>
+                                <label>Export baza de date completă (SQLite)</label>
                                 <button className="btn-action" onClick={async () => {
                                     const p = await window.electron.dialog.saveFile('hymns-backup.db');
                                     if (p) {
                                         await window.electron.db.exportDb(p);
-                                        setImportStatus('Baza de date exportată!');
+                                        setImportStatus('Baza de date cu imnuri exportată!');
                                     }
                                 }}>
                                     <Download className="icon-xs" /> Export DB
