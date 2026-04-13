@@ -132,6 +132,11 @@ autoUpdater.autoInstallOnAppQuit = true
 
 function setupAutoUpdater() {
   autoUpdater.on('update-available', (info) => {
+    // Skip if the "update" is actually the same version we're running
+    if (info.version === app.getVersion()) {
+      debugLog('[AutoUpdater] Skipping update-available for same version:', info.version)
+      return
+    }
     debugLog('[AutoUpdater] Update available:', info.version)
     win?.webContents.send('update:available', {
       version: info.version,
@@ -640,6 +645,15 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.whenReady().then(() => {
+  // Configure native macOS About panel with developer credits
+  app.setAboutPanelOptions({
+    applicationName: 'AdventShow',
+    applicationVersion: app.getVersion(),
+    copyright: '© 2025 AdventTools',
+    credits: 'Ovidius Zanfir — concept, interfață, baza de date imnuri\nSamy Balasa — video, YouTube, auto-update, Biblie',
+    website: 'https://github.com/AdventTools/AdventShow',
+  })
+
   // Prevent system sleep / screensaver / hibernate while the app is running
   startPowerSaveBlocker()
 
@@ -893,7 +907,11 @@ app.whenReady().then(() => {
   ipcMain.handle('update:check', async () => {
     try {
       const result = await autoUpdater.checkForUpdates()
-      return { available: !!result?.updateInfo, version: result?.updateInfo?.version }
+      const latest = result?.updateInfo?.version
+      const current = app.getVersion()
+      const available = !!latest && latest !== current
+      debugLog(`[AutoUpdater] check: current=${current} latest=${latest} available=${available}`)
+      return { available, version: latest }
     } catch {
       return { available: false }
     }
