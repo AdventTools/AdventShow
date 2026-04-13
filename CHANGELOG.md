@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.9 (13 Aprilie 2026)
+
+### Corecții
+- **Biblie: toate versetele în previzualizare** — revenire la afișarea tuturor versetelor din capitol în panoul de previzualizare, cu navigare cu săgeți (ca la imnuri)
+- **Auto-update: fișierele YAML de metadate** — CI-ul încarcă acum `latest.yml` și `latest-linux.yml` în release, necesare pentru ca electron-updater să detecteze versiuni noi
+
+---
+
 ## v1.1.8 (13 Aprilie 2026)
 
 ### Corecții
