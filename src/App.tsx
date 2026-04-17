@@ -382,11 +382,15 @@ function App() {
         });
     }, []);
 
-    // Check for updates on mount + listen for auto-updater events
+    // Check for updates on mount + every 6 hours, listen for updater events
     useEffect(() => {
-        window.electron.update.check()
-            .then(info => { if (info.available) setUpdateInfo(info) })
-            .catch(() => { /* silently ignore */ });
+        const doCheck = () => {
+            window.electron.update.check()
+                .then(info => { if (info.available) setUpdateInfo(info) })
+                .catch(() => { /* silently ignore */ });
+        };
+        doCheck();
+        const interval = setInterval(doCheck, 6 * 60 * 60 * 1000); // 6 hours
 
         window.electron.update.onProgress((data) => {
             setUpdateProgress(data.percent);
@@ -401,6 +405,7 @@ function App() {
         });
 
         return () => {
+            clearInterval(interval);
             window.electron.update.offProgress();
             window.electron.update.offDownloaded();
             window.electron.update.offError();
@@ -1083,6 +1088,42 @@ function App() {
 
     return (
         <div className="app-root">
+            {/* ── Update notification banner ── */}
+            {updateInfo?.available && !updateDownloading && !updateReady && (
+                <div className="update-banner">
+                    <span>Versiune nouă disponibilă: <strong>v{updateInfo.version}</strong></span>
+                    <button className="update-banner-btn" onClick={() => {
+                        setUpdateDownloading(true);
+                        setUpdateProgress(0);
+                        setUpdateError(null);
+                        window.electron.update.download().catch(() => {
+                            setUpdateDownloading(false);
+                            setUpdateError('Descărcarea a eșuat.');
+                        });
+                    }}>Actualizează</button>
+                    <button className="update-banner-dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
+                </div>
+            )}
+            {updateDownloading && (
+                <div className="update-banner">
+                    <span>Se descarcă actualizarea... {updateProgress.toFixed(0)}%</span>
+                    <div className="update-banner-progress">
+                        <div className="update-banner-progress-bar" style={{ width: `${updateProgress}%` }} />
+                    </div>
+                </div>
+            )}
+            {updateReady && (
+                <div className="update-banner update-banner-ready">
+                    <span>Actualizare descărcată!</span>
+                    <button className="update-banner-btn" onClick={() => window.electron.update.install()}>Instalează și repornește</button>
+                </div>
+            )}
+            {updateError && (
+                <div className="update-banner update-banner-error">
+                    <span>{updateError}</span>
+                    <button className="update-banner-dismiss" onClick={() => setUpdateError(null)}>✕</button>
+                </div>
+            )}
             {/* ── Header ── */}
             <header className="header">
                 <div className="header-logo">

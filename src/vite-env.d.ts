@@ -189,13 +189,15 @@ export interface IElectronAPI {
     navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     updateHymn: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     close: () => Promise<void>;
-    sendKeyRequest: (action: 'prev' | 'next' | 'close') => Promise<void>;
+    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') => Promise<void>;
     onSlide: (cb: (data: ProjectionSlideData) => void) => void;
     offSlide: () => void;
     onControllerSync: (cb: (data: { currentIndex: number }) => void) => void;
     offControllerSync: () => void;
     onClosed: (cb: () => void) => void;
     offClosed: () => void;
+    onZoom: (cb: (action: 'zoom-in' | 'zoom-out') => void) => void;
+    offZoom: () => void;
     signalReady: () => void;
   };
   update: {
