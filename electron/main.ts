@@ -1147,8 +1147,12 @@ app.whenReady().then(() => {
     sendSlideToProjection(idx)
   })
 
-  ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close') => {
+  ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') => {
     if (action === 'close') { projectionWin?.close(); return }
+    if (action === 'zoom-in' || action === 'zoom-out') {
+      projectionWin?.webContents.send('projection:zoom', action)
+      return
+    }
     if (!projState) return
     const minIndex = projState.contentType === 'bible' ? 0 : -1  // Bible has no title slide
     const newIndex = action === 'next'

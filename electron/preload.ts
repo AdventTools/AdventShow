@@ -104,7 +104,7 @@ contextBridge.exposeInMainWorld('electron', {
     updateHymn: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
       ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
     close: () => ipcRenderer.invoke('projection:close'),
-    sendKeyRequest: (action: 'prev' | 'next' | 'close') =>
+    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') =>
       ipcRenderer.invoke('projection:key-request', action),
     onSlide: (cb: (data: any) => void) =>
       ipcRenderer.on('projection:slide', (_e, data) => cb(data)),
@@ -115,6 +115,9 @@ contextBridge.exposeInMainWorld('electron', {
     onClosed: (cb: () => void) =>
       ipcRenderer.on('projection:closed', () => cb()),
     offClosed: () => ipcRenderer.removeAllListeners('projection:closed'),
+    onZoom: (cb: (action: 'zoom-in' | 'zoom-out') => void) =>
+      ipcRenderer.on('projection:zoom', (_e, action) => cb(action)),
+    offZoom: () => ipcRenderer.removeAllListeners('projection:zoom'),
     signalReady: () => ipcRenderer.send('projection:renderer-ready'),
   },
 

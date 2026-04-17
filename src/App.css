@@ -2162,3 +2162,80 @@
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255 255 255 / 0.15);
 }
+
+/* ── Update notification banner ── */
+.update-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 16px;
+    background: rgba(99, 102, 241, 0.15);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+    flex-shrink: 0;
+}
+
+.update-banner-ready {
+    background: rgba(34, 197, 94, 0.15);
+    border-bottom-color: rgba(34, 197, 94, 0.3);
+}
+
+.update-banner-error {
+    background: rgba(239, 68, 68, 0.15);
+    border-bottom-color: rgba(239, 68, 68, 0.3);
+}
+
+.update-banner-btn {
+    padding: 3px 12px;
+    border-radius: 4px;
+    background: rgba(99, 102, 241, 0.8);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.update-banner-btn:hover {
+    background: rgba(99, 102, 241, 1);
+}
+
+.update-banner-ready .update-banner-btn {
+    background: rgba(34, 197, 94, 0.8);
+}
+
+.update-banner-ready .update-banner-btn:hover {
+    background: rgba(34, 197, 94, 1);
+}
+
+.update-banner-dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 6px;
+}
+
+.update-banner-dismiss:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.update-banner-progress {
+    flex: 1;
+    max-width: 200px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.update-banner-progress-bar {
+    height: 100%;
+    background: rgba(99, 102, 241, 0.8);
+    border-radius: 2px;
+    transition: width 0.3s;
+}

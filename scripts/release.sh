@@ -136,8 +136,11 @@ gh release create "$TAG" \
 ### Delta Update
 Utilizatorii existenți vor descărca automat doar codul aplicației (~$(du -h "$ASAR_DEST" | cut -f1 | xargs)), nu întregul Electron."
 
-# Exclude source code archives via API
-gh api "repos/AdventTools/AdventShow/releases/tags/${TAG}" --method PATCH -F exclude_source_code_archives=true --silent 2>/dev/null || true
+# Exclude source code archives via API (PATCH by release ID, not by tag)
+RELEASE_ID=$(gh api "repos/AdventTools/AdventShow/releases/tags/${TAG}" --jq '.id')
+curl -s -X PATCH -H "Authorization: token $(gh auth token)" -H "Content-Type: application/json" \
+  -d '{"exclude_source_code_archives":true}' \
+  "https://api.github.com/repos/AdventTools/AdventShow/releases/${RELEASE_ID}" > /dev/null || true
 
 echo "   ✓ Release created"
 
