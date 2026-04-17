@@ -68,6 +68,5 @@ jobs:
           files: |
             release/**/*-Setup.exe
             release/**/*.AppImage
-            release/**/latest*.yml
           draft: false
           prerelease: false
