@@ -258,7 +258,6 @@ async function downloadUpdate(): Promise<void> {
   // Delta files come from the hidden "delta-latest" pre-release
   // Full installers come from the public "latest" release
   const isDelta = updateState.isDelta
-  const releaseTag = isDelta ? 'delta-latest' : 'latest'
   const releaseUrl = isDelta
     ? `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/delta-latest`
     : `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`

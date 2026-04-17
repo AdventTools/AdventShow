@@ -3109,6 +3109,8 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 </a>
 
                                 <div className="border-t border-white/10 w-full" />
+                                <UpdateChecker />
+                                <div className="border-t border-white/10 w-full" />
                                 <YtDlpSettings />
                                 <div className="border-t border-white/10 w-full" />
 
@@ -3123,6 +3125,114 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
             </div>
         </div>
     );
+}
+
+function UpdateChecker() {
+    const [checking, setChecking] = useState(false)
+    const [downloading, setDownloading] = useState(false)
+    const [progress, setProgress] = useState(0)
+    const [result, setResult] = useState<{ available: boolean; version?: string; isDelta?: boolean } | null>(null)
+    const [ready, setReady] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    useEffect(() => {
+        const onProg = (data: { percent: number }) => setProgress(data.percent)
+        const onDone = () => { setDownloading(false); setReady(true) }
+        const onErr = (msg: string) => { setDownloading(false); setError(msg) }
+        window.electron.update.onProgress(onProg)
+        window.electron.update.onDownloaded(onDone)
+        window.electron.update.onError(onErr)
+        return () => {
+            window.electron.update.offProgress()
+            window.electron.update.offDownloaded()
+            window.electron.update.offError()
+        }
+    }, [])
+
+    const doCheck = async () => {
+        setChecking(true)
+        setResult(null)
+        setError(null)
+        setReady(false)
+        try {
+            const info = await window.electron.update.check()
+            setResult(info)
+        } catch {
+            setError('Nu s-a putut verifica. Verifică conexiunea la internet.')
+        }
+        setChecking(false)
+    }
+
+    const doDownloadAndInstall = async () => {
+        setDownloading(true)
+        setProgress(0)
+        setError(null)
+        try {
+            await window.electron.update.download()
+        } catch {
+            setDownloading(false)
+            setError('Descărcarea a eșuat.')
+        }
+    }
+
+    const doInstall = () => {
+        window.electron.update.install()
+    }
+
+    return (
+        <div className="text-sm text-white/60 leading-relaxed w-full">
+            <p className="font-semibold text-white/80 mb-3 text-center">Actualizare aplicație</p>
+            <div className="flex flex-col items-center gap-2">
+                {!result && !checking && !downloading && !ready && (
+                    <button className="btn-sm" onClick={doCheck}>
+                        Verifică actualizări
+                    </button>
+                )}
+
+                {checking && (
+                    <p className="text-white/40 text-xs">Se verifică...</p>
+                )}
+
+                {result && !result.available && !downloading && !ready && (
+                    <p className="text-green-400 text-xs">✓ Ai cea mai recentă versiune.</p>
+                )}
+
+                {result && result.available && !downloading && !ready && (
+                    <div className="flex flex-col items-center gap-2">
+                        <p className="text-yellow-400 text-xs">
+                            Versiune nouă disponibilă: <strong>{result.version}</strong>
+                            {result.isDelta ? ' (actualizare rapidă)' : ''}
+                        </p>
+                        <button className="btn-sm" onClick={doDownloadAndInstall}>
+                            Descarcă și instalează
+                        </button>
+                    </div>
+                )}
+
+                {downloading && (
+                    <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+                        <p className="text-white/40 text-xs">Se descarcă... {progress.toFixed(0)}%</p>
+                        <div className="w-full bg-white/10 rounded-full h-2">
+                            <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                        </div>
+                    </div>
+                )}
+
+                {ready && (
+                    <div className="flex flex-col items-center gap-2">
+                        <p className="text-green-400 text-xs">Actualizare descărcată! Aplicația va reporni.</p>
+                        <button className="btn-sm" onClick={doInstall}>
+                            Instalează și repornește
+                        </button>
+                    </div>
+                )}
+
+                {error && (
+                    <p className="text-red-400 text-xs">{error}</p>
+                )}
+            </div>
+        </div>
+    )
 }
 
 function YtDlpSettings() {
