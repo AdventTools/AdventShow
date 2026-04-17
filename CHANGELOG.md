@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.24 (17 Aprilie 2026)
+
+### Modificări
+- Corecție auto-update Windows: script ascuns fără command prompt, retry la copiere app.asar
+
+---
+
+
 ## v1.1.23 (17 Aprilie 2026)
 
 ### Modificări

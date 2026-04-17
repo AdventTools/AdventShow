@@ -358,19 +358,34 @@ async function installDeltaUpdate(): Promise<void> {
     debugLog('[DeltaUpdate] Delta update script launched, quitting…')
     app.quit()
   } else if (process.platform === 'win32') {
-    // Windows: use a batch script that runs after the app quits
+    // Windows: use a hidden PowerShell script with retry logic
     const appExe = process.execPath
-    const script = path.join(tempDir, 'delta-update.bat')
+    const script = path.join(tempDir, 'delta-update.ps1')
+    const src = newAsar.replace(/\//g, '\\')
+    const dst = targetAsar.replace(/\//g, '\\')
+    const exe = appExe.replace(/\//g, '\\')
+    const tmp = tempDir.replace(/\//g, '\\')
     fs.writeFileSync(script, [
-      '@echo off',
-      'timeout /t 3 /nobreak >nul',
-      `copy /Y "${newAsar.replace(/\//g, '\\')}" "${targetAsar.replace(/\//g, '\\')}"`,
-      `start "" "${appExe.replace(/\//g, '\\')}"`,
-      `rmdir /s /q "${tempDir.replace(/\//g, '\\')}"`,
+      'Start-Sleep -Seconds 2',
+      '$maxRetries = 15',
+      'for ($i = 0; $i -lt $maxRetries; $i++) {',
+      '  try {',
+      `    Copy-Item -Path "${src}" -Destination "${dst}" -Force -ErrorAction Stop`,
+      '    break',
+      '  } catch {',
+      '    Start-Sleep -Seconds 1',
+      '  }',
+      '}',
+      `Start-Process -FilePath "${exe}"`,
+      `Remove-Item -Path "${tmp}" -Recurse -Force -ErrorAction SilentlyContinue`,
     ].join('\r\n'))
 
-    spawn('cmd.exe', ['/c', script], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
-    debugLog('[DeltaUpdate] Delta update script launched, quitting…')
+    spawn('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass',
+      '-WindowStyle', 'Hidden',
+      '-File', script,
+    ], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+    debugLog('[DeltaUpdate] Delta update PowerShell script launched, quitting…')
     app.quit()
   }
 }
