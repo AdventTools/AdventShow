@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.23 (17 Aprilie 2026)
+
+### Modificări
+- Corecție proiecție Windows, jurnal detaliat îmbunătățit, corecție imn 562
+
+---
+
+
 ## v1.1.22 (17 Aprilie 2026)
 
 ### Modificări

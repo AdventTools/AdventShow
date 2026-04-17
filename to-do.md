@@ -1,4 +1,9 @@
-1. https://github.com/AdventTools/AdventShow/releases/tag/v1.1.19
-am cam multe fisiere in release, nu trebuia sa fie acolo decat mac, windows si linux ?
-2. renuntam la culoarea gri pe proiectie, deci tot ce e gri defivine alb. Numarul imnului care e pe acel albastru deschis poate ramane asa. dar strofax si refren din dreapta sus se face alb. de asemenea indicatoarele cu punctulete de jos de tot se fac tot alb, iar liniuta care indica unde te afli cu strofa sau refrenul curent devine verde, dar un verde elegant, nu tipator, si destul de deschis cat sa se vada bine pe videoproiectoare slabe
-3. la instalare windows, aplicatia nu isi face shortcut pe desktop ceea ce nu e deloc bine. la urmatorul release, update-ul sa creeze si shortcut-ul. si redenumeste numele installer-ului, sa fie simplu AdventShow, nu toata povestea aia lunga cu aplicatie gratuita si assa mai departe.
+1. inca nu am butonul de check for update !!!!!!!!!
+2. pe windows nu face play deloc. nici macar nu arata fereastra de preview in main window. poate are nevoie de ceva dependinte care nu sunt instalate. daca da, ar trebui sa le verifice la install routine.
+3. nu scrie log detaliat in folderul aplicatiei daca bifez jurnal detaliat in setari.
+4. vreau sa stiu daca in setari SIGUR se aplica tot ce modific, intrucat nu are nici un buton de aplica sau OK.
+5. verifica compilarile de pe github, ca mi se par ca sunt multe failuri. daca sunt vechi si nu e o problema ignora ce am zis la punctul 5.
+6. corecteaza imnul 562 ca in imaginea atasata in chat, ca sunt rupte randurile de la mijloc unele si se face prea lunga piesa.
+7. vreau sa imi spui daca mai sunt imnuri care au pe strofa mai mult de 6 linii de versuri ca sa le verific manual. 
+
+la final, respecta pasii de finalizare, build mac, upload, etc...
