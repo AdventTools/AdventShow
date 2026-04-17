@@ -67,7 +67,6 @@ jobs:
         with:
           files: |
             release/**/*-Setup.exe
-            release/**/*-Portable.exe
             release/**/*.AppImage
             release/**/latest*.yml
           draft: false

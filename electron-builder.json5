@@ -41,7 +41,7 @@
       "dmg",
       "zip"
     ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+    "artifactName": "AdventShow-Mac-${version}.${ext}"
   },
   "win": {
     "icon": "build/icons/win/icon.ico",
@@ -51,15 +51,9 @@
         "arch": [
           "x64"
         ]
-      },
-      {
-        "target": "portable",
-        "arch": [
-          "x64"
-        ]
       }
     ],
-    "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
+    "artifactName": "AdventShow-Setup.${ext}"
   },
   "nsis": {
     "oneClick": false,
@@ -76,6 +70,6 @@
     "target": [
       "AppImage"
     ],
-    "artifactName": "${productName}-Linux-${version}.${ext}"
+    "artifactName": "AdventShow-Linux.${ext}"
   }
 }

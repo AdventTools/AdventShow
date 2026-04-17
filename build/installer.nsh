@@ -15,6 +15,9 @@
     Pop $0
   ${EndIf}
   DetailPrint "Certificate import completed (exit code: $0)"
+
+  ; Create desktop shortcut
+  CreateShortCut "$DESKTOP\AdventShow.lnk" "$INSTDIR\AdventShow.exe" "" "$INSTDIR\AdventShow.exe" 0
 !macroend
 
 !macro customUnInstall
@@ -22,4 +25,7 @@
   DetailPrint "Removing AdventShow certificate from trusted stores..."
   nsExec::ExecToLog 'certutil -delstore "TrustedPublisher" "AdventShow"'
   nsExec::ExecToLog 'certutil -delstore "Root" "AdventShow"'
+
+  ; Remove desktop shortcut
+  Delete "$DESKTOP\AdventShow.lnk"
 !macroend
