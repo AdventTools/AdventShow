@@ -144,8 +144,8 @@ echo ""
 echo "📤 Uploading macOS + delta assets..."
 
 UPLOAD_FILES=(
-  "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}-Installer.dmg"
-  "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}-Installer.zip"
+  "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
+  "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip"
   "${RELEASE_DIR}/latest-mac.yml"
   "${RELEASE_DIR}/app-update.asar"
   "${RELEASE_DIR}/update-manifest.json"

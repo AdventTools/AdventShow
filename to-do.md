@@ -1,0 +1,4 @@
+1. https://github.com/AdventTools/AdventShow/releases/tag/v1.1.19
+am cam multe fisiere in release, nu trebuia sa fie acolo decat mac, windows si linux ?
+2. renuntam la culoarea gri pe proiectie, deci tot ce e gri defivine alb. Numarul imnului care e pe acel albastru deschis poate ramane asa. dar strofax si refren din dreapta sus se face alb. de asemenea indicatoarele cu punctulete de jos de tot se fac tot alb, iar liniuta care indica unde te afli cu strofa sau refrenul curent devine verde, dar un verde elegant, nu tipator, si destul de deschis cat sa se vada bine pe videoproiectoare slabe
+3. la instalare windows, aplicatia nu isi face shortcut pe desktop ceea ce nu e deloc bine. la urmatorul release, update-ul sa creeze si shortcut-ul. si redenumeste numele installer-ului, sa fie simplu AdventShow, nu toata povestea aia lunga cu aplicatie gratuita si assa mai departe.
