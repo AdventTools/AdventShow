@@ -124,6 +124,15 @@ export function ProjectionPage() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Listen for zoom commands from main window via IPC
+  useEffect(() => {
+    window.electron.projection.onZoom((action) => {
+      if (action === 'zoom-in') setZoomLevel(z => Math.min(z + 0.1, 2.5));
+      else if (action === 'zoom-out') setZoomLevel(z => Math.max(z - 0.1, 0.5));
+    });
+    return () => { window.electron.projection.offZoom(); };
+  }, []);
+
   const section: HymnSection | undefined = data?.sections[data.currentIndex];
   const isBible = data?.contentType === 'bible';
 

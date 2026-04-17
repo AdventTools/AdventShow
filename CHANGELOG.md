@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.22 (17 Aprilie 2026)
+
+### Modificări
+- Navigare cu taste identică pe toate platformele: ←→ Space = navigare slide-uri, ↑↓ = mărire/micșorare font
+- Verificare automată actualizări la pornire și din 6 în 6 ore, cu notificare discretă și actualizare cu un click
+
+---
+
 ## v1.1.21 (17 Aprilie 2026)
 
 ### Modificări

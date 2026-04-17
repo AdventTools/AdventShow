@@ -46,12 +46,18 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
       // When in a text field, skip arrow handling (global handler manages Escape)
       if (inTextField) return;
 
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ' || e.key === 'ArrowDown') {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
         navigate(currentIndexRef.current + 1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
         navigate(currentIndexRef.current - 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        window.electron.projection.sendKeyRequest('zoom-in');
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        window.electron.projection.sendKeyRequest('zoom-out');
       }
     };
     window.addEventListener('keydown', handler, true);
@@ -85,7 +91,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           {currentIndex === -1 ? 'Titlu' : `${currentIndex + 1} / ${sections.length}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
-          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ ↑↓ Space</kbd>
+          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ Space: navigare · ↑↓: font</kbd>
           <span className="text-[9px] text-white/15">pentru navigare</span>
           <button
             onClick={onClose}
