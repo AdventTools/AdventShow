@@ -214,11 +214,13 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
   })
 }
 
-// Check for updates by fetching the update manifest from the latest release
+// Check for updates by fetching the update manifest from the delta-latest release
 async function checkForUpdate(): Promise<{ available: boolean; version?: string; isDelta?: boolean }> {
   try {
-    const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
-    const release = await fetchJson<{ tag_name: string; assets: { name: string; browser_download_url: string }[] }>(releaseUrl)
+    // Delta files (app-update.asar + update-manifest.json) live in a separate
+    // pre-release tag "delta-latest" so the main release stays clean (3 files only).
+    const deltaReleaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/delta-latest`
+    const release = await fetchJson<{ tag_name: string; assets: { name: string; browser_download_url: string }[] }>(deltaReleaseUrl)
 
     const manifestAsset = release.assets.find(a => a.name === 'update-manifest.json')
     if (!manifestAsset) {
@@ -252,7 +254,14 @@ async function downloadUpdate(): Promise<void> {
   if (!updateState.manifest) throw new Error('No update available')
 
   const { version } = updateState.manifest
-  const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+
+  // Delta files come from the hidden "delta-latest" pre-release
+  // Full installers come from the public "latest" release
+  const isDelta = updateState.isDelta
+  const releaseTag = isDelta ? 'delta-latest' : 'latest'
+  const releaseUrl = isDelta
+    ? `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/delta-latest`
+    : `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
   const release = await fetchJson<{ assets: { name: string; browser_download_url: string }[] }>(releaseUrl)
 
   const assetName = updateState.isDelta ? 'app-update.asar' : getFullUpdateAssetName()
