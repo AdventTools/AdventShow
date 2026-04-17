@@ -263,7 +263,7 @@ export function ProjectionPage() {
               className={`ml-auto uppercase tracking-widest font-bold px-4 py-1 rounded-full border whitespace-nowrap
                 ${section.type === 'refren'
                   ? 'border-amber-400/60 text-amber-300'
-                  : 'border-white/30 text-white/70'}`}
+                  : 'border-white/40 text-white'}`}
               style={{ fontSize: 'clamp(0.7rem, 1.2vw, 0.95rem)', letterSpacing: '0.2em', textShadow: '0 2px 12px rgba(0,0,0,0.9)' }}
             >
               {section.type === 'refren' ? 'Refren' : `Strofa ${(data?.sections
@@ -391,11 +391,12 @@ export function ProjectionPage() {
               <div
                 key={i}
                 className={`rounded-full transition-all duration-300 ${i === data.currentIndex
-                  ? 'w-6 h-2 bg-white'
+                  ? 'w-6 h-2'
                   : s.type === 'refren'
                     ? 'w-2 h-2 bg-amber-400/80'
-                    : 'w-2 h-2 bg-white/70'
+                    : 'w-2 h-2 bg-white'
                   }`}
+                style={i === data.currentIndex ? { backgroundColor: '#6ee7a0' } : undefined}
               />
             ))
           )}

@@ -1,5 +1,16 @@
 # Changelog — AdventShow
 
+## v1.1.20 (17 Aprilie 2026)
+
+### Modificări
+- Culori proiecție: text alb pe strofă/refren, indicator curent verde elegant
+- Windows: shortcut pe desktop la instalare
+- Nume installer simplificat (AdventShow-Setup.exe)
+- Release curat: doar DMG, Setup.exe, AppImage
+
+---
+
+
 ## v1.1.19 (13 Aprilie 2026)
 
 ### Modificări

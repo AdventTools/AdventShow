@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.19-green)
+![version](https://img.shields.io/badge/versiune-1.1.20-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -16,9 +16,9 @@ Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/
 
 | Platformă | Fișier |
 |-----------|--------|
-| **Windows** | `AdventShow-Windows-...-Setup.exe` |
-| **macOS** | `AdventShow-Mac-...-Installer.dmg` |
-| **Linux** | `AdventShow-Linux-....AppImage` |
+| **Windows** | `AdventShow-Setup.exe` |
+| **macOS** | `AdventShow-Mac-....dmg` |
+| **Linux** | `AdventShow-Linux.AppImage` |
 
 > 💡 La prima pornire, aplicația creează automat baza de date cu toate imnurile și Biblia Cornilescu. Nu trebuie să imporți nimic manual.
 
@@ -39,8 +39,8 @@ AdventShow este distribuit gratuit și nu deține un certificat de semnare. Sist
 5. Alternativ: clic dreapta pe aplicație → **Open** → **Open**
 
 #### Linux
-1. Fă fișierul executabil: `chmod +x AdventShow-Linux-*.AppImage`
-2. Rulează-l: `./AdventShow-Linux-*.AppImage`
+1. Fă fișierul executabil: `chmod +x AdventShow-Linux.AppImage`
+2. Rulează-l: `./AdventShow-Linux.AppImage`
 
 ---
 

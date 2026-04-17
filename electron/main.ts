@@ -299,10 +299,10 @@ async function downloadUpdate(): Promise<void> {
 function getFullUpdateAssetName(): string {
   const version = updateState.manifest?.version || ''
   switch (process.platform) {
-    case 'darwin': return `AdventShow-Mac-${version}-Installer.zip`
-    case 'win32': return `AdventShow-Windows-${version}-Setup.exe`
-    case 'linux': return `AdventShow-Linux-${version}.AppImage`
-    default: return `AdventShow-Linux-${version}.AppImage`
+    case 'darwin': return `AdventShow-Mac-${version}.zip`
+    case 'win32': return `AdventShow-Setup.exe`
+    case 'linux': return `AdventShow-Linux.AppImage`
+    default: return `AdventShow-Linux.AppImage`
   }
 }
 
