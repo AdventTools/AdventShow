@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.1.21 (17 Aprilie 2026)
+
+### Modificări
+- Verificare actualizări manuală în Setări → Despre (buton „Verifică actualizări" cu descărcare și instalare directă)
+
+---
+
 ## v1.1.20 (17 Aprilie 2026)
 
 ### Modificări
