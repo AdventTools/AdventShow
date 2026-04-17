@@ -130,6 +130,7 @@ echo "📋 Creating GitHub Release ${TAG}..."
 
 gh release create "$TAG" \
   --title "${TAG}" \
+  --exclude-source-code-archives \
   --notes "### Modificări
 - ${DESCRIPTION}
 
