@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.22-green)
+![version](https://img.shields.io/badge/versiune-1.1.23-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---

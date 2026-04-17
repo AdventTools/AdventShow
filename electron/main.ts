@@ -791,15 +791,20 @@ function createProjectionWindow() {
     ?? primary
 
   const { x, y, width, height } = targetDisplay.bounds
+  const isWin = process.platform === 'win32'
+
+  debugLog('[Projection] Creating window on display', targetDisplay.id,
+    `(${width}x${height} at ${x},${y})`, isWin ? '[Windows mode]' : '[macOS/Linux mode]')
 
   projectionWin = new BrowserWindow({
     x, y, width, height,
-    fullscreen: true,
+    fullscreen: !isWin,
     frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
+    transparent: !isWin,
+    backgroundColor: isWin ? '#000000' : '#00000000',
     show: false,
     alwaysOnTop: targetDisplay.id === primary.id,
+    ...(isWin ? { simpleFullscreen: true } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       // Allow file:// access for background images/videos
@@ -956,10 +961,17 @@ app.whenReady().then(() => {
   initDB()
   seedBibleFromJson()
 
+  debugLog('[App] Ready. Platform:', process.platform, 'Version:', app.getVersion(),
+    'userData:', app.getPath('userData'))
+  debugLog('[App] Displays:', screen.getAllDisplays().map(d =>
+    `${d.id}(${d.bounds.width}x${d.bounds.height})`).join(', '))
+
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => readSettings())
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
-    writeSettings({ ...readSettings(), ...patch })
+    const merged = { ...readSettings(), ...patch }
+    writeSettings(merged)
+    debugLog('[Settings] Saved:', Object.keys(patch).join(', '))
   })
 
   // ── Screen / display info ─────────────────────────────────────────────────
@@ -992,7 +1004,10 @@ app.whenReady().then(() => {
     getAllHymnsWithSnippets(categoryId))
   ipcMain.handle('db:search-hymns-content', (_e, query: string, categoryId?: number) =>
     searchHymnsContent(query, categoryId))
-  ipcMain.handle('db:get-hymn-with-sections', (_e, id: number) => getHymnWithSections(id))
+  ipcMain.handle('db:get-hymn-with-sections', (_e, id: number) => {
+    debugLog('[DB] getHymnWithSections id:', id)
+    return getHymnWithSections(id)
+  })
   ipcMain.handle('db:create-hymn-with-sections', (_e, payload: {
     number: string;
     title: string;
@@ -1118,6 +1133,7 @@ app.whenReady().then(() => {
   // ── Projection ────────────────────────────────────────────────────────────
 
   ipcMain.handle('projection:open', async (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
+    debugLog('[Projection] Open request:', hymnTitle, hymnNumber, 'sections:', sections.length, 'type:', contentType)
     const idx = typeof startIndex === 'number' ? startIndex : 0
     projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
     if (projectionWin) {
