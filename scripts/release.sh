@@ -130,12 +130,14 @@ echo "📋 Creating GitHub Release ${TAG}..."
 
 gh release create "$TAG" \
   --title "${TAG}" \
-  --exclude-source-code-archives \
   --notes "### Modificări
 - ${DESCRIPTION}
 
 ### Delta Update
 Utilizatorii existenți vor descărca automat doar codul aplicației (~$(du -h "$ASAR_DEST" | cut -f1 | xargs)), nu întregul Electron."
+
+# Exclude source code archives via API
+gh api "repos/AdventTools/AdventShow/releases/tags/${TAG}" --method PATCH -F exclude_source_code_archives=true --silent 2>/dev/null || true
 
 echo "   ✓ Release created"
 
