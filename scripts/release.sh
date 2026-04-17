@@ -145,8 +145,6 @@ echo "📤 Uploading macOS + delta assets..."
 
 UPLOAD_FILES=(
   "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
-  "${RELEASE_DIR}/app-update.asar"
-  "${RELEASE_DIR}/update-manifest.json"
 )
 
 MISSING=0
@@ -163,7 +161,16 @@ if [[ $MISSING -eq 1 ]]; then
 fi
 
 gh release upload "$TAG" "${UPLOAD_FILES[@]}" --clobber
-echo "   ✓ Uploaded: DMG, app-update.asar, update-manifest.json"
+echo "   ✓ Uploaded: DMG"
+
+# Upload delta files to the hidden pre-release (delta-latest)
+echo ""
+echo "📤 Uploading delta files to delta-latest..."
+gh release upload delta-latest \
+  "${RELEASE_DIR}/app-update.asar" \
+  "${RELEASE_DIR}/update-manifest.json" \
+  --clobber
+echo "   ✓ Uploaded delta: app-update.asar, update-manifest.json"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 

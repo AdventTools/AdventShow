@@ -97,9 +97,13 @@ Repo: https://github.com/AdventTools/AdventShow
   3. Build macOS local (`npm run build:mac`)
   4. Extrage `app.asar` + creează `update-manifest.json` pentru delta update
   5. Commit + tag + push pe `main`
-  6. Creează GitHub Release
-  7. Uploadează: DMG, ZIP, latest-mac.yml, app-update.asar, update-manifest.json
-  8. GitHub Actions construiește automat Windows + Linux
+  6. Creează GitHub Release (tag `v<version>`)
+  7. Uploadează DMG-ul pe release-ul principal
+  8. Uploadează `app-update.asar` + `update-manifest.json` pe release-ul ascuns `delta-latest` (pre-release)
+  9. GitHub Actions construiește automat Windows + Linux
+- **Release-ul principal** conține DOAR **3 fișiere**: DMG (macOS), Setup.exe (Windows), AppImage (Linux)
+- **Fișierele delta** (`app-update.asar`, `update-manifest.json`) stau în release-ul pre-release `delta-latest` — invizibil pentru utilizatori
+- **NU** upload-a yml-uri, zip-uri, blockmap-uri sau alte fișiere pe release-ul principal
 - Link-urile de descărcare din `README.md` trebuie să rămână mereu funcționale
 - Tag-ul git pentru release este `v<MAJOR>.<MINOR>.<PATCH>` (ex: `v1.1.0`)
 
