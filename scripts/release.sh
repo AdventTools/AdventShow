@@ -145,8 +145,6 @@ echo "📤 Uploading macOS + delta assets..."
 
 UPLOAD_FILES=(
   "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
-  "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip"
-  "${RELEASE_DIR}/latest-mac.yml"
   "${RELEASE_DIR}/app-update.asar"
   "${RELEASE_DIR}/update-manifest.json"
 )
@@ -165,7 +163,7 @@ if [[ $MISSING -eq 1 ]]; then
 fi
 
 gh release upload "$TAG" "${UPLOAD_FILES[@]}" --clobber
-echo "   ✓ Uploaded: DMG, ZIP, latest-mac.yml, app-update.asar, update-manifest.json"
+echo "   ✓ Uploaded: DMG, app-update.asar, update-manifest.json"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
