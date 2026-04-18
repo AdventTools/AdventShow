@@ -1035,11 +1035,24 @@ function App() {
             return;
         }
 
+        // When projecting, arrow keys control projection (same as ProjectorController):
+        // Right/Left = navigate slides, Up/Down = zoom
+        if (projecting && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+            e.preventDefault();
+            if (e.key === 'ArrowRight') navigateSlide(projSlideIndex + 1);
+            else navigateSlide(projSlideIndex - 1);
+            return;
+        }
+
+        if (projecting && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            e.preventDefault();
+            window.electron.projection.sendKeyRequest(e.key === 'ArrowUp' ? 'zoom-in' : 'zoom-out');
+            return;
+        }
+
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            if (projecting) {
-                navigateSlide(projSlideIndex + 1);
-            } else if (tab === 'imnuri') {
+            if (tab === 'imnuri') {
                 const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
                 const nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : 0;
                 if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
@@ -1053,9 +1066,7 @@ function App() {
 
         if (e.key === 'ArrowUp') {
             e.preventDefault();
-            if (projecting) {
-                navigateSlide(projSlideIndex - 1);
-            } else if (tab === 'imnuri') {
+            if (tab === 'imnuri') {
                 const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
                 const nextIdx = currentIdx > 0 ? currentIdx - 1 : hymns.length - 1;
                 if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
