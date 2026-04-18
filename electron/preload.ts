@@ -84,6 +84,8 @@ contextBridge.exposeInMainWorld('electron', {
     getDisplays: () => ipcRenderer.invoke('screen:get-displays'),
   },
 
+  openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
+
   bible: {
     getBooks: () => ipcRenderer.invoke('bible:get-books'),
     getChapters: (bookId: number) => ipcRenderer.invoke('bible:get-chapters', bookId),
