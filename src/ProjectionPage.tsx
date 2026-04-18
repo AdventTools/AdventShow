@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppSettings, HymnSection, ProjectionSlideData } from './vite-env';
 
+// Convert a local file path to a proper file:// URL (handles Windows drive letters)
+function toFileUrl(p: string): string {
+  const fwd = p.replace(/\\/g, '/')
+  // Windows: C:/... → file:///C:/...    macOS/Linux: /... → file:///...
+  return fwd.startsWith('/') ? `file://${fwd}` : `file:///${fwd}`
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Projection Page — renders in the fullscreen secondary window
 // ─────────────────────────────────────────────────────────────────────────────
@@ -209,7 +216,7 @@ export function ProjectionPage() {
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage: `url("file://${bg.bgImagePath.replace(/\\/g, '/')}")`,
+            backgroundImage: `url("${toFileUrl(bg.bgImagePath)}")`,
             opacity: bg.bgOpacity ?? 1,
           }}
         >
@@ -221,7 +228,7 @@ export function ProjectionPage() {
       {bgType === 'video' && bg.bgVideoPath && (
         <>
           <video
-            src={`file://${bg.bgVideoPath.replace(/\\/g, '/')}`}
+            src={toFileUrl(bg.bgVideoPath)}
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: bg.bgOpacity ?? 1 }}
             autoPlay loop muted playsInline

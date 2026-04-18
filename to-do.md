@@ -1,9 +1,11 @@
-1. inca nu am butonul de check for update !!!!!!!!!
-2. pe windows nu face play deloc. nici macar nu arata fereastra de preview in main window. poate are nevoie de ceva dependinte care nu sunt instalate. daca da, ar trebui sa le verifice la install routine.
-3. nu scrie log detaliat in folderul aplicatiei daca bifez jurnal detaliat in setari.
-4. vreau sa stiu daca in setari SIGUR se aplica tot ce modific, intrucat nu are nici un buton de aplica sau OK.
-5. verifica compilarile de pe github, ca mi se par ca sunt multe failuri. daca sunt vechi si nu e o problema ignora ce am zis la punctul 5.
-6. corecteaza imnul 562 ca in imaginea atasata in chat, ca sunt rupte randurile de la mijloc unele si se face prea lunga piesa.
-7. vreau sa imi spui daca mai sunt imnuri care au pe strofa mai mult de 6 linii de versuri ca sa le verific manual. 
+vezi ca mi-ai dublat acum zona unde apare automat version upgrade, e si in stanga jos si bara sus, lasa doar aia din meniul din stanga jos, nu ambele
+
+intrebare: daca am modificat versuri? la update se scriu ce am modificat eu in git? daca oamenii si-au modificat versuri la urmatorul upgrade se vor suprascrie?
+dar imnurile custom adaugate de fiecare se sterg la upgrade? dar la upgrade prin installer, adica full upgrade? fa un audit pe tema asta ca sa decidem cum sa facem. unii vor corecta versuri, altii vor adauga. dar in paralel si noi corectam.
+
+unde e logul???? nu am log ca sa iti pot da !!!!!! nu scrie fisier de log in windows.
+
+si degeaba selectez eu in setari alt folder pentru temporare video, ca nu il ia, revine la default, nu pot seta alta cale.
+video pe windows tot nu merge, nu face play. deschide proiectia dart nu pleaca nici un video, nu se vede nici macar primulo frame. nici pe proiectie si nici in preview. pe amc merge.
 
 la final, respecta pasii de finalizare, build mac, upload, etc...
