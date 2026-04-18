@@ -371,16 +371,17 @@ async function installDeltaUpdate(): Promise<void> {
     const exe = appExe.replace(/\//g, '\\')
     const tmp = tempDir.replace(/\//g, '\\')
     fs.writeFileSync(script, [
-      'Start-Sleep -Seconds 2',
-      '$maxRetries = 15',
+      'Start-Sleep -Seconds 4',
+      '$maxRetries = 20',
       'for ($i = 0; $i -lt $maxRetries; $i++) {',
       '  try {',
       `    Copy-Item -Path "${src}" -Destination "${dst}" -Force -ErrorAction Stop`,
       '    break',
       '  } catch {',
-      '    Start-Sleep -Seconds 1',
+      '    Start-Sleep -Seconds 2',
       '  }',
       '}',
+      'if ($i -eq $maxRetries) { exit 1 }',
       `Start-Process -FilePath "${exe}"`,
       `Remove-Item -Path "${tmp}" -Recurse -Force -ErrorAction SilentlyContinue`,
     ].join('\r\n'))
@@ -785,8 +786,13 @@ function stopPowerSaveBlocker() {
   powerSaveId = null
 }
 
+/** Safe check: window exists and is not destroyed */
+function isWinAlive(w: BrowserWindow | null): w is BrowserWindow {
+  return w !== null && !w.isDestroyed()
+}
+
 function sendSlideToProjection(index: number) {
-  if (!projState || !projectionWin) return
+  if (!projState || !isWinAlive(projectionWin)) return
   projState.currentIndex = index
   projectionWin.webContents.send('projection:slide', {
     sections: projState.sections,
@@ -796,7 +802,7 @@ function sendSlideToProjection(index: number) {
     contentType: projState.contentType,
     bibleRef: projState.bibleRef,
   })
-  win?.webContents.send('projection:controller-sync', { currentIndex: index })
+  if (isWinAlive(win)) win.webContents.send('projection:controller-sync', { currentIndex: index })
 }
 
 // ── Projection window ─────────────────────────────────────────────────────────
@@ -851,7 +857,7 @@ function createProjectionWindow() {
     projState = null
     projectionReadyResolve = null
     projectionReadyPromise = null
-    win?.webContents.send('projection:closed')
+    if (isWinAlive(win)) win.webContents.send('projection:closed')
   })
 
   resetProjectionReady()
@@ -1187,9 +1193,9 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') => {
-    if (action === 'close') { projectionWin?.close(); return }
+    if (action === 'close') { if (isWinAlive(projectionWin)) projectionWin.close(); return }
     if (action === 'zoom-in' || action === 'zoom-out') {
-      projectionWin?.webContents.send('projection:zoom', action)
+      if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:zoom', action)
       return
     }
     if (!projState) return
@@ -1209,7 +1215,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('projection:close', () => {
-    projectionWin?.close()
+    if (isWinAlive(projectionWin)) projectionWin.close()
     projectionWin = null
     projState = null
   })
@@ -1305,8 +1311,16 @@ app.whenReady().then(() => {
 
   // Open projection and start playback
   ipcMain.handle('video:start-playback', async (_e, url: string, name: string) => {
+    // Fix cached broken file:// URLs from older versions (file://C:%5C... → file:///C:/...)
+    if (url.startsWith('file://') && !url.startsWith('file:///')) {
+      try {
+        const decoded = decodeURIComponent(url.replace('file://', ''))
+        url = pathToFileURL(decoded).href
+        debugLog('[video:start-playback] Fixed legacy URL →', url.substring(0, 100))
+      } catch { /* keep original */ }
+    }
     debugLog('[video:start-playback] Starting playback:', url.substring(0, 100), 'name:', name)
-    if (!projectionWin) {
+    if (!isWinAlive(projectionWin)) {
       debugLog('[video:start-playback] Creating projection window...')
       createProjectionWindow()
     }
@@ -1314,9 +1328,9 @@ app.whenReady().then(() => {
     debugLog('[video:start-playback] Waiting for projection renderer ready...')
     await waitForProjectionReady()
     debugLog('[video:start-playback] Projection ready! Sending video:load + video:play')
-    projectionWin?.webContents.send('video:load', url, name)
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:load', url, name)
     // Small delay for the <video> element to mount after state change
-    setTimeout(() => projectionWin?.webContents.send('video:play'), 200)
+    setTimeout(() => { if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:play') }, 200)
   })
 
   // Legacy load (kept for backward compat)
@@ -1338,11 +1352,11 @@ app.whenReady().then(() => {
       }
     }
     const videoUrl = pathToFileURL(servePath).href
-    if (!projectionWin) createProjectionWindow()
+    if (!isWinAlive(projectionWin)) createProjectionWindow()
     const sendVideo = () => {
-      projectionWin?.webContents.send('video:load', videoUrl, path.basename(filePath))
+      if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:load', videoUrl, path.basename(filePath))
     }
-    if (projectionWin?.webContents.isLoading()) {
+    if (isWinAlive(projectionWin) && projectionWin.webContents.isLoading()) {
       projectionWin.webContents.once('did-finish-load', sendVideo)
     } else {
       setTimeout(sendVideo, 300)
@@ -1352,27 +1366,27 @@ app.whenReady().then(() => {
 
   ipcMain.handle('video:play', () => {
     debugLog('[video:play] Sending play to projection')
-    projectionWin?.webContents.send('video:play')
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:play')
   })
   ipcMain.handle('video:pause', () => {
     debugLog('[video:pause] Sending pause to projection')
-    projectionWin?.webContents.send('video:pause')
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:pause')
   })
   ipcMain.handle('video:stop', () => {
     debugLog('[video:stop] Sending stop to projection')
-    projectionWin?.webContents.send('video:stop')
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:stop')
   })
-  ipcMain.handle('video:seek', (_e, time: number) => projectionWin?.webContents.send('video:seek', time))
-  ipcMain.handle('video:volume', (_e, vol: number) => projectionWin?.webContents.send('video:volume', vol))
+  ipcMain.handle('video:seek', (_e, time: number) => { if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:seek', time) })
+  ipcMain.handle('video:volume', (_e, vol: number) => { if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:volume', vol) })
 
   // Legacy load-url (kept for backward compat)
   ipcMain.handle('video:load-url', (_e, url: string) => {
     debugLog('[video:load-url] Loading URL:', url.substring(0, 120) + '...')
-    if (!projectionWin) createProjectionWindow()
+    if (!isWinAlive(projectionWin)) createProjectionWindow()
     const sendVideo = () => {
-      projectionWin?.webContents.send('video:load', url, 'YouTube')
+      if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:load', url, 'YouTube')
     }
-    if (projectionWin?.webContents.isLoading()) {
+    if (isWinAlive(projectionWin) && projectionWin.webContents.isLoading()) {
       projectionWin.webContents.once('did-finish-load', sendVideo)
     } else {
       setTimeout(sendVideo, 300)
