@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.1.30 (18 Aprilie 2026)
+
+### Modificări
+- Corecție descărcare video YouTube: sunetul lipsea deoarece video și audio nu erau unite. Acum ffmpeg este folosit automat la descărcare pentru fișiere complete cu sunet.
+
+---
+
 ## v1.1.29 (18 Aprilie 2026)
 
 ### Modificări

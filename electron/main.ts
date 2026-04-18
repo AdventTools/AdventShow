@@ -553,6 +553,7 @@ function startYouTubeDownload(entry: YouTubeEntry) {
   const args = [
     '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
     '--merge-output-format', 'mp4',
+    '--ffmpeg-location', getFFmpegPath(),
     '-o', outputTemplate,
     '--newline',
     '--no-playlist',
