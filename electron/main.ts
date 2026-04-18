@@ -285,20 +285,54 @@ async function downloadUpdate(): Promise<void> {
 // Install update: run the installer and quit
 async function installUpdate(): Promise<void> {
   if (!updateState.downloadedInstallerPath || !fs.existsSync(updateState.downloadedInstallerPath)) {
-    throw new Error('Downloaded installer not found')
+    throw new Error('Fișierul descărcat nu a fost găsit. Încearcă din nou.')
   }
 
   const installer = updateState.downloadedInstallerPath
   debugLog(`[Update] Installing: ${installer}`)
 
   if (process.platform === 'win32') {
-    // Run NSIS installer silently — it handles closing the running app
-    spawn(installer, ['/S'], { detached: true, stdio: 'ignore' }).unref()
-    app.quit()
+    // On Windows, spawning the installer directly and then calling app.quit() can cause the
+    // child process to be terminated together with Electron because they share a Windows Job Object.
+    // Fix: use a cmd.exe intermediary batch file that waits for Electron to close first.
+    const batPath = path.join(path.dirname(installer), '_adv_update.cmd')
+    // Use timeout to wait for Electron to fully exit before launching the installer
+    const bat = [
+      '@echo off',
+      'timeout /t 3 /nobreak > nul',
+      `"${installer}" /S`,
+      `del "%~f0"`,
+    ].join('\r\n')
+    fs.writeFileSync(batPath, bat)
+    spawn('cmd.exe', ['/c', batPath], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    }).unref()
+    // Short delay so cmd.exe starts before we quit
+    setTimeout(() => app.quit(), 400)
   } else if (process.platform === 'darwin') {
-    // Open the DMG — user drags app to Applications
-    shell.openPath(installer)
-    app.quit()
+    // Remove quarantine attribute if present (macOS adds it to downloaded files,
+    // which can cause Gatekeeper to block opening the DMG)
+    try {
+      execFile('xattr', ['-d', 'com.apple.quarantine', installer], { timeout: 5000 }, () => { })
+    } catch { /* ignore — file may not have the attribute */ }
+
+    // Show instructions dialog so the user knows what to do after the DMG opens
+    const { response } = await dialog.showMessageBox({
+      type: 'info',
+      title: 'Instalare actualizare',
+      message: `AdventShow ${updateState.latestVersion} este gata de instalat.`,
+      detail: 'Se va deschide fișierul DMG. Trageți AdventShow în folderul Applications, apoi reporniți aplicația.',
+      buttons: ['Deschide DMG și iese', 'Anulează'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    if (response !== 0) return   // user cancelled
+
+    // Open the DMG and give Finder time to mount it before quitting
+    await shell.openPath(installer)
+    setTimeout(() => app.quit(), 2000)
   } else {
     // Linux: replace the AppImage
     const currentPath = process.env.APPIMAGE
@@ -883,6 +917,10 @@ app.whenReady().then(() => {
   })
 
   // ── Screen / display info ─────────────────────────────────────────────────
+  ipcMain.handle('shell:open-external', (_e, url: string) => {
+    shell.openExternal(url)
+  })
+
   ipcMain.handle('screen:get-displays', () => {
     const primary = screen.getPrimaryDisplay()
     return screen.getAllDisplays().map(d => ({

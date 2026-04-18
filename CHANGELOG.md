@@ -1,5 +1,15 @@
 # Changelog — AdventShow
 
+## v1.1.31 (18 Aprilie 2026)
+
+### Modificări
+- Corecție actualizare Windows: installerul nu pornea după confirmarea UAC — acum se folosește un proces intermediar care așteaptă ca aplicația să se închidă complet înainte de a lansa installerul
+- Corecție actualizare macOS: se afișează acum un dialog cu instrucțiuni clare înainte de a deschide DMG-ul; aplicația așteaptă 2 secunde ca DMG-ul să se monteze înainte de a ieși
+- Progres descărcare actualizare: afișat acum în MB (ex: 45.2 MB / 107.0 MB) nu doar procente
+- Adăugat buton „Descarcă manual din browser" ca alternativă de rezervă în panoul de actualizare
+
+---
+
 ## v1.1.30 (18 Aprilie 2026)
 
 ### Modificări

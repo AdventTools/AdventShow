@@ -267,6 +267,8 @@ function App() {
     } | null>(null);
     const [updateDownloading, setUpdateDownloading] = useState(false);
     const [updateProgress, setUpdateProgress] = useState(0);
+    const [updateTransferred, setUpdateTransferred] = useState(0);
+    const [updateTotal, setUpdateTotal] = useState(0);
     const [updateReady, setUpdateReady] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
 
@@ -394,6 +396,8 @@ function App() {
 
         window.electron.update.onProgress((data) => {
             setUpdateProgress(data.percent);
+            setUpdateTransferred(data.transferred);
+            setUpdateTotal(data.total);
         });
         window.electron.update.onDownloaded(() => {
             setUpdateDownloading(false);
@@ -1253,7 +1257,10 @@ function App() {
                                         }} />
                                     </div>
                                     <div style={{ fontSize: 11, textAlign: 'center', opacity: 0.7 }}>
-                                        {updateProgress}%
+                                        {updateTotal > 0
+                                            ? `${(updateTransferred / 1048576).toFixed(1)} MB / ${(updateTotal / 1048576).toFixed(1)} MB (${updateProgress}%)`
+                                            : `${updateProgress}% — se descarcă...`
+                                        }
                                     </div>
                                 </div>
                             ) : updateReady ? (
@@ -1269,6 +1276,8 @@ function App() {
                                     onClick={() => {
                                         setUpdateDownloading(true);
                                         setUpdateProgress(0);
+                                        setUpdateTransferred(0);
+                                        setUpdateTotal(0);
                                         setUpdateError(null);
                                         window.electron.update.download();
                                     }}
@@ -1276,6 +1285,14 @@ function App() {
                                     Actualizează
                                 </button>
                             )}
+                            <div style={{ marginTop: 4, textAlign: 'center' }}>
+                                <button
+                                    style={{ fontSize: 10, opacity: 0.5, background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', textDecoration: 'underline' }}
+                                    onClick={() => window.electron.openExternal('https://github.com/AdventTools/AdventShow/releases/latest')}
+                                >
+                                    Descarcă manual din browser
+                                </button>
+                            </div>
                         </div>
                     )}
                 </aside>
