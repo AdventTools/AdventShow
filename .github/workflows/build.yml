@@ -14,9 +14,9 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            cmd: npm run build:win
+            cmd: npm run build && npx electron-builder --win --publish never
           - os: ubuntu-latest
-            cmd: npm run build:linux
+            cmd: npm run build && npx electron-builder --linux --publish never
 
     runs-on: ${{ matrix.os }}
 
@@ -40,27 +40,6 @@ jobs:
 
       - name: Build
         run: ${{ matrix.cmd }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract app.asar for delta updates
-        shell: bash
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          RELEASE_DIR="release/${VERSION}"
-          
-          # Find app.asar in the build output
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            ASAR_SRC="${RELEASE_DIR}/win-unpacked/resources/app.asar"
-          else
-            ASAR_SRC="${RELEASE_DIR}/linux-unpacked/resources/app.asar"
-          fi
-          
-          if [ -f "$ASAR_SRC" ]; then
-            PLATFORM=$( [ "${{ matrix.os }}" = "windows-latest" ] && echo "win" || echo "linux" )
-            cp "$ASAR_SRC" "${RELEASE_DIR}/app-update-${PLATFORM}.asar"
-            echo "Extracted app.asar for ${PLATFORM} delta updates"
-          fi
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2

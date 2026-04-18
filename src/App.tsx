@@ -3085,7 +3085,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                         <li>Proiecție fullscreen pe ecran secundar</li>
                                         <li>Redare video — fișiere locale și YouTube</li>
                                         <li>Editor integrat, import PowerPoint, căutare</li>
-                                        <li>Actualizări automate delta — descarcă doar codul nou</li>
+                                        <li>Actualizări automate — descarcă și instalează ultima versiune</li>
                                     </ul>
                                 </div>
 
@@ -3144,7 +3144,7 @@ function UpdateChecker() {
     const [checking, setChecking] = useState(false)
     const [downloading, setDownloading] = useState(false)
     const [progress, setProgress] = useState(0)
-    const [result, setResult] = useState<{ available: boolean; version?: string; isDelta?: boolean } | null>(null)
+    const [result, setResult] = useState<{ available: boolean; version?: string } | null>(null)
     const [ready, setReady] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -3214,7 +3214,6 @@ function UpdateChecker() {
                     <div className="flex flex-col items-center gap-2">
                         <p className="text-yellow-400 text-xs">
                             Versiune nouă disponibilă: <strong>{result.version}</strong>
-                            {result.isDelta ? ' (actualizare rapidă)' : ''}
                         </p>
                         <button className="btn-sm" onClick={doDownloadAndInstall}>
                             Descarcă și instalează
