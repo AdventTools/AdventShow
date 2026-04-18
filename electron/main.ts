@@ -705,6 +705,8 @@ function createProjectionWindow() {
       preload: path.join(__dirname, 'preload.mjs'),
       // Allow file:// access for background images/videos
       webSecurity: false,
+      // Allow video/audio autoplay without user gesture (fixes no-sound on Windows)
+      autoplayPolicy: 'no-user-gesture-required',
     },
   })
 

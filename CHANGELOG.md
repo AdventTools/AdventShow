@@ -1,5 +1,16 @@
 # Changelog — AdventShow
 
+## v1.1.29 (18 Aprilie 2026)
+
+### Modificări
+- Corecție navigare cu săgeți după deschiderea proiecției cu Enter din listă
+- Corecție sunet video pe Windows (lipsea audio la redarea video-urilor)
+- Text proiecție: auto-redimensionare font — textul se potrivește mereu pe ecran, fără scroll
+- Header și footer proiecție mai compacte, mai mult spațiu pentru text
+- Indicatoare de poziție (puncte) mărite și mai vizibile
+
+---
+
 ## v1.1.28 (18 Aprilie 2026)
 
 ### Modificări
