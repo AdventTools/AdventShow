@@ -79,15 +79,20 @@ Repo: https://github.com/AdventTools/AdventShow
 - **macOS** — build-ul se face **local** pe mașina dezvoltatorului (este necesar macOS nativ pentru a genera `.dmg`)
 - **Windows și Linux** — build-urile se fac prin **GitHub Actions** (workflow CI/CD)
 
-### Auto-update (Delta Update)
-- **Nu folosim `electron-updater`**. Avem sistem propriu de delta update.
-- La update, aplicația descarcă doar `app.asar` (~2MB) în loc de tot Electron (~150MB)
-- Funcționează atâta timp cât versiunea Electron nu se schimbă
-- Dacă versiunea Electron s-a schimbat, se descarcă installerul complet (fallback)
-- Fiecare release include: `app-update.asar` + `update-manifest.json`
-- `update-manifest.json` conține: version, electronVersion, asarSha256, asarSize
-- Pe macOS, după înlocuirea app.asar, se re-semnează ad-hoc automat
-- Pe Windows, app.asar se înlocuiește direct (exe-ul rămâne neschimbat)
+### Auto-update
+- **Nu folosim `electron-updater`** și **nu folosim delta update**.
+- La update, aplicația descarcă **installerul complet** (Setup.exe / DMG / AppImage) de pe GitHub Releases și îl rulează.
+- Pe Windows: NSIS Setup.exe cu `/S` (silent) — setup-ul face upgrade automat.
+- Pe macOS: deschide DMG-ul — utilizatorul trage aplicația în Applications.
+- Pe Linux: înlocuiește AppImage-ul curent.
+- Verificarea se face prin GitHub API: `/repos/{owner}/{repo}/releases/latest`
+
+### Baza de date — upgrade și sincronizare
+- `public/hymns.db` este seed DB-ul, copiat în `userData/hymns.db` **doar la prima instalare** (dacă nu există).
+- Corecțiile noastre la imnuri (ex: fix text strofa) se propagă la clienți prin **sincronizare pe bază de timestamp**.
+- Fiecare `hymn_sections` are coloana `updated_at` (ISO 8601). La fiecare pornire, `syncSeedCorrections()` compară seed DB cu user DB — dacă seed-ul e mai nou, actualizează.
+- Modificările utilizatorului sunt păstrate dacă sunt mai recente decât cele din seed.
+- **Când corectăm un imn în seed DB**, setăm `updated_at` la data corectării.
 
 ### Release-uri (OBLIGATORIU)
 - **Un singur script**: `./scripts/release.sh "Descriere modificări" [patch|minor|major]`
@@ -95,15 +100,13 @@ Repo: https://github.com/AdventTools/AdventShow
   1. Incrementează versiunea (patch implicit)
   2. Actualizează `package.json`, `README.md`, `CHANGELOG.md`
   3. Build macOS local (`npm run build:mac`)
-  4. Extrage `app.asar` + creează `update-manifest.json` pentru delta update
-  5. Commit + tag + push pe `main`
-  6. Creează GitHub Release (tag `v<version>`)
-  7. Uploadează DMG-ul pe release-ul principal
-  8. Uploadează `app-update.asar` + `update-manifest.json` pe release-ul ascuns `delta-latest` (pre-release)
-  9. GitHub Actions construiește automat Windows + Linux
+  4. Commit + tag + push pe `main`
+  5. Creează GitHub Release (tag `v<version>`) cu `exclude_source_code_archives`
+  6. Uploadează DMG-ul pe release
+  7. GitHub Actions construiește automat Windows + Linux
 - **Release-ul principal** conține DOAR **3 fișiere**: DMG (macOS), Setup.exe (Windows), AppImage (Linux)
-- **Fișierele delta** (`app-update.asar`, `update-manifest.json`) stau în release-ul pre-release `delta-latest` — invizibil pentru utilizatori
-- **NU** upload-a yml-uri, zip-uri, blockmap-uri sau alte fișiere pe release-ul principal
+- **NU** upload-a yml-uri, zip-uri, blockmap-uri sau alte fișiere pe release
+- **NU** seta `GH_TOKEN` la build în CI — electron-builder auto-publică yml-uri nedorite
 - Link-urile de descărcare din `README.md` trebuie să rămână mereu funcționale
 - Tag-ul git pentru release este `v<MAJOR>.<MINOR>.<PATCH>` (ex: `v1.1.0`)
 

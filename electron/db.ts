@@ -143,6 +143,20 @@ export function initDB() {
     // Column already exists — fine
   }
 
+  // Migration: add updated_at to hymn_sections for tracking modifications
+  try {
+    db.exec("ALTER TABLE hymn_sections ADD COLUMN updated_at TEXT DEFAULT ''");
+  } catch {
+    // Column already exists — fine
+  }
+
+  // Migration: add updated_at to hymns for tracking modifications
+  try {
+    db.exec("ALTER TABLE hymns ADD COLUMN updated_at TEXT DEFAULT ''");
+  } catch {
+    // Column already exists — fine
+  }
+
   // Migration: drop UNIQUE on number (if present from old schema)
   // We allow duplicate numbers across categories, so only enforce uniqueness per category.
   migrateLegacyHymnsNumberConstraint(db);
@@ -694,18 +708,20 @@ export function importJsonBackup(data: unknown): BackupSummary {
 
 export function addSection(hymnId: number, type: 'strofa' | 'refren', text: string) {
   const db = getDb();
+  const now = new Date().toISOString();
   const maxOrder = db
     .prepare('SELECT COALESCE(MAX(order_index), -1) as m FROM hymn_sections WHERE hymn_id = ?')
     .get(hymnId) as { m: number };
   return db
-    .prepare('INSERT INTO hymn_sections (hymn_id, order_index, type, text) VALUES (?, ?, ?, ?)')
-    .run(hymnId, maxOrder.m + 1, type, text);
+    .prepare('INSERT INTO hymn_sections (hymn_id, order_index, type, text, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run(hymnId, maxOrder.m + 1, type, text, now);
 }
 
 export function updateSection(id: number, type: 'strofa' | 'refren', text: string) {
+  const now = new Date().toISOString();
   return getDb()
-    .prepare('UPDATE hymn_sections SET type = @type, text = @text WHERE id = @id')
-    .run({ id, type, text });
+    .prepare('UPDATE hymn_sections SET type = @type, text = @text, updated_at = @updated_at WHERE id = @id')
+    .run({ id, type, text, updated_at: now });
 }
 
 export function deleteSection(id: number) {
@@ -990,5 +1006,70 @@ export function seedBibleFromJson() {
     tx();
   } catch (err) {
     console.error('[Bible] Seed failed:', err);
+  }
+}
+
+/**
+ * Sync corrections from the seed (bundled) DB to the user's DB.
+ * Only updates sections where the seed's updated_at is newer than the user's.
+ * This ensures our corrections (e.g., fixing hymn 562) reach existing users,
+ * while preserving any user modifications that are more recent.
+ */
+export function syncSeedCorrections(seedDbPath: string) {
+  if (!fs.existsSync(seedDbPath)) return;
+
+  try {
+    const userDb = getDb();
+    const seedDb = new Database(seedDbPath, { readonly: true });
+
+    // Check if seed DB has updated_at column
+    const seedCols = seedDb.pragma('table_info(hymn_sections)') as { name: string }[];
+    if (!seedCols.some(c => c.name === 'updated_at')) {
+      seedDb.close();
+      return; // Seed DB doesn't have timestamps yet, nothing to sync
+    }
+
+    // Get all seed sections that have an updated_at timestamp
+    const seedSections = seedDb.prepare(`
+      SELECT hs.id, hs.hymn_id, hs.order_index, hs.type, hs.text, hs.updated_at
+      FROM hymn_sections hs
+      WHERE hs.updated_at IS NOT NULL AND hs.updated_at != ''
+    `).all() as { id: number; hymn_id: number; order_index: number; type: string; text: string; updated_at: string }[];
+
+    if (seedSections.length === 0) {
+      seedDb.close();
+      return;
+    }
+
+    const getUserSection = userDb.prepare(`
+      SELECT id, text, updated_at FROM hymn_sections WHERE hymn_id = ? AND order_index = ?
+    `);
+    const updateUserSection = userDb.prepare(`
+      UPDATE hymn_sections SET text = ?, type = ?, updated_at = ? WHERE id = ?
+    `);
+
+    let updated = 0;
+    const tx = userDb.transaction(() => {
+      for (const seed of seedSections) {
+        const user = getUserSection.get(seed.hymn_id, seed.order_index) as { id: number; text: string; updated_at: string } | undefined;
+        if (!user) continue;
+
+        // Only update if seed is newer (or user has no timestamp)
+        const userTs = user.updated_at || '';
+        if (seed.updated_at > userTs) {
+          updateUserSection.run(seed.text, seed.type, seed.updated_at, user.id);
+          updated++;
+        }
+      }
+    });
+    tx();
+
+    if (updated > 0) {
+      console.log(`[DB Sync] Updated ${updated} sections from seed DB`);
+    }
+
+    seedDb.close();
+  } catch (err) {
+    console.error('[DB Sync] Failed:', err);
   }
 }

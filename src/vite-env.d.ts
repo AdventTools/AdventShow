@@ -201,7 +201,7 @@ export interface IElectronAPI {
     signalReady: () => void;
   };
   update: {
-    check: () => Promise<{ available: boolean; version?: string; isDelta?: boolean }>;
+    check: () => Promise<{ available: boolean; version?: string }>;
     download: () => Promise<void>;
     install: () => void;
     openLogFile: () => void;
