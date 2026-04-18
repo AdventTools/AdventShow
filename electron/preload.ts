@@ -125,6 +125,7 @@ contextBridge.exposeInMainWorld('electron', {
     check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string; isDelta?: boolean }>,
     download: () => ipcRenderer.invoke('update:download'),
     install: () => ipcRenderer.invoke('update:install'),
+    openLogFile: () => ipcRenderer.invoke('update:open-log'),
     onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) =>
       ipcRenderer.on('update:download-progress', (_e, data) => cb(data)),
     offProgress: () => ipcRenderer.removeAllListeners('update:download-progress'),

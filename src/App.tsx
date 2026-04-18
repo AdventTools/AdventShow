@@ -1088,42 +1088,6 @@ function App() {
 
     return (
         <div className="app-root">
-            {/* ── Update notification banner ── */}
-            {updateInfo?.available && !updateDownloading && !updateReady && (
-                <div className="update-banner">
-                    <span>Versiune nouă disponibilă: <strong>v{updateInfo.version}</strong></span>
-                    <button className="update-banner-btn" onClick={() => {
-                        setUpdateDownloading(true);
-                        setUpdateProgress(0);
-                        setUpdateError(null);
-                        window.electron.update.download().catch(() => {
-                            setUpdateDownloading(false);
-                            setUpdateError('Descărcarea a eșuat.');
-                        });
-                    }}>Actualizează</button>
-                    <button className="update-banner-dismiss" onClick={() => setUpdateInfo(null)}>✕</button>
-                </div>
-            )}
-            {updateDownloading && (
-                <div className="update-banner">
-                    <span>Se descarcă actualizarea... {updateProgress.toFixed(0)}%</span>
-                    <div className="update-banner-progress">
-                        <div className="update-banner-progress-bar" style={{ width: `${updateProgress}%` }} />
-                    </div>
-                </div>
-            )}
-            {updateReady && (
-                <div className="update-banner update-banner-ready">
-                    <span>Actualizare descărcată!</span>
-                    <button className="update-banner-btn" onClick={() => window.electron.update.install()}>Instalează și repornește</button>
-                </div>
-            )}
-            {updateError && (
-                <div className="update-banner update-banner-error">
-                    <span>{updateError}</span>
-                    <button className="update-banner-dismiss" onClick={() => setUpdateError(null)}>✕</button>
-                </div>
-            )}
             {/* ── Header ── */}
             <header className="header">
                 <div className="header-logo">
@@ -3006,6 +2970,14 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 <p className="text-white/40 text-xs mt-1">
                                     Scrie un fișier de log detaliat în folderul aplicației. Util pentru diagnosticarea problemelor cu video și YouTube.
                                 </p>
+                                {settings.debugLog && (
+                                    <button
+                                        className="btn-sm mt-1"
+                                        onClick={() => window.electron.update.openLogFile()}
+                                    >
+                                        Deschide fișierul de log
+                                    </button>
+                                )}
                             </div>
                             <DownloadFolderPicker settings={settings} onSave={saveSettings} />
                         </div>

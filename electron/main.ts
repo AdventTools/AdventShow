@@ -4,7 +4,7 @@ import { execFile, execSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import https from 'node:https'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
   addSection,
   clearAllData,
@@ -108,8 +108,13 @@ function debugLog(...args: unknown[]) {
   const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ')
   const line = `[${timestamp}] ${message}\n`
   try {
-    fs.appendFileSync(getLogPath(), line, 'utf-8')
-  } catch { /* ignore */ }
+    const logPath = getLogPath()
+    const logDir = path.dirname(logPath)
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+    fs.appendFileSync(logPath, line, 'utf-8')
+  } catch (err) {
+    console.error('[debugLog] Failed to write log:', err)
+  }
   console.log('[DEBUG]', ...args)
 }
 
@@ -635,8 +640,11 @@ interface YouTubeEntry {
 
 function getYouTubeDir(): string {
   const settings = readSettings()
-  if (settings.downloadFolder && fs.existsSync(settings.downloadFolder)) {
-    return settings.downloadFolder
+  if (settings.downloadFolder) {
+    debugLog('[YouTube] Custom download folder:', settings.downloadFolder, 'exists:', fs.existsSync(settings.downloadFolder))
+    if (fs.existsSync(settings.downloadFolder)) {
+      return settings.downloadFolder
+    }
   }
   return path.join(app.getPath('userData'), 'youtube-videos')
 }
@@ -1249,6 +1257,15 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('update:open-log', () => {
+    const logPath = getLogPath()
+    if (fs.existsSync(logPath)) {
+      shell.openPath(logPath)
+    } else {
+      shell.openPath(app.getPath('userData'))
+    }
+  })
+
   // ── Video ───────────────────────────────────────────────────────────────────
   ipcMain.handle('video:pick-file', async () => {
     if (!win) return undefined
@@ -1281,7 +1298,7 @@ app.whenReady().then(() => {
         win?.webContents.send('video:converting', false)
       }
     }
-    const videoUrl = `file://${encodeURI(servePath).replace(/#/g, '%23')}`
+    const videoUrl = pathToFileURL(servePath).href
     debugLog('[video:prepare] Prepared URL:', videoUrl)
     return { url: videoUrl, name: path.basename(filePath), converted }
   })
@@ -1320,7 +1337,7 @@ app.whenReady().then(() => {
         win?.webContents.send('video:converting', false)
       }
     }
-    const videoUrl = `localfile://${encodeURI(servePath).replace(/#/g, '%23')}`
+    const videoUrl = pathToFileURL(servePath).href
     if (!projectionWin) createProjectionWindow()
     const sendVideo = () => {
       projectionWin?.webContents.send('video:load', videoUrl, path.basename(filePath))
