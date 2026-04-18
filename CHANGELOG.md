@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.27 (18 Aprilie 2026)
+
+### Modificări
+- Proiecția se închide automat după oprirea video (nu mai rămâne ecran negru)
+- Ascundere arhive sursă din release-uri GitHub
+
+---
+
 ## v1.1.26 (18 Aprilie 2026)
 
 ### Modificări
