@@ -112,3 +112,11 @@ Repo: https://github.com/AdventTools/AdventShow
 - Commit messages: descriptive, în engleză, prefixate cu tipul: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
 - Tag-uri de versiune: `v1.0.0`, `v1.1.0`, etc.
 - Nu commita `node_modules/`, `dist/`, `dist-electron/`, `release/`
+
+### Terminal (OBLIGATORIU)
+- **NICIODATĂ** nu rula comenzi care blochează terminalul cu un pager (less, more, etc.)
+- La **orice** comandă `gh`, `git log`, `git diff` sau altele care pot deschide un pager, adaugă MEREU `| cat` sau `--no-pager`
+- Exemple corecte: `gh release view v1.0.0 | cat`, `git --no-pager log`, `gh api ... --jq ...`
+- Exemple **INTERZISE**: `gh release view v1.0.0` (fără `| cat`), `git log` (fără `--no-pager`)
+- Folosește MEREU `--jq` cu `gh api` pentru a extrage doar ce ai nevoie
+- Dacă nu ești sigur dacă o comandă folosește pager, adaugă `| cat` la final
