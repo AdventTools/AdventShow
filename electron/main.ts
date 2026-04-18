@@ -1374,7 +1374,15 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('video:stop', () => {
     debugLog('[video:stop] Sending stop to projection')
-    if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:stop')
+    if (isWinAlive(projectionWin)) {
+      projectionWin.webContents.send('video:stop')
+      // Close the projection window so it doesn't stay as a black screen
+      setTimeout(() => {
+        if (isWinAlive(projectionWin)) {
+          projectionWin.close()
+        }
+      }, 300)
+    }
   })
   ipcMain.handle('video:seek', (_e, time: number) => { if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:seek', time) })
   ipcMain.handle('video:volume', (_e, vol: number) => { if (isWinAlive(projectionWin)) projectionWin.webContents.send('video:volume', vol) })
