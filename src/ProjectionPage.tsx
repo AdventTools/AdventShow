@@ -58,11 +58,13 @@ export function ProjectionPage() {
       setVideoUrl(url);
       setData(null); // hide hymn/bible content
       // Audio output: use saved device if available
-      window.electron.settings.get().then(s => {
+      window.electron.settings.get().then(async s => {
         if (s.audioOutputDeviceId && videoRef.current) {
           try {
-            (videoRef.current as any).setSinkId(s.audioOutputDeviceId);
-          } catch { /* ignore if not supported */ }
+            await (videoRef.current as any).setSinkId(s.audioOutputDeviceId);
+          } catch (err) {
+            console.warn('[Projection] setSinkId failed, using default audio output:', err);
+          }
         }
       });
     });
@@ -146,11 +148,39 @@ export function ProjectionPage() {
   // Font size setting: default 1.2 (larger than before), user-adjustable from settings
   const fontSizeMultiplier = (bg.projectionFontSize ?? 1.2) * zoomLevel;
 
+  // ── Auto-shrink: guarantees text NEVER overflows the container ──
+  const contentRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [shrinkFactor, setShrinkFactor] = useState(1);
+
+  // Reset shrink factor when slide changes
+  useEffect(() => {
+    setShrinkFactor(1);
+  }, [data?.currentIndex, data?.hymnNumber, zoomLevel]);
+
+  // After render, check if content overflows and shrink until it fits
+  useEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+
+    // Use requestAnimationFrame to measure after paint
+    const raf = requestAnimationFrame(() => {
+      const containerH = container.clientHeight;
+      const contentH = content.scrollHeight;
+      if (contentH > containerH && containerH > 0) {
+        // Shrink proportionally, with a small extra margin
+        const newFactor = shrinkFactor * (containerH / contentH) * 0.95;
+        setShrinkFactor(Math.max(0.3, newFactor));
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  });
+
   // ── Uniform font size for the entire hymn ──
   // Analyze ALL sections once when the hymn changes, pick the tightest fit,
   // and use that font for every slide so it never varies mid-hymn.
-  // Constants are conservative: account for header (~6vh), footer dots (~6vh),
-  // padding, line-height 1.45, and bold text being ~20% wider than normal.
+  // Available area: ~88vh (header ~3vh + footer ~3vh + padding ~6vh = 12vh overhead)
   const hymnFontSize = (() => {
     if (!data || data.sections.length === 0) return null;
 
@@ -164,19 +194,19 @@ export function ProjectionPage() {
       const lines = sec.text.split('\n');
       const lineCount = Math.max(1, lines.length);
       const maxLineCharCount = Math.max(1, ...lines.map((l: string) => l.trim().length));
-      // 120 instead of 150: bold weight 700 chars are ~20% wider
+      // Bold weight 700 chars are ~20% wider
       worstVw = Math.min(worstVw, 120 / maxLineCharCount);
-      // 58 instead of 72: usable area is ~58vh after header + footer + padding
-      worstVh = Math.min(worstVh, 58 / (lineCount * 1.45));
+      // 82vh usable area after compact header + footer + padding
+      worstVh = Math.min(worstVh, 82 / (lineCount * 1.45));
     }
 
     const vw = Math.min(10, worstVw).toFixed(2);
     const vh = Math.min(14, worstVh).toFixed(2);
-    return `calc(clamp(1.5rem, min(${vw}vw, ${vh}vh), 7rem) * ${fontSizeMultiplier})`;
+    return `calc(clamp(1.5rem, min(${vw}vw, ${vh}vh), 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   })();
 
   // Dynamic font size: use the uniform hymn font, or per-section for Bible
-  let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier})`;
+  let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   if (hymnFontSize) {
     // Hymn: consistent font across all slides
     dynamicFontSize = hymnFontSize;
@@ -187,11 +217,11 @@ export function ProjectionPage() {
     const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
 
     const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
-    const maxVh = Math.min(14, 72 / (lineCount * 1.45)).toFixed(2);
+    const maxVh = Math.min(14, 82 / (lineCount * 1.45)).toFixed(2);
 
     const minSize = isBible ? '2.5rem' : '2rem';
     const maxSize = isBible ? '9rem' : '8rem';
-    dynamicFontSize = `calc(clamp(${minSize}, min(${maxVw}vw, ${maxVh}vh), ${maxSize}) * ${fontSizeMultiplier})`;
+    dynamicFontSize = `calc(clamp(${minSize}, min(${maxVw}vw, ${maxVh}vh), ${maxSize}) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   }
 
   // Resolve background styles
@@ -259,7 +289,7 @@ export function ProjectionPage() {
       {/* Header — Hymn: number + title + section label, all on one bright line */}
       {!videoUrl && data && !isBible && data.currentIndex >= 0 && (
         <div
-          className="absolute top-0 left-0 right-0 flex items-center gap-4 px-10 py-5"
+          className="absolute top-0 left-0 right-0 flex items-center gap-3 px-8 py-2"
           style={{ opacity: visible ? 0.85 : 0, transition: 'opacity 0.4s' }}
         >
           <span
@@ -293,39 +323,46 @@ export function ProjectionPage() {
       {/* Main content — title slide, lyrics, or Bible verse */}
       {!videoUrl && (
         <div
-          className="relative z-10 px-16 text-center w-full max-w-full"
+          ref={containerRef}
+          className="relative z-10 px-12 text-center w-full"
           style={{
             opacity: visible ? 1 : 0,
             transform: visible ? 'translateY(0)' : 'translateY(12px)',
             transition: 'opacity 0.35s ease, transform 0.35s ease',
+            // Leave room for header (~3vh) and footer dots (~4vh)
+            maxHeight: '90vh',
+            paddingTop: data && !isBible && data.currentIndex >= 0 ? '3.5vh' : '0',
+            paddingBottom: data && data.sections.length > 1 && data.currentIndex >= 0 ? '4vh' : '0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
           }}
         >
           {data && isBible && section ? (
             /* ── Bible verse slide ── */
-            <div className="flex flex-col items-center justify-center gap-8">
-              <div className="max-h-[65vh] overflow-y-auto px-3">
-                <p
-                  className="leading-relaxed"
-                  style={{
-                    color: contentTextColor,
-                    fontSize: dynamicFontSize,
-                    fontWeight: 700,
-                    lineHeight: 1.5,
-                    textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
-                    whiteSpace: 'pre-line',
-                    overflowWrap: 'anywhere',
-                  }}
-                >
-                  {section.text}
-                </p>
-              </div>
+            <div ref={contentRef} className="flex flex-col items-center justify-center gap-6">
+              <p
+                className="leading-relaxed"
+                style={{
+                  color: contentTextColor,
+                  fontSize: dynamicFontSize,
+                  fontWeight: 700,
+                  lineHeight: 1.5,
+                  textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
+                  whiteSpace: 'pre-line',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {section.text}
+              </p>
               {/* Bible reference below the text */}
               {data.bibleRef && (
                 <p
                   className="font-semibold uppercase tracking-widest"
                   style={{
                     color: hymnNumberColor,
-                    fontSize: 'clamp(1rem, 2.5vw, 2rem)',
+                    fontSize: 'clamp(0.8rem, 2vw, 1.5rem)',
                     letterSpacing: '0.15em',
                     textShadow: '0 2px 24px rgba(0,0,0,0.8)',
                     opacity: 0.7,
@@ -369,7 +406,7 @@ export function ProjectionPage() {
             </div>
           ) : section ? (
             /* ── Lyrics slide ── */
-            <div className="max-h-[72vh] overflow-y-auto px-3">
+            <div ref={contentRef}>
               <p
                 className="leading-relaxed"
                 style={{
@@ -394,12 +431,12 @@ export function ProjectionPage() {
       {/* Slide position dots — bottom */}
       {!videoUrl && data && data.sections.length > 1 && data.currentIndex >= 0 && (
         <div
-          className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 pb-8 z-10"
-          style={{ opacity: visible ? 0.7 : 0, transition: 'opacity 0.4s' }}
+          className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2.5 pb-4 z-10"
+          style={{ opacity: visible ? 0.85 : 0, transition: 'opacity 0.4s' }}
         >
           {isBible ? (
             /* Bible: current verse / total */
-            <span className="text-white text-sm font-mono tracking-wider">
+            <span className="text-white text-base font-mono tracking-wider">
               {data.currentIndex + 1} / {data.sections.length}
             </span>
           ) : (
@@ -407,10 +444,10 @@ export function ProjectionPage() {
               <div
                 key={i}
                 className={`rounded-full transition-all duration-300 ${i === data.currentIndex
-                  ? 'w-6 h-2'
+                  ? 'w-8 h-3'
                   : s.type === 'refren'
-                    ? 'w-2 h-2 bg-amber-400/80'
-                    : 'w-2 h-2 bg-white'
+                    ? 'w-3 h-3 bg-amber-400/80'
+                    : 'w-3 h-3 bg-white'
                   }`}
                 style={i === data.currentIndex ? { backgroundColor: '#6ee7a0' } : undefined}
               />
