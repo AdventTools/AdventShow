@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.1.25 (18 Aprilie 2026)
+
+### Modificări
+- Corecție video pe Windows, eliminare banner duplicat actualizare, buton deschidere log, îmbunătățiri URLs fișiere locale
+
+---
+
+
 ## v1.1.24 (17 Aprilie 2026)
 
 ### Modificări
