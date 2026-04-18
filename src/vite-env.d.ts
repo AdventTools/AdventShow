@@ -184,6 +184,7 @@ export interface IElectronAPI {
   screen: {
     getDisplays: () => Promise<DisplayInfo[]>;
   };
+  openExternal: (url: string) => Promise<void>;
   projection: {
     open: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
