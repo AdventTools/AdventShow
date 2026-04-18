@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.1.32 (18 Aprilie 2026)
+
+### Modificări
+- Release de test pentru verificarea mecanismului de actualizare automată
+
+---
+
 ## v1.1.31 (18 Aprilie 2026)
 
 ### Modificări
