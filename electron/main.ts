@@ -1,6 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
-import { createHash } from 'node:crypto'
-import { execFile, execSync, spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import https from 'node:https'
 import path from 'node:path'
@@ -36,6 +35,7 @@ import {
   getBibleVerseRange,
   hasBibleData,
   seedBibleFromJson,
+  syncSeedCorrections,
 } from './db'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
@@ -139,25 +139,15 @@ function writeSettings(settings: AppSettings) {
 
 const GITHUB_OWNER = 'AdventTools'
 const GITHUB_REPO = 'AdventShow'
-const ELECTRON_VERSION = process.versions.electron // e.g. "30.5.1"
-
-interface UpdateManifest {
-  version: string
-  electronVersion: string
-  asarSha256: string
-  asarSize: number
-}
 
 interface UpdateState {
-  manifest: UpdateManifest | null
-  downloadedAsarPath: string | null
-  isDelta: boolean
+  latestVersion: string | null
+  downloadedInstallerPath: string | null
 }
 
 const updateState: UpdateState = {
-  manifest: null,
-  downloadedAsarPath: null,
-  isDelta: false,
+  latestVersion: null,
+  downloadedInstallerPath: null,
 }
 
 // Fetch JSON from GitHub API or raw URL
@@ -219,72 +209,67 @@ function downloadFile(url: string, dest: string, onProgress?: (percent: number, 
   })
 }
 
-// Check for updates by fetching the update manifest from the delta-latest release
-async function checkForUpdate(): Promise<{ available: boolean; version?: string; isDelta?: boolean }> {
+// Check for updates by fetching the latest GitHub release
+async function checkForUpdate(): Promise<{ available: boolean; version?: string }> {
   try {
-    // Delta files (app-update.asar + update-manifest.json) live in a separate
-    // pre-release tag "delta-latest" so the main release stays clean (3 files only).
-    const deltaReleaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/delta-latest`
-    const release = await fetchJson<{ tag_name: string; assets: { name: string; browser_download_url: string }[] }>(deltaReleaseUrl)
-
-    const manifestAsset = release.assets.find(a => a.name === 'update-manifest.json')
-    if (!manifestAsset) {
-      debugLog('[DeltaUpdate] No update-manifest.json found in latest release')
-      return { available: false }
-    }
-
-    const manifest = await fetchJson<UpdateManifest>(manifestAsset.browser_download_url)
+    const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+    const release = await fetchJson<{ tag_name: string }>(releaseUrl)
+    const latestVersion = release.tag_name.replace(/^v/, '')
     const current = app.getVersion()
 
-    if (manifest.version === current) {
-      debugLog(`[DeltaUpdate] Already up to date: ${current}`)
+    if (latestVersion === current) {
+      debugLog(`[Update] Already up to date: ${current}`)
       return { available: false }
     }
 
-    // Can we do a delta update? Only if Electron version matches
-    const isDelta = manifest.electronVersion === ELECTRON_VERSION
-    updateState.manifest = manifest
-    updateState.isDelta = isDelta
+    // Simple semver comparison: only update if latest > current
+    const cmp = (a: string, b: string) => {
+      const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
+      for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0) }
+      return 0
+    }
+    if (cmp(latestVersion, current) <= 0) {
+      debugLog(`[Update] Current ${current} >= latest ${latestVersion}, no update`)
+      return { available: false }
+    }
 
-    debugLog(`[DeltaUpdate] Update available: ${current} → ${manifest.version} (delta: ${isDelta})`)
-    return { available: true, version: manifest.version, isDelta }
+    updateState.latestVersion = latestVersion
+    debugLog(`[Update] Update available: ${current} → ${latestVersion}`)
+    return { available: true, version: latestVersion }
   } catch (err: any) {
-    debugLog('[DeltaUpdate] Check failed:', err.message)
+    debugLog('[Update] Check failed:', err.message)
     return { available: false }
   }
 }
 
-// Download the update (either delta asar or full zip)
+function getInstallerAssetName(): string {
+  switch (process.platform) {
+    case 'darwin': return `AdventShow-Mac-${updateState.latestVersion}.dmg`
+    case 'win32': return 'AdventShow-Setup.exe'
+    case 'linux': return 'AdventShow-Linux.AppImage'
+    default: return 'AdventShow-Linux.AppImage'
+  }
+}
+
+// Download the full installer from the latest release
 async function downloadUpdate(): Promise<void> {
-  if (!updateState.manifest) throw new Error('No update available')
+  if (!updateState.latestVersion) throw new Error('No update available')
 
-  const { version } = updateState.manifest
-
-  // Delta files come from the hidden "delta-latest" pre-release
-  // Full installers come from the public "latest" release
-  const isDelta = updateState.isDelta
-  const releaseUrl = isDelta
-    ? `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tags/delta-latest`
-    : `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+  const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
   const release = await fetchJson<{ assets: { name: string; browser_download_url: string }[] }>(releaseUrl)
 
-  const assetName = updateState.isDelta ? 'app-update.asar' : getFullUpdateAssetName()
+  const assetName = getInstallerAssetName()
   const asset = release.assets.find(a => a.name === assetName)
   if (!asset) throw new Error(`Asset ${assetName} not found in release`)
 
   const tempDir = path.join(app.getPath('temp'), `adventshow-update-${Date.now()}`)
   fs.mkdirSync(tempDir, { recursive: true })
-  // IMPORTANT: nu folosi extensia .asar pentru fișierul descărcat!
-  // Electron interceptează TOATE operațiunile fs pe căi care se termină în .asar
-  // (le tratează ca pachete, nu ca fișiere), ceea ce face ca WriteStream-ul să nu scrie nimic.
-  // Descărcăm în .tmp, iar scriptul de instalare copiază .tmp → app.asar.
-  const localFileName = updateState.isDelta ? 'update.tmp' : assetName
-  const destFile = path.join(tempDir, localFileName)
+  const destFile = path.join(tempDir, assetName)
 
-  debugLog(`[DeltaUpdate] Downloading ${assetName} (${updateState.isDelta ? 'delta' : 'full'})...`)
+  debugLog(`[Update] Downloading ${assetName}...`)
 
   await downloadFile(asset.browser_download_url, destFile, (percent, transferred, total) => {
-    win?.webContents.send('update:download-progress', {
+    if (isWinAlive(win)) win.webContents.send('update:download-progress', {
       percent,
       bytesPerSecond: 0,
       transferred,
@@ -292,165 +277,47 @@ async function downloadUpdate(): Promise<void> {
     })
   })
 
-  // Verify SHA256 for delta updates
-  if (updateState.isDelta && updateState.manifest.asarSha256) {
-    const hash = createHash('sha256')
-    hash.update(fs.readFileSync(destFile))
-    const actual = hash.digest('hex')
-    if (actual !== updateState.manifest.asarSha256) {
-      fs.unlinkSync(destFile)
-      throw new Error('SHA256 mismatch — download may be corrupted')
-    }
-    debugLog('[DeltaUpdate] SHA256 verified ✓')
-  }
-
-  updateState.downloadedAsarPath = destFile
-  debugLog(`[DeltaUpdate] Downloaded to ${destFile}`)
-  win?.webContents.send('update:downloaded', { version })
+  updateState.downloadedInstallerPath = destFile
+  debugLog(`[Update] Downloaded to ${destFile}`)
+  if (isWinAlive(win)) win.webContents.send('update:downloaded', { version: updateState.latestVersion })
 }
 
-function getFullUpdateAssetName(): string {
-  const version = updateState.manifest?.version || ''
-  switch (process.platform) {
-    case 'darwin': return `AdventShow-Mac-${version}.zip`
-    case 'win32': return `AdventShow-Setup.exe`
-    case 'linux': return `AdventShow-Linux.AppImage`
-    default: return `AdventShow-Linux.AppImage`
-  }
-}
-
-// Install delta update: replace app.asar and restart
-async function installDeltaUpdate(): Promise<void> {
-  if (!updateState.downloadedAsarPath || !fs.existsSync(updateState.downloadedAsarPath)) {
-    throw new Error('Downloaded asar not found')
+// Install update: run the installer and quit
+async function installUpdate(): Promise<void> {
+  if (!updateState.downloadedInstallerPath || !fs.existsSync(updateState.downloadedInstallerPath)) {
+    throw new Error('Downloaded installer not found')
   }
 
-  const newAsar = updateState.downloadedAsarPath
-  const tempDir = path.dirname(newAsar)
+  const installer = updateState.downloadedInstallerPath
+  debugLog(`[Update] Installing: ${installer}`)
 
-  // Determine app.asar location
-  let resourcesDir: string
-  if (process.platform === 'darwin') {
-    // /path/to/App.app/Contents/MacOS/AppName → /path/to/App.app/Contents/Resources
-    resourcesDir = path.resolve(process.execPath, '..', '..', 'Resources')
-  } else if (process.platform === 'win32') {
-    // /path/to/app/AppName.exe → /path/to/app/resources
-    resourcesDir = path.join(path.dirname(process.execPath), 'resources')
-  } else {
-    // Linux AppImage: mounted read-only, can't delta update
-    throw new Error('Delta update not supported on Linux AppImage')
-  }
-
-  const targetAsar = path.join(resourcesDir, 'app.asar')
-  debugLog(`[DeltaUpdate] Installing delta: ${newAsar} → ${targetAsar}`)
-
-  if (process.platform === 'darwin') {
-    // macOS: use a shell script that runs after the app quits
-    const appPath = path.resolve(process.execPath, '..', '..', '..')
-    const script = path.join(tempDir, 'delta-update.sh')
-    fs.writeFileSync(script, [
-      '#!/bin/bash',
-      'sleep 2',
-      `cp -f "${newAsar}" "${targetAsar}"`,
-      // Re-sign the app ad-hoc so Gatekeeper stays happy
-      `codesign --force --sign - "${appPath}" 2>/dev/null || true`,
-      `xattr -rd com.apple.quarantine "${appPath}" 2>/dev/null || true`,
-      `open "${appPath}"`,
-      `rm -rf "${tempDir}"`,
-    ].join('\n'), { mode: 0o755 })
-
-    spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
-    debugLog('[DeltaUpdate] Delta update script launched, quitting…')
+  if (process.platform === 'win32') {
+    // Run NSIS installer silently — it handles closing the running app
+    spawn(installer, ['/S'], { detached: true, stdio: 'ignore' }).unref()
     app.quit()
-  } else if (process.platform === 'win32') {
-    // Windows: use a hidden PowerShell script with retry logic
-    const appExe = process.execPath
-    const script = path.join(tempDir, 'delta-update.ps1')
-    const src = newAsar.replace(/\//g, '\\')
-    const dst = targetAsar.replace(/\//g, '\\')
-    const exe = appExe.replace(/\//g, '\\')
-    const tmp = tempDir.replace(/\//g, '\\')
-    fs.writeFileSync(script, [
-      'Start-Sleep -Seconds 4',
-      '$maxRetries = 20',
-      'for ($i = 0; $i -lt $maxRetries; $i++) {',
-      '  try {',
-      `    Copy-Item -Path "${src}" -Destination "${dst}" -Force -ErrorAction Stop`,
-      '    break',
-      '  } catch {',
-      '    Start-Sleep -Seconds 2',
-      '  }',
-      '}',
-      'if ($i -eq $maxRetries) { exit 1 }',
-      `Start-Process -FilePath "${exe}"`,
-      `Remove-Item -Path "${tmp}" -Recurse -Force -ErrorAction SilentlyContinue`,
-    ].join('\r\n'))
-
-    spawn('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass',
-      '-WindowStyle', 'Hidden',
-      '-File', script,
-    ], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
-    debugLog('[DeltaUpdate] Delta update PowerShell script launched, quitting…')
-    app.quit()
-  }
-}
-
-// Install full update (non-delta) — download was a full installer/zip
-async function installFullUpdate(): Promise<void> {
-  if (!updateState.downloadedAsarPath || !fs.existsSync(updateState.downloadedAsarPath)) {
-    throw new Error('Downloaded update file not found')
-  }
-
-  const downloaded = updateState.downloadedAsarPath
-  const tempDir = path.dirname(downloaded)
-
-  if (process.platform === 'darwin') {
-    // Extract zip, replace .app, restart
-    const extractDir = path.join(tempDir, 'extracted')
-    fs.mkdirSync(extractDir, { recursive: true })
-    execSync(`ditto -xk "${downloaded}" "${extractDir}"`, { encoding: 'utf8' })
-
-    const items = fs.readdirSync(extractDir)
-    const appBundle = items.find(i => i.endsWith('.app'))
-    if (!appBundle) throw new Error('No .app bundle found in update zip')
-
-    const newAppPath = path.join(extractDir, appBundle)
-    const currentAppPath = path.resolve(process.execPath, '..', '..', '..')
-
-    const script = path.join(tempDir, 'full-update.sh')
-    fs.writeFileSync(script, [
-      '#!/bin/bash',
-      'sleep 2',
-      `rm -rf "${currentAppPath}"`,
-      `mv "${newAppPath}" "${currentAppPath}"`,
-      `xattr -rd com.apple.quarantine "${currentAppPath}" 2>/dev/null || true`,
-      `open "${currentAppPath}"`,
-      `rm -rf "${tempDir}"`,
-    ].join('\n'), { mode: 0o755 })
-
-    spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
-    app.quit()
-  } else if (process.platform === 'win32') {
-    // Run the NSIS installer
-    spawn(downloaded, ['/S'], { detached: true, stdio: 'ignore' }).unref()
+  } else if (process.platform === 'darwin') {
+    // Open the DMG — user drags app to Applications
+    shell.openPath(installer)
     app.quit()
   } else {
     // Linux: replace the AppImage
     const currentPath = process.env.APPIMAGE
     if (currentPath) {
-      const script = path.join(tempDir, 'full-update.sh')
+      const tempDir = path.dirname(installer)
+      const script = path.join(tempDir, 'update.sh')
       fs.writeFileSync(script, [
         '#!/bin/bash',
         'sleep 2',
-        `cp -f "${downloaded}" "${currentPath}"`,
+        `cp -f "${installer}" "${currentPath}"`,
         `chmod +x "${currentPath}"`,
         `"${currentPath}" &`,
         `rm -rf "${tempDir}"`,
       ].join('\n'), { mode: 0o755 })
-
       spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
       app.quit()
+    } else {
+      // Not running as AppImage — just open the downloaded file
+      shell.openPath(installer)
     }
   }
 }
@@ -990,6 +857,15 @@ app.whenReady().then(() => {
   initDB()
   seedBibleFromJson()
 
+  // Sync corrections from seed DB to user DB (e.g., fixed hymns)
+  const seedPaths = [
+    path.join(process.resourcesPath ?? '', 'hymns.db'),
+    path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
+  ]
+  for (const sp of seedPaths) {
+    if (fs.existsSync(sp)) { syncSeedCorrections(sp); break }
+  }
+
   debugLog('[App] Ready. Platform:', process.platform, 'Version:', app.getVersion(),
     'userData:', app.getPath('userData'))
   debugLog('[App] Displays:', screen.getAllDisplays().map(d =>
@@ -1247,19 +1123,15 @@ app.whenReady().then(() => {
       await downloadUpdate()
     } catch (err: any) {
       debugLog('[Update] Download error:', err.message)
-      win?.webContents.send('update:error', err.message)
+      if (isWinAlive(win)) win.webContents.send('update:error', err.message)
     }
   })
   ipcMain.handle('update:install', async () => {
     try {
-      if (updateState.isDelta) {
-        await installDeltaUpdate()
-      } else {
-        await installFullUpdate()
-      }
+      await installUpdate()
     } catch (err: any) {
       debugLog('[Update] Install error:', err.message)
-      win?.webContents.send('update:error', err.message)
+      if (isWinAlive(win)) win.webContents.send('update:error', err.message)
     }
   })
 

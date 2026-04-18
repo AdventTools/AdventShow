@@ -1,5 +1,14 @@
 # Changelog — AdventShow
 
+## v1.1.28 (18 Aprilie 2026)
+
+### Modificări
+- Sistem de actualizare simplificat — descarcă și rulează installerul complet
+- Sincronizare automată a corecțiilor imnuri din actualizări către baza de date locală
+- Eliminare fișiere yml nedorite din release-uri
+
+---
+
 ## v1.1.27 (18 Aprilie 2026)
 
 ### Modificări
