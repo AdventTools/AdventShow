@@ -1,11 +1,17 @@
-vezi ca mi-ai dublat acum zona unde apare automat version upgrade, e si in stanga jos si bara sus, lasa doar aia din meniul din stanga jos, nu ambele
+1. ai zis ca "Banner actualizare duplicat eliminat — Rămâne doar notificarea din Setări → Despre, nu mai apare și bara sus"
+eu nu asta am cerut. am cerut sa ramana si notificarea de jos din stanga din main app. nu am reclamat ca am setari plus bara de sus, ci ca am pe main app 2 notificari paralelel vizual. 
 
-intrebare: daca am modificat versuri? la update se scriu ce am modificat eu in git? daca oamenii si-au modificat versuri la urmatorul upgrade se vor suprascrie?
-dar imnurile custom adaugate de fiecare se sterg la upgrade? dar la upgrade prin installer, adica full upgrade? fa un audit pe tema asta ca sa decidem cum sa facem. unii vor corecta versuri, altii vor adauga. dar in paralel si noi corectam.
+2. sistemul de upgrade db nu e bun. trebuie ca daca noi am modificat vreun imn, sa se duca modificarea si in db-ul destinatie pe app. daca clientul a modificat, modificarea lui ramane pana cand publicam si noi un update la acelasi imn. Inclusiv daca adaugam imnuri custom, ele sa se duca la update in baza destinatie
 
-unde e logul???? nu am log ca sa iti pot da !!!!!! nu scrie fisier de log in windows.
+3. daca ai buton de deschide log, scoate textul care spune aiurea ca logul e in acelasi folder cu apolicatia, ceea ce e fundamental gresit.
 
-si degeaba selectez eu in setari alt folder pentru temporare video, ca nu il ia, revine la default, nu pot seta alta cale.
-video pe windows tot nu merge, nu face play. deschide proiectia dart nu pleaca nici un video, nu se vede nici macar primulo frame. nici pe proiectie si nici in preview. pe amc merge.
+4. video pe windows tot nu merge. acum doar se comporta diferit: pleaca tot negru, dar la escape nu se mai inchide proiectia pe negru, ramane proiectia blocata. daca inchid aplicatia, imi da eroare. captura erorii o ai in chat. vezi log atasat in chat.
+
+5. upgrade-ul inca nu merge deloc. se descarca, se opreste aplicatia cand apas restart si upgrade, dar u mai face nimic, nici nu face upgrade si nici nu se restarteaza singura aplicatia. cand repornesc e tot vechea versiune. vezi log atasat in chat.
+
+vezi ca logul atasat poate contine si eventuri vechi, de la versiuni anterioare
 
 la final, respecta pasii de finalizare, build mac, upload, etc...
+
+
+1. atentie, in release pe git inca sunt cele 2 arhive cu source code pe care nu le vreau acolo, cel putin nu vizibile.
