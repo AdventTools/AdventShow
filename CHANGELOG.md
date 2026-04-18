@@ -1,5 +1,14 @@
 # Changelog — AdventShow
 
+## v1.1.26 (18 Aprilie 2026)
+
+### Modificări
+- Corecție eroare „Object has been destroyed" pe Windows la închiderea proiecției
+- Corecție URL-uri video cache-uite din versiuni anterioare (format incorect pe Windows)
+- Îmbunătățire fiabilitate auto-update delta pe Windows (timp de așteptare mărit)
+
+---
+
 ## v1.1.25 (18 Aprilie 2026)
 
 ### Modificări
