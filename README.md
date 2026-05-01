@@ -1,8 +1,8 @@
 # AdventShow
 
-**Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici.**
+**Aplicație gratuită pentru proiecția imnurilor și versetelor biblice în biserici.**
 
-Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
+Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din colecția „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 ![version](https://img.shields.io/badge/versiune-1.2.0-green)
@@ -12,98 +12,124 @@ Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnu
 
 ## 📥 Descărcare și instalare
 
-Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/latest)** și descarcă fișierul potrivit platformei tale:
+Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/latest)** și descarcă fișierul potrivit calculatorului tău:
 
 | Platformă | Fișier |
 |-----------|--------|
 | **Windows** | `AdventShow-Setup.exe` |
-| **macOS** | `AdventShow-Mac-....dmg` |
+| **macOS** | `AdventShow-Mac-1.2.0.dmg` |
 | **Linux** | `AdventShow-Linux.AppImage` |
 
-> 💡 La prima pornire, aplicația creează automat baza de date cu toate imnurile și Biblia Cornilescu. Nu trebuie să imporți nimic manual.
+> 💡 La prima pornire, aplicația se pregătește singură — nu trebuie să imporți nimic. Toate cele 922 de imnuri și întreaga Biblie Cornilescu sunt deja incluse.
 
-### Aplicația este semnată digital
+### 🪟 Pe Windows
 
-Începând cu **v1.2.0**, AdventShow este semnată digital pe macOS și Windows.
+1. Dublu-clic pe `AdventShow-Setup.exe`
+2. Urmează pașii din wizardul de instalare
+3. Pornește aplicația din meniul Start sau de pe Desktop
 
-#### Windows
-- Installerul este semnat cu certificat *****SIGNING_ORG***** (Public Trust, prin Azure Trusted Signing)
-- SmartScreen nu mai afișează avertisment de „publisher necunoscut" — instalarea se face direct
-- Doar dublu-clic pe `AdventShow-Setup.exe` și urmează pașii din wizard
+> ⚠️ **Dacă apare un avertisment albastru „Windows protected your PC":**
+> Aplicația este nouă, iar Windows este uneori suspicios cu programe pe care nu le-a mai văzut.
+> Nu este nimic în neregulă cu instalerul.
+>
+> **Cum treci de avertisment:**
+> 1. În fereastra albastră, apasă pe **More info** (Mai multe informații)
+> 2. Apasă pe butonul **Run anyway** (Rulează oricum)
+> 3. Continuă instalarea normal
+>
+> Acest pas e necesar doar la prima instalare. După aceea aplicația pornește direct.
 
-#### macOS
-- Aplicația este semnată cu **Developer ID Application** (***DEVELOPER***) și notarizată de Apple
-- Deschide `.dmg`, trage aplicația în **Applications** și pornește-o normal — fără pași suplimentari de „Open Anyway"
+### 🍎 Pe macOS
 
-#### Linux
-1. Fă fișierul executabil: `chmod +x AdventShow-Linux.AppImage`
-2. Rulează-l: `./AdventShow-Linux.AppImage`
+1. Dublu-clic pe fișierul `.dmg`
+2. Trage iconița **AdventShow** peste folderul **Applications**
+3. Deschide aplicația din **Applications**
+
+> Aplicația este verificată de Apple, deci ar trebui să pornească normal, fără mesaje de avertisment.
+
+### 🐧 Pe Linux
+
+1. Deschide un terminal în folderul în care ai descărcat fișierul
+2. Rulează: `chmod +x AdventShow-Linux.AppImage`
+3. Apoi: `./AdventShow-Linux.AppImage`
 
 ---
 
-## ✨ Funcționalități
+## ✨ Ce poate face AdventShow
 
-### 🎵 Imnuri Creștine
-- **922 de imnuri** din colecția „Imnuri Creștine", organizate pe categorii
-- Fiecare imn are strofe și refren clar delimitate
-- Căutare instantanee după **număr**, **titlu** sau **cuvinte din text**
-- Previzualizare text complet pe un singur rând pentru fiecare imn din listă
-- Import suplimentar din fișiere PowerPoint (`.pptx`)
-- Editor integrat — adaugă, editează, reordonează strofe și refrene
+### 🎵 Imnuri
+
+- **922 de imnuri** din „Imnuri Creștine", organizate pe categorii (Adunare, Speciale, etc.)
+- Caută rapid după **număr**, **titlu** sau **cuvânt din text** — rezultatele apar pe măsură ce scrii
+- Vezi prima linie a fiecărui imn direct în listă, fără să-l deschizi
+- Poți **adăuga imnuri noi** dintr-un fișier PowerPoint (`.pptx`)
+- **Editor integrat** — schimbi versurile, adaugi sau ștergi strofe, reordonezi cu mouse-ul
 
 ### 📖 Biblia Cornilescu
-- **66 de cărți**, **31.102 versete** — Biblia Cornilescu completă
-- Navigare pe cărți → capitole → versete, cu capitolele mereu vizibile la selectarea unui capitol
-- Căutare inteligentă: tastezi `gen 1`, `ps 23`, `1cor 13 4-7` și se încarcă direct
-- Căutare în text se declanșează la **Enter** (nu în timp real), fără limită de rezultate
-- Proiecție cu text mare și referința versetului afișată dedesubt
 
-### 🖥️ Proiecție pe ecran secundar
-- Proiecție fullscreen pe monitorul secundar
-- Fundal configurabil: **culoare solidă**, **imagine** sau **video**, cu opacitate reglabilă
-- Font reglabil (60% – 200%), uniform pe toate strofele unui imn
-- Culori personalizabile pentru numărul imnului și text
-- Navigare între strofe cu **săgeți** sau **clic**
-- Indicatori de poziție în partea de jos a ecranului
+- **66 de cărți** și **31.102 versete** — Biblia completă
+- Navighezi din carte → capitol → verset; capitolul ales rămâne mereu vizibil
+- **Căutare deșteaptă** — tastezi pe scurt și aplicația înțelege:
+  - `gen 1` → Geneza, capitolul 1
+  - `ps 23` → Psalmul 23
+  - `ioa 3 16` → Ioan 3:16
+  - `1cor 13 4-7` → 1 Corinteni 13, versetele 4–7
+- Poți căuta și un **cuvânt sau expresie** din Biblie (apasă Enter ca să declanșezi căutarea)
+- Pe ecranul de proiecție apar versetul și referința dedesubt
 
-### 🎬 Redare Video
-- Redă fișiere video direct pe ecranul de proiecție (**MP4**, **WebM**, **MOV**, **MKV**, **AVI**)
-- Conversie automată a formatelor nesuportate (MKV, AVI) în MP4 via FFmpeg
-- **Previzualizare video sincronizată** — videoul rulează simultan în panoul de previzualizare (muted) și pe proiecție
-- Controale: play, pauză, stop, bară de progres, volum
-- Selectare ieșire audio din Setări
-- **Suport YouTube** — lipește un link YouTube și se redă direct pe proiecție (necesită yt-dlp, se instalează din Setări)
+### 🖥️ Proiecție pe al doilea ecran
 
-### 🔄 Altele
-- **Layout redimensionabil** — marginile dintre coloane (sidebar, conținut, previzualizare) se trag cu mouse-ul; pozițiile se salvează automat
-- **Verificare actualizări** — la pornire, aplicația verifică dacă există o versiune nouă și afișează un buton de descărcare
-- **Schimbare fluidă** — treci de la un imn la altul fără a opri proiecția
-- **Memorie fereastră** — poziția și dimensiunea ferestrei se rețin între sesiuni
-- **Previne hibernarea** — PC-ul nu intră în sleep cât timp aplicația e pornită
-- **Import/Export** backup JSON
-- **Meniu contextual** — clic dreapta pe imn pentru editare, ștergere, schimbare categorie
+- Aplicația deschide automat o fereastră fullscreen pe **ecranul secundar** (proiector / monitor extern)
+- **Fundal personalizabil:**
+  - culoare solidă
+  - imagine
+  - video care rulează în buclă
+- Setezi **opacitatea** fundalului ca textul să fie mereu citibil
+- **Mărimea fontului** se reglează între 60% și 200%
+- Poți alege **culoarea numărului** imnului și **culoarea textului**
+- Treci între strofe cu **săgețile** sau cu **clic pe puncte**
+- În josul ecranului apar puncte care arată unde te afli (strofa 2 din 5, etc.)
+
+### 🎬 Redare video pe proiecție
+
+- Redă fișiere **MP4, WebM, MOV, MKV, AVI** direct pe proiector
+- Formatele neacceptate (MKV, AVI) sunt convertite automat în MP4
+- **Previzualizare sincronizată** — videoul rulează simultan în panoul mic (fără sunet) și pe ecranul mare (cu sunet)
+- Controale clare: play, pauză, stop, bară de progres, volum
+- **Selectare boxe / cască** pentru sunet din meniul Setări
+- **Suport pentru YouTube** — lipești un link YouTube și videoul se redă direct pe proiector (necesită yt-dlp; se descarcă cu un singur clic din Setări)
+
+### 🔄 Alte lucruri utile
+
+- **Layout reglabil** — coloanele (lista de imnuri, conținut, previzualizare) se trag cu mouse-ul; pozițiile se rețin
+- **Schimbare lină** — treci de la un imn la altul fără să oprești proiecția
+- **Verificare actualizări** — la pornire, dacă există o versiune nouă, vezi un buton de actualizare
+- **Memorie de fereastră** — poziția și mărimea ferestrei se păstrează între sesiuni
+- **Calculatorul nu intră în sleep** cât timp aplicația rulează (nu pierzi proiecția în mijlocul slujbei)
+- **Backup** — exporți toate imnurile editate într-un fișier și le poți importa pe alt calculator
+- **Meniu cu clic dreapta** pe un imn → editare, ștergere, mutare în altă categorie
 
 ---
 
-## ⌨️ Scurtături tastatură
+## ⌨️ Scurtături utile
 
-| Tastă | Acțiune |
+| Tasta | Ce face |
 |-------|---------|
-| `Enter` | Încarcă în previzualizare / Proiectează |
-| `Escape` | Oprește proiecția / Curăță previzualizare |
-| `↑` `↓` | Navighează lista imnuri / secțiuni |
-| `←` `→` | Navighează între strofe în proiecție |
-| `/` | Focus pe câmpul de căutare |
+| `Enter` | Încarcă în previzualizare / Pornește proiecția |
+| `Escape` | Oprește proiecția / Curăță previzualizarea |
+| `↑` `↓` | Navighează prin listă |
+| `←` `→` | Treci între strofe în timpul proiecției |
+| `/` | Pune cursorul în câmpul de căutare |
 
 ---
 
-## 🔎 Căutare Biblie — Exemple
+## 🔎 Căutare în Biblie — exemple
 
-| Tastezi | Rezultat |
-|---------|----------|
-| `gen 1` | Geneza capitolul 1 |
+| Tastezi | Ce primești |
+|---------|-------------|
+| `gen 1` | Geneza, capitolul 1 |
 | `ps 23` | Psalmul 23 |
-| `1cor 13 4-7` | 1 Corinteni 13:4-7 |
+| `1cor 13 4-7` | 1 Corinteni 13:4–7 |
 | `deu 6 4` | Deuteronom 6:4 |
 | `ioa 3 16` | Ioan 3:16 |
 
@@ -111,17 +137,12 @@ Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/
 
 ## 👥 Despre
 
-**AdventShow** este dezvoltat și distribuit **gratuit** de:
-
-- **Ovidius Zanfir** — autor original, interfață
-- **Samy Balasa** — redare video, YouTube, auto-update, funcționalități noi, corecții
-
-Organizație: [**AdventTools**](https://github.com/AdventTools)
+**AdventShow** este dezvoltat și distribuit **gratuit** de comunitatea **[AdventTools](https://github.com/AdventTools)**.
 
 Biblia Cornilescu — text în domeniu public.
 
 ---
 
-## 📋 Changelog
+## 📋 Istoric versiuni
 
-Vezi [CHANGELOG.md](CHANGELOG.md) pentru istoricul modificărilor.
+Vezi [CHANGELOG.md](CHANGELOG.md) pentru lista modificărilor.
