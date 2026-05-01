@@ -36,7 +36,8 @@
   "afterPack": "./scripts/afterPack.cjs",
   "mac": {
     "icon": "build/icons/mac/icon.icns",
-    "identity": "***SIGNING_IDENTITY***",
+    // SHA1 al certificatului Developer ID din keychain. Înlocuibil — vezi scripts/signing.env
+    "identity": "CAFB6F4197186A7AF5EBE17111147ADF58CFD0A7",
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
     "entitlements": "build/entitlements.mac.plist",

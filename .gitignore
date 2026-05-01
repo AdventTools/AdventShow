@@ -24,6 +24,10 @@ build/icons/icons/
 .idea
 .notes/
 .DS_Store
+
+# Signing secrets — local only
+scripts/signing.env
+*.env.local
 *.suo
 *.ntvs*
 *.njsproj

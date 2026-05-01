@@ -137,7 +137,12 @@ Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/
 
 ## 👥 Despre
 
-**AdventShow** este dezvoltat și distribuit **gratuit** de comunitatea **[AdventTools](https://github.com/AdventTools)**.
+**AdventShow** este dezvoltat și distribuit **gratuit** de:
+
+- **Ovidius Zanfir** — autor original, interfață, structura aplicației
+- **Samy Balasa** — redare video, integrare YouTube, actualizare automată, funcționalități noi, corecții
+
+Organizație: **[AdventTools](https://github.com/AdventTools)**
 
 Biblia Cornilescu — text în domeniu public.
 
