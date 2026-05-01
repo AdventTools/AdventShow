@@ -36,7 +36,12 @@
   "afterPack": "./scripts/afterPack.cjs",
   "mac": {
     "icon": "build/icons/mac/icon.icns",
-    "identity": null,
+    "identity": "***SIGNING_IDENTITY***",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "notarize": false,
     "target": [
       "dmg"
     ],
@@ -52,7 +57,9 @@
         ]
       }
     ],
-    "artifactName": "AdventShow-Setup.${ext}"
+    "artifactName": "AdventShow-Setup.${ext}",
+    "sign": "./scripts/sign-windows.cjs",
+    "signingHashAlgorithms": ["sha256"]
   },
   "nsis": {
     "oneClick": false,
