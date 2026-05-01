@@ -22,6 +22,7 @@ build/icons/icons/
 .vscode/*
 !.vscode/extensions.json
 .idea
+.notes/
 .DS_Store
 *.suo
 *.ntvs*

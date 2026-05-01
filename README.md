@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.1.32-green)
+![version](https://img.shields.io/badge/versiune-1.2.0-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -22,21 +22,18 @@ Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/
 
 > 💡 La prima pornire, aplicația creează automat baza de date cu toate imnurile și Biblia Cornilescu. Nu trebuie să imporți nimic manual.
 
-### ⚠️ Aplicația nu este semnată digital
+### Aplicația este semnată digital
 
-AdventShow este distribuit gratuit și nu deține un certificat de semnare. Sistemele de operare pot afișa un avertisment la prima rulare.
+Începând cu **v1.2.0**, AdventShow este semnată digital pe macOS și Windows.
 
 #### Windows
-1. Installerul importă automat certificatul AdventShow — în majoritatea cazurilor, SmartScreen nu va mai apărea
-2. Dacă totuși apare mesajul **„Windows protected your PC"**, apasă **„More info"** apoi **„Run anyway"**
-3. Acest pas este necesar doar la prima instalare
+- Installerul este semnat cu certificat *****SIGNING_ORG***** (Public Trust, prin Azure Trusted Signing)
+- SmartScreen nu mai afișează avertisment de „publisher necunoscut" — instalarea se face direct
+- Doar dublu-clic pe `AdventShow-Setup.exe` și urmează pașii din wizard
 
 #### macOS
-1. Deschide fișierul `.dmg` și trage aplicația în **Applications**
-2. La prima deschidere, macOS va afișa un mesaj că aplicația nu poate fi deschisă
-3. Mergi la **System Settings → Privacy & Security**
-4. În secțiunea de jos vei vedea mesajul despre AdventShow — apasă **„Open Anyway"**
-5. Alternativ: clic dreapta pe aplicație → **Open** → **Open**
+- Aplicația este semnată cu **Developer ID Application** (***DEVELOPER***) și notarizată de Apple
+- Deschide `.dmg`, trage aplicația în **Applications** și pornește-o normal — fără pași suplimentari de „Open Anyway"
 
 #### Linux
 1. Fă fișierul executabil: `chmod +x AdventShow-Linux.AppImage`

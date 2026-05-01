@@ -1,5 +1,15 @@
 # Changelog — AdventShow
 
+## v1.2.0 (1 Mai 2026)
+
+### Modificări
+- Aplicația este acum **semnată digital** pe macOS și Windows
+- macOS: semnată cu Developer ID Application + hardened runtime, notarizată de Apple, ticket stapled — Gatekeeper o acceptă fără avertisment
+- Windows: semnată cu certificat *****SIGNING_ORG***** prin Azure Trusted Signing (Public Trust) — SmartScreen nu mai apare
+- Pipeline de release reorganizat: build local pe macOS pentru DMG, build pe mașina Windows via SSH pentru installer, urcare în Git doar după ce ambele artefacte sunt semnate
+
+---
+
 ## v1.1.32 (18 Aprilie 2026)
 
 ### Modificări

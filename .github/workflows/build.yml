@@ -1,4 +1,8 @@
-name: Build & Release (Windows + Linux)
+name: Build & Release (Linux)
+
+# Windows și macOS sunt build-uite local și semnate (Developer ID, Azure Trusted Signing)
+# înainte de tag — vezi docs/PROCEDURE.md. CI-ul GitHub Actions construiește
+# doar AppImage pentru Linux la push de tag.
 
 on:
   push:
@@ -10,15 +14,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            cmd: npm run build && npx electron-builder --win --publish never
-          - os: ubuntu-latest
-            cmd: npm run build && npx electron-builder --linux --publish never
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -33,19 +29,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
         env:
-          # ffmpeg-static uneori 504 la prima încercare pe GitHub CDN — retry automat
           npm_config_fetch_retry_mintimeout: 20000
           npm_config_fetch_retries: 3
           npm_config_fetch_retry_maxtimeout: 120000
 
-      - name: Build
-        run: ${{ matrix.cmd }}
+      - name: Build Linux
+        run: npm run build && npx electron-builder --linux --publish never
 
-      - name: Upload release assets
+      - name: Upload AppImage
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/**/*-Setup.exe
             release/**/*.AppImage
           draft: false
           prerelease: false
