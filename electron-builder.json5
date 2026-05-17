@@ -36,9 +36,12 @@
   "afterPack": "./scripts/afterPack.cjs",
   "mac": {
     "icon": "build/icons/mac/icon.icns",
-    // Default: NU semnăm (dezvoltare). Identitatea se trimite la release via
-    // `--config.mac.identity="$MACOS_SIGNING_IDENTITY"` din scripts/release.sh.
-    "identity": null,
+    // Default: auto-discovery din keychain (semnează dacă găsește Developer ID).
+    // Dev unsigned: pornește cu `CSC_IDENTITY_AUTO_DISCOVERY=false` (vezi build-mac.sh).
+    // Release signed: pornește cu `CSC_NAME="$MACOS_SIGNING_IDENTITY"` (vezi build-mac.sh).
+    // NU setăm `identity: null` aici — declanșează un cod path în electron-builder care
+    // semnează main exe dar SARE Electron Framework, ceea ce face notarizarea Apple să eșueze
+    // cu "code object is not signed at all" pe framework.
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
     "entitlements": "build/entitlements.mac.plist",
