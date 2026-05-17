@@ -583,81 +583,113 @@ function getYouTubeTitle(videoUrl: string): Promise<string> {
 function startYouTubeDownload(entry: YouTubeEntry) {
   ensureYouTubeDir()
   const ytdlpBin = getYtDlpPath()
-  const outputTemplate = path.join(getYouTubeDir(), `${entry.id}.%(ext)s`)
-  const args = [
-    '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-    '--merge-output-format', 'mp4',
-    '--ffmpeg-location', getFFmpegPath(),
-    '-o', outputTemplate,
-    '--newline',
-    '--no-playlist',
-    entry.url,
-  ]
-  debugLog('[yt-dlp-download] Starting:', ytdlpBin, args.join(' '))
+  const ffmpegBin = getFFmpegPath()
+  const youtubeDir = getYouTubeDir()
+  const tmpDir = path.join(youtubeDir, `_tmp_${entry.id}`)
+  const finalFile = `${entry.id}.mp4`
+  const finalPath = path.join(youtubeDir, finalFile)
 
-  const proc = spawn(ytdlpBin, args)
+  // Stage tracking: progress is scaled across 3 phases
+  //   video download:  0–45%
+  //   audio download: 45–90%
+  //   ffmpeg mux:     90–100% (ffmpeg uses time= not %, so we send a steady 95%)
+  let stage: 'video' | 'audio' | 'mux' = 'video'
 
-  const onData = (data: Buffer) => {
-    const line = data.toString().trim()
-    debugLog('[yt-dlp-download] output:', line)
-    // Parse progress lines: [download]  45.2% of ~123.45MiB ...
-    if (line.includes('%')) {
-      const match = line.match(/([\d.]+)%/)
-      if (match) {
-        win?.webContents.send('youtube:progress', entry.id, parseFloat(match[1]), line)
-      }
-    }
+  const updateStatus = (status: YouTubeEntry['status'], error?: string, fileName?: string) => {
+    const pl = readYouTubePlaylist()
+    const idx = pl.findIndex(e => e.id === entry.id)
+    if (idx === -1) return
+    pl[idx].status = status
+    pl[idx].error = error
+    if (fileName !== undefined) pl[idx].fileName = fileName
+    writeYouTubePlaylist(pl)
+    win?.webContents.send('youtube:status', entry.id, status, error ?? '')
   }
 
-  proc.stdout.on('data', onData)
-  proc.stderr.on('data', onData)
-
-  proc.on('close', (code) => {
-    debugLog('[yt-dlp-download] Process exited with code:', code)
-    const playlist = readYouTubePlaylist()
-    const idx = playlist.findIndex(e => e.id === entry.id)
-    if (idx === -1) return
-
-    if (code === 0) {
-      // Find the downloaded file — prefer merged .mp4 over intermediate fragments
-      const files = fs.readdirSync(getYouTubeDir()).filter(f => f.startsWith(entry.id + '.'))
-      debugLog('[yt-dlp-download] Downloaded files:', files)
-      // Priority: exact id.mp4 (merged) > .mp4 > .webm > .mkv > anything not audio-only
-      const audioOnly = ['.m4a', '.opus', '.ogg', '.aac', '.mp3']
-      const downloadedFile =
-        files.find(f => f === entry.id + '.mp4') ||
-        files.find(f => f.endsWith('.mp4') && !f.includes('.f')) ||
-        files.find(f => f.endsWith('.mp4')) ||
-        files.find(f => f.endsWith('.webm') || f.endsWith('.mkv')) ||
-        files.find(f => !audioOnly.some(ext => f.endsWith(ext))) ||
-        files[0]
-      if (downloadedFile) {
-        playlist[idx].fileName = downloadedFile
-        playlist[idx].status = 'ready'
-        playlist[idx].error = undefined
-      } else {
-        playlist[idx].status = 'error'
-        playlist[idx].error = 'Fișierul descărcat nu a fost găsit'
+  const runStep = (bin: string, args: string[]): Promise<void> => new Promise((resolve, reject) => {
+    debugLog(`[yt-dlp-download:${stage}]`, bin, args.join(' '))
+    const proc = spawn(bin, args)
+    const onData = (data: Buffer) => {
+      const line = data.toString().trim()
+      debugLog(`[yt-dlp-download:${stage}]`, line)
+      const m = line.match(/([\d.]+)%/)
+      if (m) {
+        const pct = parseFloat(m[1])
+        let scaled = pct
+        if (stage === 'video') scaled = pct * 0.45
+        else if (stage === 'audio') scaled = 45 + pct * 0.45
+        win?.webContents.send('youtube:progress', entry.id, Math.min(99, scaled), line)
       }
-    } else {
-      playlist[idx].status = 'error'
-      playlist[idx].error = `yt-dlp a returnat codul ${code}`
     }
-    writeYouTubePlaylist(playlist)
-    win?.webContents.send('youtube:status', entry.id, playlist[idx].status, playlist[idx].error ?? '')
+    proc.stdout.on('data', onData)
+    proc.stderr.on('data', onData)
+    proc.on('close', (code) => code === 0 ? resolve() : reject(new Error(`${stage} exited with code ${code}`)))
+    proc.on('error', reject)
   })
 
-  proc.on('error', (err) => {
-    debugLog('[yt-dlp-download] spawn error:', err.message)
-    const playlist = readYouTubePlaylist()
-    const idx = playlist.findIndex(e => e.id === entry.id)
-    if (idx !== -1) {
-      playlist[idx].status = 'error'
-      playlist[idx].error = err.message
-      writeYouTubePlaylist(playlist)
-      win?.webContents.send('youtube:status', entry.id, 'error', err.message)
+  ;(async () => {
+    try {
+      // Clean any stale tmp + final from previous attempts so we never serve a half-baked file
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* fresh */ }
+      try { fs.unlinkSync(finalPath) } catch { /* fresh */ }
+      fs.mkdirSync(tmpDir, { recursive: true })
+
+      // ── Stage 1: video stream only (prefer H.264 mp4 for Chromium compatibility)
+      stage = 'video'
+      await runStep(ytdlpBin, [
+        '-f', 'bv*[vcodec^=avc1]/bv*[ext=mp4]/bv*',
+        '-o', path.join(tmpDir, 'video.%(ext)s'),
+        '--no-playlist', '--newline',
+        entry.url,
+      ])
+
+      // ── Stage 2: audio stream only (prefer AAC m4a)
+      stage = 'audio'
+      await runStep(ytdlpBin, [
+        '-f', 'ba[ext=m4a]/ba',
+        '-o', path.join(tmpDir, 'audio.%(ext)s'),
+        '--no-playlist', '--newline',
+        entry.url,
+      ])
+
+      const tmpFiles = fs.readdirSync(tmpDir)
+      const videoTmp = tmpFiles.find(f => f.startsWith('video.'))
+      const audioTmp = tmpFiles.find(f => f.startsWith('audio.'))
+      if (!videoTmp || !audioTmp) {
+        throw new Error(`Streams lipsesc după descărcare: ${JSON.stringify(tmpFiles)}`)
+      }
+
+      // ── Stage 3: mux into mp4 with ffmpeg.
+      //    -c:v copy: nu re-encodăm video (păstrăm calitatea, e rapid)
+      //    -c:a aac: RE-ENCODĂM audio în AAC — garantează compatibilitate MP4/Chromium chiar
+      //              dacă yt-dlp a returnat opus (din webm). Aici a fost regresia.
+      stage = 'mux'
+      win?.webContents.send('youtube:progress', entry.id, 95, '[mux] merging streams')
+      await runStep(ffmpegBin, [
+        '-i', path.join(tmpDir, videoTmp),
+        '-i', path.join(tmpDir, audioTmp),
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-c:v', 'copy',
+        '-c:a', 'aac', '-b:a', '192k',
+        '-movflags', '+faststart',
+        '-y', finalPath,
+      ])
+
+      const stat = fs.statSync(finalPath)
+      if (stat.size < 10000) throw new Error(`Fișierul final pare incomplet (${stat.size} bytes)`)
+
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* best effort */ }
+
+      updateStatus('ready', undefined, finalFile)
+      win?.webContents.send('youtube:progress', entry.id, 100, 'done')
+    } catch (err: any) {
+      debugLog('[yt-dlp-download] ERROR:', err.message)
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      try { fs.unlinkSync(finalPath) } catch { /* best effort */ }
+      updateStatus('error', err.message || String(err))
     }
-  })
+  })()
 }
 
 // ── Projection state ──────────────────────────────────────────────────────────
