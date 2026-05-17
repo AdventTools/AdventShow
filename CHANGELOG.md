@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.2.2 (17 Mai 2026)
+
+### Modificări
+- fix descărcare YouTube — calea ffmpeg nu se rezolva corect în app packaged (spawn ffmpeg ENOENT)
+
+---
+
+
 ## v1.2.1 (17 Mai 2026)
 
 ### Modificări
