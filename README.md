@@ -5,7 +5,7 @@
 Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnuri din colecția „Imnuri Creștine".
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.2.1-green)
+![version](https://img.shields.io/badge/versiune-1.2.2-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 ---
@@ -16,9 +16,9 @@ Apasă pe linkul potrivit calculatorului tău — descărcarea pornește direct:
 
 | Platformă | Descarcă |
 |-----------|----------|
-| **Windows** | [AdventShow-Setup.exe](https://github.com/AdventTools/AdventShow/releases/download/v1.2.1/AdventShow-Setup.exe) |
-| **macOS** | [AdventShow-Mac-1.2.1.dmg](https://github.com/AdventTools/AdventShow/releases/download/v1.2.1/AdventShow-Mac-1.2.1.dmg) |
-| **Linux** | [AdventShow-Linux.AppImage](https://github.com/AdventTools/AdventShow/releases/download/v1.2.1/AdventShow-Linux.AppImage) |
+| **Windows** | [AdventShow-Setup.exe](https://github.com/AdventTools/AdventShow/releases/download/v1.2.2/AdventShow-Setup.exe) |
+| **macOS** | [AdventShow-Mac-1.2.2.dmg](https://github.com/AdventTools/AdventShow/releases/download/v1.2.2/AdventShow-Mac-1.2.2.dmg) |
+| **Linux** | [AdventShow-Linux.AppImage](https://github.com/AdventTools/AdventShow/releases/download/v1.2.2/AdventShow-Linux.AppImage) |
 
 > 💡 La prima pornire, aplicația se pregătește singură — nu trebuie să imporți nimic. Toate cele 922 de imnuri și întreaga Biblie Cornilescu sunt deja incluse.
 
