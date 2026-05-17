@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.2.1 (17 Mai 2026)
+
+### Modificări
+- fix descărcare YouTube — sunetul lipsea pentru că merge-ul yt-dlp eșua silent; acum descărcăm video și audio separat și le mux-uim cu ffmpeg re-encoding audio în AAC pentru compatibilitate Chromium
+
+---
+
+
 ## v1.2.0 (1 Mai 2026)
 
 ### Modificări

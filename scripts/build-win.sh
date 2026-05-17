@@ -106,4 +106,9 @@ SIZE_BYTES=$(stat -f%z "$EXE_LOCAL")
 
 echo ""
 echo "✅ EXE: $EXE_LOCAL ($(du -h "$EXE_LOCAL" | cut -f1))"
-[ "$BUILD_MODE" = "dev" ] && echo "   ⚠️  EXE-ul e NESEMNAT — Windows SmartScreen va afișa avertisment."
+if [ "$BUILD_MODE" = "dev" ]; then
+    echo "   ⚠️  EXE-ul e NESEMNAT — Windows SmartScreen va afișa avertisment."
+fi
+# Explicit exit 0: un `[ test ] && echo` în mod release returnează 1 (test fail, fără else)
+# și omoară release.sh care e sub `set -e`. Bug fix după release v1.2.1.
+exit 0

@@ -46,9 +46,15 @@ if [ "$BUILD_MODE" = "release" ]; then
         || { echo "❌ Developer ID identity lipsă din keychain: ${MACOS_SIGNING_IDENTITY}"; exit 1; }
 
     echo "🔐 Semnez cu: ${MACOS_SIGNING_IDENTITY}"
+    # Clean intermediate state — stale builds cu identity diferit pot duce la framework-uri
+    # parțial semnate care fac notarizarea Apple să eșueze (vezi electron-builder.json5).
+    rm -rf dist dist-electron "release/$(node -p "require('./package.json').version")/mac-arm64" 2>/dev/null || true
+    # CSC_NAME e calea standard prin care electron-builder primește identitatea pt. signing
+    # complet (main exe + helpers + frameworks). Comparativ cu --config.mac.identity=...
+    # CLI override, CSC_NAME prinde toate sub-componentele.
+    export CSC_NAME="${MACOS_SIGNING_IDENTITY}"
     npm run build
-    npx electron-builder --mac \
-        --config.mac.identity="${MACOS_SIGNING_IDENTITY}"
+    npx electron-builder --mac
 else
     echo "⚠️  Mode dev — DMG NESEMNAT (doar pentru test local)"
     # CSC_IDENTITY_AUTO_DISCOVERY=false → electron-builder nu caută cert automat
