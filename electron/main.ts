@@ -359,18 +359,35 @@ async function installUpdate(): Promise<void> {
 // ── Video conversion (FFmpeg) ─────────────────────────────────────────────────
 
 function getFFmpegPath(): string {
+  const binaryName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
+
+  // 1) Try ffmpeg-static module. NOT trusted blindly: in packaged Electron its index.js
+  //    asserts the binary exists at app.asar/.../ffmpeg, but our binary lives in
+  //    app.asar.unpacked/.../ffmpeg (per electron-builder.json5 asarUnpack). The assertion
+  //    throws and require returns nothing, falling into our catch.
   try {
-    // ffmpeg-static provides the binary path
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ffmpegStatic = require('ffmpeg-static') as string
-    // In packaged app, fix the path
-    if (app.isPackaged && ffmpegStatic.includes('app.asar')) {
-      return ffmpegStatic.replace('app.asar', 'app.asar.unpacked')
+    const p = require('ffmpeg-static') as string
+    if (p && fs.existsSync(p)) return p
+    // require returned but path doesn't exist on disk — try asar.unpacked rewrite
+    if (p) {
+      const unpacked = p.replace(/app\.asar(?!\.)/g, 'app.asar.unpacked')
+      if (fs.existsSync(unpacked)) return unpacked
     }
-    return ffmpegStatic
-  } catch {
-    return 'ffmpeg' // fallback to system ffmpeg
+  } catch { /* fall through */ }
+
+  // 2) Packaged app: compute the canonical unpacked path from process.resourcesPath.
+  //    This works even when ffmpeg-static's existence check threw at module-load time.
+  if (app.isPackaged) {
+    const guess = path.join(
+      process.resourcesPath,
+      'app.asar.unpacked', 'node_modules', 'ffmpeg-static', binaryName,
+    )
+    if (fs.existsSync(guess)) return guess
   }
+
+  // 3) Last resort — system ffmpeg from PATH. Usually missing on Windows.
+  return binaryName
 }
 
 const NATIVE_VIDEO_EXTS = new Set(['.mp4', '.webm', '.ogg', '.mov'])
