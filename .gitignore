@@ -25,10 +25,8 @@ build/icons/icons/
 .notes/
 .DS_Store
 
-# Local-only — build tooling, signing secrets, internal notes
+# Local-only — signing secrets, internal notes (release scripts trăiesc în git)
 scripts/signing.env
-scripts/signing.env.example
-scripts/release.sh
 NOTES.md
 docs/
 *.env.local

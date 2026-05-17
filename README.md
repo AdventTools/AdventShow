@@ -12,13 +12,13 @@ Include Biblia Cornilescu completă (66 cărți, 31.102 versete) și 922 de imnu
 
 ## 📥 Descărcare și instalare
 
-Mergi la pagina **[Releases](https://github.com/AdventTools/AdventShow/releases/latest)** și descarcă fișierul potrivit calculatorului tău:
+Apasă pe linkul potrivit calculatorului tău — descărcarea pornește direct:
 
-| Platformă | Fișier |
-|-----------|--------|
-| **Windows** | `AdventShow-Setup.exe` |
-| **macOS** | `AdventShow-Mac-1.2.0.dmg` |
-| **Linux** | `AdventShow-Linux.AppImage` |
+| Platformă | Descarcă |
+|-----------|----------|
+| **Windows** | [AdventShow-Setup.exe](https://github.com/AdventTools/AdventShow/releases/download/v1.2.0/AdventShow-Setup.exe) |
+| **macOS** | [AdventShow-Mac-1.2.0.dmg](https://github.com/AdventTools/AdventShow/releases/download/v1.2.0/AdventShow-Mac-1.2.0.dmg) |
+| **Linux** | [AdventShow-Linux.AppImage](https://github.com/AdventTools/AdventShow/releases/download/v1.2.0/AdventShow-Linux.AppImage) |
 
 > 💡 La prima pornire, aplicația se pregătește singură — nu trebuie să imporți nimic. Toate cele 922 de imnuri și întreaga Biblie Cornilescu sunt deja incluse.
 

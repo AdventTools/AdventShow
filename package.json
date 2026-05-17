@@ -14,7 +14,11 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
-    "release": "npm run build && electron-builder -mwl",
+    "mac:dev": "./scripts/build-mac.sh dev",
+    "mac:signed": "./scripts/build-mac.sh release",
+    "win:dev": "./scripts/build-win.sh dev",
+    "win:signed": "./scripts/build-win.sh release",
+    "release:signed": "./scripts/release.sh",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

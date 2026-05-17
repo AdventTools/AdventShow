@@ -19,6 +19,11 @@ exports.default = async function (configuration) {
         throw new Error("sign-windows: configuration.path missing");
     }
 
+    if (process.env.SKIP_WIN_SIGN === "1") {
+        console.log(`[sign-windows] SKIP_WIN_SIGN=1 — skipping: ${file}`);
+        return;
+    }
+
     const cmd = `${SIGNTOOL} sign /v /fd SHA256 /tr ${TIMESTAMP} /td SHA256 /dlib ${DLIB} /dmdf ${META} "${file}"`;
     console.log(`[sign-windows] Signing: ${file}`);
 
