@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.2.3 (30 Mai 2026)
+
+### Modificări
+- player video universal (sunet + imagine pe orice format comun), pagina video reorganizată, descărcări YouTube stabile, fix actualizare Windows (repornire automată, fără fereastră de comandă), pornire mai rapidă
+
+---
+
+
 ## v1.2.2 (17 Mai 2026)
 
 ### Modificări
