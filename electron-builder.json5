@@ -34,6 +34,15 @@
     }
   ],
   "afterPack": "./scripts/afterPack.cjs",
+  // electron-updater reads release metadata (latest.yml / latest-mac.yml) from
+  // GitHub Releases. Declaring `publish` makes electron-builder GENERATE those yml
+  // files next to the artifacts. It does NOT auto-publish here — our build scripts
+  // run electron-builder without `--publish`, and release.sh uploads everything via gh.
+  "publish": {
+    "provider": "github",
+    "owner": "AdventTools",
+    "repo": "AdventShow"
+  },
   "mac": {
     "icon": "build/icons/mac/icon.icns",
     // Default: auto-discovery din keychain (semnează dacă găsește Developer ID).
@@ -47,8 +56,12 @@
     "entitlements": "build/entitlements.mac.plist",
     "entitlementsInherit": "build/entitlements.mac.plist",
     "notarize": false,
+    // dmg = first-time install (drag to Applications). zip = what Squirrel.Mac
+    // (electron-updater) downloads to self-apply updates in place. Both are signed
+    // + notarized; latest-mac.yml references the zip.
     "target": [
-      "dmg"
+      "dmg",
+      "zip"
     ],
     "artifactName": "AdventShow-Mac-${version}.${ext}"
   },
@@ -67,9 +80,14 @@
     "signingHashAlgorithms": ["sha256"]
   },
   "nsis": {
-    "oneClick": false,
-    "perMachine": false,
-    "allowToChangeInstallationDirectory": true,
+    // One-click installer: a single progress screen, no wizard. This is what makes
+    // auto-update seamless — electron-updater runs it silently, it closes the running
+    // app, installs, and relaunches automatically (no cmd window, no manual steps).
+    "oneClick": true,
+    // Per-machine (Program Files) install for all users. Requires one UAC prompt per
+    // update — the only click in the flow. electron-updater handles the elevation.
+    "perMachine": true,
+    "allowElevation": true,
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,

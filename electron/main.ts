@@ -1,7 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
-import https from 'node:https'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
@@ -131,224 +130,57 @@ function writeSettings(settings: AppSettings) {
   fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
 }
 
-// ── Delta Update System ───────────────────────────────────────────────────────
-// Downloads only app.asar (~2MB) instead of the full Electron bundle (~150MB).
-// Falls back to full update only when the Electron version changes.
-// Works on all platforms without code signing issues because the Electron
-// framework stays untouched — only the app code is replaced.
+// ── Auto-update (electron-updater) ────────────────────────────────────────────
+// Native, battle-tested updater. Reads latest.yml / latest-mac.yml from the
+// GitHub Release (configured via `publish` in electron-builder.json5), downloads
+// the signed artifact, verifies it, and installs:
+//   • Windows: runs the one-click NSIS installer silently — it closes the running
+//     app, installs, and relaunches automatically (no cmd window, no manual steps).
+//   • macOS: Squirrel.Mac swaps the .app in place from the signed+notarized zip
+//     and relaunches.
+// No custom scripts, no half-finished sequences for the user to clean up.
+import electronUpdater from 'electron-updater'
+const { autoUpdater } = electronUpdater
 
-const GITHUB_OWNER = 'AdventTools'
-const GITHUB_REPO = 'AdventShow'
+let updaterWired = false
 
-interface UpdateState {
-  latestVersion: string | null
-  downloadedInstallerPath: string | null
-}
+function wireAutoUpdater() {
+  if (updaterWired) return
+  updaterWired = true
 
-const updateState: UpdateState = {
-  latestVersion: null,
-  downloadedInstallerPath: null,
-}
-
-// Fetch JSON from GitHub API or raw URL
-function fetchJson<T>(url: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const request = https.get(url, {
-      headers: { 'User-Agent': 'AdventShow-Updater', Accept: 'application/json' },
-    }, (res) => {
-      // Follow redirects
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        fetchJson<T>(res.headers.location).then(resolve, reject)
-        return
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode}`))
-        return
-      }
-      let data = ''
-      res.on('data', (chunk) => { data += chunk })
-      res.on('end', () => {
-        try { resolve(JSON.parse(data) as T) }
-        catch (e) { reject(e) }
-      })
-    })
-    request.on('error', reject)
-    request.setTimeout(15000, () => { request.destroy(); reject(new Error('Timeout')) })
-  })
-}
-
-// Download a file from URL with progress reporting
-function downloadFile(url: string, dest: string, onProgress?: (percent: number, transferred: number, total: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const request = https.get(url, {
-      headers: { 'User-Agent': 'AdventShow-Updater', Accept: 'application/octet-stream' },
-    }, (res) => {
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        downloadFile(res.headers.location, dest, onProgress).then(resolve, reject)
-        return
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode}`))
-        return
-      }
-      const total = parseInt(res.headers['content-length'] || '0', 10)
-      let transferred = 0
-      const file = fs.createWriteStream(dest)
-      res.on('data', (chunk: Buffer) => {
-        transferred += chunk.length
-        if (onProgress && total > 0) {
-          onProgress(Math.round((transferred / total) * 100), transferred, total)
-        }
-      })
-      res.pipe(file)
-      file.on('finish', () => { file.close(); resolve() })
-      file.on('error', (err) => { try { fs.unlinkSync(dest) } catch { /* ignore — fișierul poate că nici nu a fost creat */ }; reject(err) })
-    })
-    request.on('error', reject)
-    request.setTimeout(120000, () => { request.destroy(); reject(new Error('Download timeout')) })
-  })
-}
-
-// Check for updates by fetching the latest GitHub release
-async function checkForUpdate(): Promise<{ available: boolean; version?: string }> {
-  try {
-    const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
-    const release = await fetchJson<{ tag_name: string }>(releaseUrl)
-    const latestVersion = release.tag_name.replace(/^v/, '')
-    const current = app.getVersion()
-
-    if (latestVersion === current) {
-      debugLog(`[Update] Already up to date: ${current}`)
-      return { available: false }
-    }
-
-    // Simple semver comparison: only update if latest > current
-    const cmp = (a: string, b: string) => {
-      const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
-      for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0) }
-      return 0
-    }
-    if (cmp(latestVersion, current) <= 0) {
-      debugLog(`[Update] Current ${current} >= latest ${latestVersion}, no update`)
-      return { available: false }
-    }
-
-    updateState.latestVersion = latestVersion
-    debugLog(`[Update] Update available: ${current} → ${latestVersion}`)
-    return { available: true, version: latestVersion }
-  } catch (err: any) {
-    debugLog('[Update] Check failed:', err.message)
-    return { available: false }
+  // We drive download/install from the UI, so don't auto-download on check.
+  autoUpdater.autoDownload = false
+  // If an update was downloaded but the user didn't click install, apply on quit.
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.logger = {
+    info: (m: unknown) => debugLog('[autoUpdater]', String(m)),
+    warn: (m: unknown) => debugLog('[autoUpdater][warn]', String(m)),
+    error: (m: unknown) => debugLog('[autoUpdater][error]', String(m)),
+    debug: (m: unknown) => debugLog('[autoUpdater][debug]', String(m)),
   }
-}
 
-function getInstallerAssetName(): string {
-  switch (process.platform) {
-    case 'darwin': return `AdventShow-Mac-${updateState.latestVersion}.dmg`
-    case 'win32': return 'AdventShow-Setup.exe'
-    case 'linux': return 'AdventShow-Linux.AppImage'
-    default: return 'AdventShow-Linux.AppImage'
-  }
-}
-
-// Download the full installer from the latest release
-async function downloadUpdate(): Promise<void> {
-  if (!updateState.latestVersion) throw new Error('No update available')
-
-  const releaseUrl = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
-  const release = await fetchJson<{ assets: { name: string; browser_download_url: string }[] }>(releaseUrl)
-
-  const assetName = getInstallerAssetName()
-  const asset = release.assets.find(a => a.name === assetName)
-  if (!asset) throw new Error(`Asset ${assetName} not found in release`)
-
-  const tempDir = path.join(app.getPath('temp'), `adventshow-update-${Date.now()}`)
-  fs.mkdirSync(tempDir, { recursive: true })
-  const destFile = path.join(tempDir, assetName)
-
-  debugLog(`[Update] Downloading ${assetName}...`)
-
-  await downloadFile(asset.browser_download_url, destFile, (percent, transferred, total) => {
+  autoUpdater.on('download-progress', (p) => {
     if (isWinAlive(win)) win.webContents.send('update:download-progress', {
-      percent,
-      bytesPerSecond: 0,
-      transferred,
-      total,
+      percent: Math.round(p.percent),
+      bytesPerSecond: p.bytesPerSecond,
+      transferred: p.transferred,
+      total: p.total,
     })
   })
-
-  updateState.downloadedInstallerPath = destFile
-  debugLog(`[Update] Downloaded to ${destFile}`)
-  if (isWinAlive(win)) win.webContents.send('update:downloaded', { version: updateState.latestVersion })
+  autoUpdater.on('update-downloaded', (info) => {
+    debugLog('[autoUpdater] update-downloaded', info.version)
+    if (isWinAlive(win)) win.webContents.send('update:downloaded', { version: info.version })
+  })
+  autoUpdater.on('error', (err) => {
+    debugLog('[autoUpdater] error', err == null ? 'unknown' : (err.stack || err.message || String(err)))
+    if (isWinAlive(win)) win.webContents.send('update:error',
+      err == null ? 'Eroare necunoscută la actualizare' : (err.message || String(err)))
+  })
 }
 
-// Install update: run the installer and quit
-async function installUpdate(): Promise<void> {
-  if (!updateState.downloadedInstallerPath || !fs.existsSync(updateState.downloadedInstallerPath)) {
-    throw new Error('Fișierul descărcat nu a fost găsit. Încearcă din nou.')
-  }
-
-  const installer = updateState.downloadedInstallerPath
-  debugLog(`[Update] Installing: ${installer}`)
-
-  if (process.platform === 'win32') {
-    // Launch the NSIS installer directly — no cmd.exe, no .bat, no flashing console.
-    // The previous script ran a silent install but never relaunched the app, which is
-    // why AdventShow stayed closed after updating.
-    //   /S          → silent install (no wizard)
-    //   --force-run → relaunch AdventShow automatically once the install finishes
-    // electron-builder's NSIS installer also closes the running instance itself, and
-    // we quit right after so the (now-unlocked) files can be replaced.
-    debugLog('[Update] Launching installer (silent + auto-relaunch):', installer)
-    spawn(installer, ['/S', '--force-run'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    }).unref()
-    setTimeout(() => app.quit(), 500)
-  } else if (process.platform === 'darwin') {
-    // Remove quarantine attribute if present (macOS adds it to downloaded files,
-    // which can cause Gatekeeper to block opening the DMG)
-    try {
-      execFile('xattr', ['-d', 'com.apple.quarantine', installer], { timeout: 5000 }, () => { })
-    } catch { /* ignore — file may not have the attribute */ }
-
-    // Show instructions dialog so the user knows what to do after the DMG opens
-    const { response } = await dialog.showMessageBox({
-      type: 'info',
-      title: 'Instalare actualizare',
-      message: `AdventShow ${updateState.latestVersion} este gata de instalat.`,
-      detail: 'Se va deschide fișierul DMG. Trageți AdventShow în folderul Applications, apoi reporniți aplicația.',
-      buttons: ['Deschide DMG și iese', 'Anulează'],
-      defaultId: 0,
-      cancelId: 1,
-    })
-    if (response !== 0) return   // user cancelled
-
-    // Open the DMG and give Finder time to mount it before quitting
-    await shell.openPath(installer)
-    setTimeout(() => app.quit(), 2000)
-  } else {
-    // Linux: replace the AppImage
-    const currentPath = process.env.APPIMAGE
-    if (currentPath) {
-      const tempDir = path.dirname(installer)
-      const script = path.join(tempDir, 'update.sh')
-      fs.writeFileSync(script, [
-        '#!/bin/bash',
-        'sleep 2',
-        `cp -f "${installer}" "${currentPath}"`,
-        `chmod +x "${currentPath}"`,
-        `"${currentPath}" &`,
-        `rm -rf "${tempDir}"`,
-      ].join('\n'), { mode: 0o755 })
-      spawn('bash', [script], { detached: true, stdio: 'ignore' }).unref()
-      app.quit()
-    } else {
-      // Not running as AppImage — just open the downloaded file
-      shell.openPath(installer)
-    }
-  }
+// In dev (not packaged) there is no app-update.yml, so updates are unavailable.
+function updatesSupported(): boolean {
+  return app.isPackaged
 }
 
 // ── Video conversion (FFmpeg) ─────────────────────────────────────────────────
@@ -1319,30 +1151,43 @@ app.whenReady().then(() => {
       getBibleVerseRange(bookId, chapter, startVerse, endVerse))
   ipcMain.handle('bible:has-data', () => hasBibleData())
 
-  // ── Update (Delta) ──────────────────────────────────────────────────────────
+  // ── Update (electron-updater) ─────────────────────────────────────────────
   ipcMain.handle('update:check', async () => {
+    if (!updatesSupported()) {
+      debugLog('[Update] check skipped — not packaged (dev mode)')
+      return { available: false }
+    }
     try {
-      const result = await checkForUpdate()
-      debugLog(`[Update] check: ${JSON.stringify(result)}`)
-      return result
-    } catch {
+      wireAutoUpdater()
+      const result = await autoUpdater.checkForUpdates()
+      const latest = result?.updateInfo?.version ?? null
+      const current = app.getVersion()
+      const available = !!latest && latest !== current
+      debugLog(`[Update] check: current=${current} latest=${latest} available=${available}`)
+      return { available, version: latest ?? undefined }
+    } catch (err: any) {
+      debugLog('[Update] check failed:', err?.message ?? String(err))
       return { available: false }
     }
   })
   ipcMain.handle('update:download', async () => {
+    if (!updatesSupported()) return
     try {
-      await downloadUpdate()
+      wireAutoUpdater()
+      await autoUpdater.downloadUpdate()
     } catch (err: any) {
-      debugLog('[Update] Download error:', err.message)
-      if (isWinAlive(win)) win.webContents.send('update:error', err.message)
+      debugLog('[Update] download failed:', err?.message ?? String(err))
+      if (isWinAlive(win)) win.webContents.send('update:error', err?.message ?? 'Descărcarea a eșuat')
     }
   })
-  ipcMain.handle('update:install', async () => {
+  ipcMain.handle('update:install', () => {
+    if (!updatesSupported()) return
     try {
-      await installUpdate()
+      // isSilent=true (no installer UI), isForceRunAfter=true (relaunch after install).
+      autoUpdater.quitAndInstall(true, true)
     } catch (err: any) {
-      debugLog('[Update] Install error:', err.message)
-      if (isWinAlive(win)) win.webContents.send('update:error', err.message)
+      debugLog('[Update] install failed:', err?.message ?? String(err))
+      if (isWinAlive(win)) win.webContents.send('update:error', err?.message ?? 'Instalarea a eșuat')
     }
   })
 
