@@ -86,6 +86,11 @@ export function getDb() {
   if (!_db) {
     const dbPath = path.join(app.getPath('userData'), 'hymns.db');
     _db = new Database(dbPath);
+    // Diacritic-insensitive SQL helper used by hymn + Bible search: nrm(col) LIKE ?.
+    // MUST be registered here, on the single shared connection, so every prepared
+    // statement that calls nrm() can resolve it. (Regression in v1.2.4: nrm() was
+    // used in SQL but never registered → "no such function: nrm" broke all search.)
+    _db.function('nrm', { deterministic: true }, (value: unknown) => normalizeSearchText(String(value ?? '')));
   }
   return _db;
 }
