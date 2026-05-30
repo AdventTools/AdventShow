@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.2.6 (30 Mai 2026)
+
+### Modificări
+- actualizare nativa cu electron-updater: pe Windows installerul inchide si reporneste aplicatia automat, fara fereastra de comanda si fara pasi manuali; aplicatia si installerul sunt semnate
+
+---
+
 ## v1.2.5 (30 Mai 2026)
 
 ### Modificări
