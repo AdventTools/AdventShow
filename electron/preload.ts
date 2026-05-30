@@ -121,6 +121,15 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on('projection:zoom', (_e, action) => cb(action)),
     offZoom: () => ipcRenderer.removeAllListeners('projection:zoom'),
     signalReady: () => ipcRenderer.send('projection:renderer-ready'),
+    // Special full-screen modes (timer/clock/free text)
+    showTimer: (data: any) => ipcRenderer.invoke('projection:show-timer', data),
+    showText: (data: any) => ipcRenderer.invoke('projection:show-text', data),
+    onTimer: (cb: (data: any) => void) =>
+      ipcRenderer.on('projection:timer', (_e, data) => cb(data)),
+    offTimer: () => ipcRenderer.removeAllListeners('projection:timer'),
+    onText: (cb: (data: any) => void) =>
+      ipcRenderer.on('projection:text', (_e, data) => cb(data)),
+    offText: () => ipcRenderer.removeAllListeners('projection:text'),
   },
 
   update: {
