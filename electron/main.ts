@@ -292,25 +292,20 @@ async function installUpdate(): Promise<void> {
   debugLog(`[Update] Installing: ${installer}`)
 
   if (process.platform === 'win32') {
-    // On Windows, spawning the installer directly and then calling app.quit() can cause the
-    // child process to be terminated together with Electron because they share a Windows Job Object.
-    // Fix: use a cmd.exe intermediary batch file that waits for Electron to close first.
-    const batPath = path.join(path.dirname(installer), '_adv_update.cmd')
-    // Use timeout to wait for Electron to fully exit before launching the installer
-    const bat = [
-      '@echo off',
-      'timeout /t 3 /nobreak > nul',
-      `"${installer}" /S`,
-      `del "%~f0"`,
-    ].join('\r\n')
-    fs.writeFileSync(batPath, bat)
-    spawn('cmd.exe', ['/c', batPath], {
+    // Launch the NSIS installer directly — no cmd.exe, no .bat, no flashing console.
+    // The previous script ran a silent install but never relaunched the app, which is
+    // why AdventShow stayed closed after updating.
+    //   /S          → silent install (no wizard)
+    //   --force-run → relaunch AdventShow automatically once the install finishes
+    // electron-builder's NSIS installer also closes the running instance itself, and
+    // we quit right after so the (now-unlocked) files can be replaced.
+    debugLog('[Update] Launching installer (silent + auto-relaunch):', installer)
+    spawn(installer, ['/S', '--force-run'], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
     }).unref()
-    // Short delay so cmd.exe starts before we quit
-    setTimeout(() => app.quit(), 400)
+    setTimeout(() => app.quit(), 500)
   } else if (process.platform === 'darwin') {
     // Remove quarantine attribute if present (macOS adds it to downloaded files,
     // which can cause Gatekeeper to block opening the DMG)
@@ -390,42 +385,141 @@ function getFFmpegPath(): string {
   return binaryName
 }
 
-const NATIVE_VIDEO_EXTS = new Set(['.mp4', '.webm', '.ogg', '.mov'])
+// ── Universal local-video playback ──────────────────────────────────────────
+//
+// Chromium (so the projection <video>) can only decode a limited set of
+// codec+container combos. Deciding "needs conversion" purely by file extension
+// is wrong in both directions:
+//   • an .mp4 with AC-3/DTS audio plays with NO SOUND
+//   • a .mov/.mp4 with HEVC (e.g. iPhone recordings) plays with NO PICTURE
+//   • an .mkv/.avi that is really H.264+AAC gets a slow, pointless full re-encode
+// So instead we probe the real streams with ffmpeg and only re-encode the
+// stream(s) Chromium can't handle, copying everything else (instant remux).
 
-function needsConversion(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase()
-  return !NATIVE_VIDEO_EXTS.has(ext)
+// Codecs Chromium plays. (HEVC/H.265 is intentionally excluded — support is
+// platform-dependent and unreliable, so we always transcode it to H.264.)
+const PLAYABLE_VIDEO_CODECS = new Set(['h264', 'vp8', 'vp9', 'av1', 'theora'])
+const PLAYABLE_AUDIO_CODECS = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac'])
+// In an .mp4/.mov container Chromium only reliably plays AAC or MP3 audio.
+const MP4_AUDIO_CODECS = new Set(['aac', 'mp3'])
+// Containers a browser can open directly (when the inner codecs are also fine).
+const PLAYABLE_CONTAINERS = new Set(['.mp4', '.m4v', '.mov', '.webm', '.ogg', '.ogv'])
+
+interface MediaInfo {
+  vcodec: string | null
+  acodec: string | null
+  hasAudio: boolean
+  probed: boolean
 }
 
-function convertToMp4(inputPath: string): Promise<{ outputPath: string }> {
-  const outputPath = path.join(app.getPath('temp'), `adventshow-converted-${Date.now()}.mp4`)
-  const ffmpeg = getFFmpegPath()
+// Probe a media file's codecs by parsing `ffmpeg -i` stderr (ffmpeg-static does
+// not ship ffprobe). Best-effort: returns { probed:false } if ffmpeg is missing
+// or the output can't be parsed, so callers fall back to extension heuristics.
+function probeMedia(filePath: string): Promise<MediaInfo> {
+  return new Promise((resolve) => {
+    const ffmpeg = getFFmpegPath()
+    execFile(ffmpeg, ['-hide_banner', '-i', filePath], { timeout: 30000 }, (_err, _stdout, stderr) => {
+      const text = stderr || ''
+      const vMatch = text.match(/Stream #\d+:\d+(?:\[[^\]]*\])?(?:\([^)]*\))?: Video:\s*([a-zA-Z0-9_]+)/)
+      const aMatch = text.match(/Stream #\d+:\d+(?:\[[^\]]*\])?(?:\([^)]*\))?: Audio:\s*([a-zA-Z0-9_]+)/)
+      if (!vMatch && !aMatch) {
+        resolve({ vcodec: null, acodec: null, hasAudio: false, probed: false })
+        return
+      }
+      resolve({
+        vcodec: vMatch ? vMatch[1].toLowerCase() : null,
+        acodec: aMatch ? aMatch[1].toLowerCase() : null,
+        hasAudio: !!aMatch,
+        probed: true,
+      })
+    })
+  })
+}
 
+// Stable cache path so re-playing the same file doesn't re-convert every time.
+function preparedCachePath(filePath: string): string {
+  let key = filePath
+  try {
+    const st = fs.statSync(filePath)
+    key = `${filePath}|${st.size}|${Math.round(st.mtimeMs)}`
+  } catch { /* use path only */ }
+  let hash = 0
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) | 0
+  return path.join(app.getPath('temp'), `adventshow-prep-${(hash >>> 0).toString(36)}.mp4`)
+}
+
+function runFFmpeg(args: string[]): Promise<void> {
+  const ffmpeg = getFFmpegPath()
+  // Show the "preparing" overlay only while ffmpeg actually runs (a quick remux or
+  // a full transcode) — never during the codec probe, so compatible files that need
+  // no work play instantly without a flashing spinner.
+  if (isWinAlive(win)) win.webContents.send('video:converting', true)
   return new Promise((resolve, reject) => {
-    const args = [
-      '-i', inputPath,
-      '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
-      '-c:a', 'aac', '-b:a', '192k',
-      '-movflags', '+faststart',
-      '-y', outputPath
-    ]
-    const proc = execFile(ffmpeg, args, { timeout: 300000 }, (err) => {
+    const proc = execFile(ffmpeg, args, { timeout: 600000, maxBuffer: 1024 * 1024 * 64 }, (err) => {
+      if (isWinAlive(win)) win.webContents.send('video:converting', false)
       if (err) {
-        console.error('[FFmpeg] Conversion failed:', err)
+        console.error('[FFmpeg] failed:', err)
         reject(new Error('Conversia video a eșuat'))
       } else {
-        console.log('[FFmpeg] Converted:', inputPath, '->', outputPath)
-        resolve({ outputPath })
+        resolve()
       }
     })
     proc.stderr?.on('data', (d: Buffer) => {
       const line = d.toString()
-      // Send progress to renderer if it contains time info
-      if (line.includes('time=') && win) {
+      if (line.includes('time=') && isWinAlive(win)) {
         win.webContents.send('video:convert-progress', line.trim())
       }
     })
   })
+}
+
+// Decide whether a file can be played as-is, fast-remuxed, or must be
+// transcoded — and return a Chromium-friendly path to feed the <video> element.
+async function prepareVideoForPlayback(filePath: string): Promise<{ servePath: string; converted: boolean }> {
+  const ext = path.extname(filePath).toLowerCase()
+  const info = await probeMedia(filePath)
+
+  // Fallback when probing isn't possible: trust the container extension.
+  if (!info.probed) {
+    if (PLAYABLE_CONTAINERS.has(ext)) return { servePath: filePath, converted: false }
+    const out = preparedCachePath(filePath)
+    if (!fileIsUsable(out)) {
+      await runFFmpeg(['-i', filePath, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+        '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', '-y', out])
+    }
+    return { servePath: out, converted: true }
+  }
+
+  const videoOk = !info.vcodec || PLAYABLE_VIDEO_CODECS.has(info.vcodec)
+  const isMp4Like = ext === '.mp4' || ext === '.m4v' || ext === '.mov'
+  // Inside a browser-friendly container with playable codecs → play directly.
+  if (PLAYABLE_CONTAINERS.has(ext) && videoOk) {
+    const audioFineHere = !info.hasAudio
+      || (isMp4Like ? MP4_AUDIO_CODECS.has(info.acodec!) : PLAYABLE_AUDIO_CODECS.has(info.acodec!))
+    if (audioFineHere) return { servePath: filePath, converted: false }
+  }
+
+  // Otherwise produce an .mp4, copying any stream that's already compatible.
+  const out = preparedCachePath(filePath)
+  if (fileIsUsable(out)) return { servePath: out, converted: true }
+
+  const args = ['-i', filePath]
+  // video: keep H.264 as-is, otherwise transcode (covers HEVC, MPEG-4, WMV, VC-1…)
+  args.push('-map', '0:v:0?', '-c:v', info.vcodec === 'h264' ? 'copy' : 'libx264')
+  if (info.vcodec !== 'h264') args.push('-preset', 'veryfast', '-crf', '23')
+  // audio: keep AAC/MP3 as-is, otherwise transcode to AAC (covers AC-3, DTS, Opus, FLAC…)
+  if (info.hasAudio) {
+    const audioCopy = info.acodec ? MP4_AUDIO_CODECS.has(info.acodec) : false
+    args.push('-map', '0:a:0?', '-c:a', audioCopy ? 'copy' : 'aac')
+    if (!audioCopy) args.push('-b:a', '192k')
+  }
+  args.push('-movflags', '+faststart', '-y', out)
+  await runFFmpeg(args)
+  return { servePath: out, converted: true }
+}
+
+function fileIsUsable(p: string): boolean {
+  try { return fs.statSync(p).size > 10000 } catch { return false }
 }
 
 // ── yt-dlp (YouTube streaming) ────────────────────────────────────────────────
@@ -597,7 +691,15 @@ function getYouTubeTitle(videoUrl: string): Promise<string> {
   })
 }
 
+// Serialize downloads: adding several links at once shouldn't spawn many
+// concurrent yt-dlp + ffmpeg processes (memory spikes, throttling, flaky muxes).
+let ytDownloadChain: Promise<void> = Promise.resolve()
+
 function startYouTubeDownload(entry: YouTubeEntry) {
+  ytDownloadChain = ytDownloadChain.then(() => runYouTubeDownload(entry)).catch(() => { /* keep queue alive */ })
+}
+
+function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
   ensureYouTubeDir()
   const ytdlpBin = getYtDlpPath()
   const ffmpegBin = getFFmpegPath()
@@ -644,7 +746,7 @@ function startYouTubeDownload(entry: YouTubeEntry) {
     proc.on('error', reject)
   })
 
-  ;(async () => {
+  return (async () => {
     try {
       // Clean any stale tmp + final from previous attempts so we never serve a half-baked file
       try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* fresh */ }
@@ -656,7 +758,8 @@ function startYouTubeDownload(entry: YouTubeEntry) {
       await runStep(ytdlpBin, [
         '-f', 'bv*[vcodec^=avc1]/bv*[ext=mp4]/bv*',
         '-o', path.join(tmpDir, 'video.%(ext)s'),
-        '--no-playlist', '--newline',
+        '--no-playlist', '--newline', '--no-mtime',
+        '--retries', '10', '--fragment-retries', '10',
         entry.url,
       ])
 
@@ -665,7 +768,8 @@ function startYouTubeDownload(entry: YouTubeEntry) {
       await runStep(ytdlpBin, [
         '-f', 'ba[ext=m4a]/ba',
         '-o', path.join(tmpDir, 'audio.%(ext)s'),
-        '--no-playlist', '--newline',
+        '--no-playlist', '--newline', '--no-mtime',
+        '--retries', '10', '--fragment-retries', '10',
         entry.url,
       ])
 
@@ -941,16 +1045,27 @@ app.whenReady().then(() => {
 
   copySeedDbIfNeeded()
   initDB()
-  seedBibleFromJson()
 
-  // Sync corrections from seed DB to user DB (e.g., fixed hymns)
-  const seedPaths = [
-    path.join(process.resourcesPath ?? '', 'hymns.db'),
-    path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
-  ]
-  for (const sp of seedPaths) {
-    if (fs.existsSync(sp)) { syncSeedCorrections(sp); break }
-  }
+  // Faster startup (especially on Windows): keep only the hymn DB ready on the
+  // critical path. Bible seeding + seed-correction sync are deferred so the main
+  // window paints first — they only matter once the user opens the Bible, which
+  // is always well after the window is up. setImmediate runs them right after the
+  // synchronous startup (window creation) finishes, so nothing is actually lost.
+  setImmediate(() => {
+    try {
+      seedBibleFromJson()
+      // Sync corrections from seed DB to user DB (e.g., fixed hymns)
+      const seedPaths = [
+        path.join(process.resourcesPath ?? '', 'hymns.db'),
+        path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
+      ]
+      for (const sp of seedPaths) {
+        if (fs.existsSync(sp)) { syncSeedCorrections(sp); break }
+      }
+    } catch (err) {
+      debugLog('[startup] deferred seed/sync error:', String(err))
+    }
+  })
 
   debugLog('[App] Ready. Platform:', process.platform, 'Version:', app.getVersion(),
     'userData:', app.getPath('userData'))
@@ -1110,8 +1225,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('dialog:pick-media', async (_e, mediaType: 'image' | 'video') => {
     const filters = mediaType === 'image'
-      ? [{ name: 'Imagini', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] }]
-      : [{ name: 'Videoclipuri', extensions: ['mp4', 'webm', 'mov', 'mkv', 'avi'] }]
+      ? [
+          { name: 'Imagini', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif'] },
+          { name: 'Toate fișierele', extensions: ['*'] },
+        ]
+      : [
+          { name: 'Videoclipuri', extensions: ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg', 'ogv', 'mpg', 'mpeg', 'ts', 'm2ts', 'mts', '3gp', 'divx', 'vob'] },
+          { name: 'Toate fișierele', extensions: ['*'] },
+        ]
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openFile'],
       filters,
@@ -1239,7 +1360,10 @@ app.whenReady().then(() => {
     if (!win) return undefined
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
-      filters: [{ name: 'Videoclipuri', extensions: ['mp4', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg'] }],
+      filters: [
+        { name: 'Videoclipuri', extensions: ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg', 'ogv', 'mpg', 'mpeg', 'ts', 'm2ts', 'mts', '3gp', 'divx', 'vob'] },
+        { name: 'Toate fișierele', extensions: ['*'] },
+      ],
     })
     if (result.canceled) return undefined
     return result.filePaths[0]
@@ -1248,27 +1372,16 @@ app.whenReady().then(() => {
   // Prepare video (convert if needed) without opening projection
   ipcMain.handle('video:prepare', async (_e, filePath: string) => {
     debugLog('[video:prepare] Preparing file:', filePath)
-    let servePath = filePath
-    let converted = false
-    if (needsConversion(filePath)) {
-      try {
-        debugLog('[video:prepare] Needs conversion, starting FFmpeg...')
-        win?.webContents.send('video:converting', true)
-        const result = await convertToMp4(filePath)
-        servePath = result.outputPath
-        converted = true
-        debugLog('[video:prepare] Conversion done:', servePath)
-      } catch (err: any) {
-        debugLog('[video:prepare] Conversion failed:', err.message)
-        win?.webContents.send('video:converting', false)
-        return { error: err.message ?? 'Conversia video a eșuat' }
-      } finally {
-        win?.webContents.send('video:converting', false)
-      }
+    try {
+      const { servePath, converted } = await prepareVideoForPlayback(filePath)
+      const videoUrl = pathToFileURL(servePath).href
+      debugLog('[video:prepare] Prepared URL:', videoUrl, 'converted:', converted)
+      return { url: videoUrl, name: path.basename(filePath), converted }
+    } catch (err: any) {
+      debugLog('[video:prepare] Failed:', err.message)
+      win?.webContents.send('video:converting', false)
+      return { error: err.message ?? 'Conversia video a eșuat' }
     }
-    const videoUrl = pathToFileURL(servePath).href
-    debugLog('[video:prepare] Prepared URL:', videoUrl)
-    return { url: videoUrl, name: path.basename(filePath), converted }
   })
 
   // Open projection and start playback
@@ -1300,18 +1413,13 @@ app.whenReady().then(() => {
     debugLog('[video:load] Loading file:', filePath)
     let servePath = filePath
     let converted = false
-    if (needsConversion(filePath)) {
-      try {
-        win?.webContents.send('video:converting', true)
-        const result = await convertToMp4(filePath)
-        servePath = result.outputPath
-        converted = true
-      } catch (err: any) {
-        win?.webContents.send('video:converting', false)
-        return { error: err.message ?? 'Conversia video a eșuat' }
-      } finally {
-        win?.webContents.send('video:converting', false)
-      }
+    try {
+      const prep = await prepareVideoForPlayback(filePath)
+      servePath = prep.servePath
+      converted = prep.converted
+    } catch (err: any) {
+      win?.webContents.send('video:converting', false)
+      return { error: err.message ?? 'Conversia video a eșuat' }
     }
     const videoUrl = pathToFileURL(servePath).href
     if (!isWinAlive(projectionWin)) createProjectionWindow()

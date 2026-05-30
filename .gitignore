@@ -24,6 +24,7 @@ build/icons/icons/
 .idea
 .notes/
 .DS_Store
+.claude/
 
 # Local-only — signing secrets, internal notes (release scripts trăiesc în git)
 scripts/signing.env
