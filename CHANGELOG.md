@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.2.5 (30 Mai 2026)
+
+### Modificări
+- fix critic: cautarea in imnuri (numar, titlu, text) si in Biblie era complet nefunctionala in 1.2.4 din cauza unei functii SQL neinregistrate; reparata
+
+---
+
+
 ## v1.2.4 (30 Mai 2026)
 
 ### Modificări
