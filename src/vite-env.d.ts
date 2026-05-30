@@ -81,6 +81,29 @@ export interface ProjectionSlideData {
   bibleRef?: string;  // e.g. "Deuteronomul 12:5"
 }
 
+// ── Special projection modes (countdown / stopwatch / free text) ──────────────
+// These render full-screen over the configured background, independent of the
+// hymn/bible slide pipeline. The projection window computes elapsed/remaining
+// time itself from these fields, so the main process doesn't tick every second.
+export interface ProjectionTimerData {
+  mode: 'countdown' | 'stopwatch' | 'clock';
+  // Wall-clock anchor (ms since epoch) the projection uses to compute the display:
+  //   countdown  → remaining = targetEpochMs - now
+  //   stopwatch  → elapsed   = now - startEpochMs
+  //   clock      → shows current local time (no anchor needed)
+  targetEpochMs?: number;   // countdown: when it hits zero
+  startEpochMs?: number;    // stopwatch: when it started
+  running: boolean;         // false = frozen (paused); ignored for clock
+  frozenValueMs?: number;   // when paused, the exact ms to display
+  title?: string;           // optional heading, e.g. "Serviciul începe în"
+  zeroMessage?: string;     // countdown: shown when it reaches 0, e.g. "Bine ați venit!"
+  clock24h?: boolean;       // clock: 24h (default) vs 12h; also show seconds
+}
+
+export interface ProjectionTextData {
+  text: string;             // free-text message, rendered centered + auto-fit
+}
+
 export interface DisplayInfo {
   id: number;
   label: string;
@@ -200,6 +223,14 @@ export interface IElectronAPI {
     onZoom: (cb: (action: 'zoom-in' | 'zoom-out') => void) => void;
     offZoom: () => void;
     signalReady: () => void;
+    // Special full-screen modes (timer/clock/free text). Sending any of these
+    // takes over the projection; sendSlide/hymn/bible returns to normal content.
+    showTimer: (data: ProjectionTimerData) => Promise<void>;
+    showText: (data: ProjectionTextData) => Promise<void>;
+    onTimer: (cb: (data: ProjectionTimerData) => void) => void;
+    offTimer: () => void;
+    onText: (cb: (data: ProjectionTextData) => void) => void;
+    offText: () => void;
   };
   update: {
     check: () => Promise<{ available: boolean; version?: string }>;

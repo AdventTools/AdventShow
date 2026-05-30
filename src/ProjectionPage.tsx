@@ -1,11 +1,90 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppSettings, HymnSection, ProjectionSlideData } from './vite-env';
+import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData } from './vite-env';
 
 // Convert a local file path to a proper file:// URL (handles Windows drive letters)
 function toFileUrl(p: string): string {
   const fwd = p.replace(/\\/g, '/')
   // Windows: C:/... → file:///C:/...    macOS/Linux: /... → file:///...
   return fwd.startsWith('/') ? `file://${fwd}` : `file:///${fwd}`
+}
+
+// Rough viewport-width sizing for free text: fewer chars on the longest line → bigger.
+function freeTextVw(text: string): number {
+  const longest = Math.max(1, ...text.split('\n').map(l => l.trim().length));
+  return Math.min(9, Math.max(3, 140 / longest));
+}
+
+// Format a millisecond duration as H:MM:SS (drops the hour when zero → M:SS).
+function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timer / clock — full-screen, self-ticking (no IPC per second). Computes its
+// display from the timestamps in `data`, so it stays accurate across lag/pauses.
+// ─────────────────────────────────────────────────────────────────────────────
+function TimerDisplay({ data, color, fontScale }: {
+  data: ProjectionTimerData; color: string; fontScale: number;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    // Tick every 250ms for smooth seconds without busy-looping.
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, []);
+
+  let display: string;
+  let atZero = false;
+
+  if (data.mode === 'clock') {
+    const d = new Date(now);
+    const h24 = data.clock24h !== false;
+    let h = d.getHours();
+    const suffix = h24 ? '' : (h >= 12 ? ' PM' : ' AM');
+    if (!h24) { h = h % 12; if (h === 0) h = 12; }
+    const pad = (n: number) => String(n).padStart(2, '0');
+    display = `${h24 ? pad(h) : h}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${suffix}`;
+  } else if (data.mode === 'stopwatch') {
+    const elapsed = !data.running && data.frozenValueMs != null
+      ? data.frozenValueMs
+      : now - (data.startEpochMs ?? now);
+    display = formatDuration(elapsed);
+  } else {
+    // countdown
+    const remaining = !data.running && data.frozenValueMs != null
+      ? data.frozenValueMs
+      : (data.targetEpochMs ?? now) - now;
+    atZero = remaining <= 0;
+    display = atZero ? '0:00' : formatDuration(remaining);
+  }
+
+  const showZeroMsg = atZero && data.mode === 'countdown' && !!data.zeroMessage;
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ padding: '4vh 4vw' }}>
+      {data.title && (
+        <div style={{
+          color, opacity: 0.85, fontWeight: 600, textAlign: 'center',
+          marginBottom: '2vh', textShadow: '0 2px 16px rgba(0,0,0,0.55)',
+          fontSize: `calc(clamp(1.5rem, 4vw, 4rem) * ${fontScale})`,
+        }}>
+          {data.title}
+        </div>
+      )}
+      <div style={{
+        color, fontWeight: 800, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
+        lineHeight: 1, letterSpacing: '0.02em', textShadow: '0 4px 28px rgba(0,0,0,0.6)',
+        fontSize: `calc(clamp(4rem, 22vw, 22rem) * ${fontScale})`,
+      }}>
+        {showZeroMsg ? data.zeroMessage : display}
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,6 +102,10 @@ export function ProjectionPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Special modes: timer/clock + free text ──
+  const [timer, setTimer] = useState<ProjectionTimerData | null>(null);
+  const [freeText, setFreeText] = useState<string | null>(null);
+
   // Load background settings once on mount
   useEffect(() => {
     window.electron.settings.get().then(s => setBg(s));
@@ -33,7 +116,9 @@ export function ProjectionPage() {
     window.electron.projection.onSlide((incoming) => {
       setData(incoming);
       setVisible(true);
-      // Stop video when hymn/bible projection starts
+      // A normal slide takes over: clear video + special modes
+      setTimer(null);
+      setFreeText(null);
       if (videoUrl) {
         setVideoUrl(null);
         if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ''; }
@@ -41,6 +126,31 @@ export function ProjectionPage() {
     });
     return () => { window.electron.projection.offSlide(); };
   }, [videoUrl]);
+
+  // Special modes: timer/clock + free text. Each takes over the screen and clears
+  // the others (and any active video/slide).
+  useEffect(() => {
+    window.electron.projection.onTimer((incoming) => {
+      setTimer(incoming);
+      setFreeText(null);
+      setData(null);
+      setVisible(true);
+      if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ''; }
+      setVideoUrl(null);
+    });
+    window.electron.projection.onText((incoming) => {
+      setFreeText(incoming?.text ?? '');
+      setTimer(null);
+      setData(null);
+      setVisible(true);
+      if (videoRef.current) { videoRef.current.pause(); videoRef.current.src = ''; }
+      setVideoUrl(null);
+    });
+    return () => {
+      window.electron.projection.offTimer();
+      window.electron.projection.offText();
+    };
+  }, []);
 
   // ── Video IPC listeners ──
   const sendVideoStatus = useCallback(() => {
@@ -282,6 +392,37 @@ export function ProjectionPage() {
           onPause={sendVideoStatus}
           onPlay={sendVideoStatus}
         />
+      )}
+
+      {/* Timer / clock (fullscreen, self-ticking) */}
+      {timer && (
+        <TimerDisplay
+          data={timer}
+          color={bg.contentTextColor ?? '#ffffff'}
+          fontScale={(bg.projectionFontSize ?? 1.2) * zoomLevel}
+        />
+      )}
+
+      {/* Free-text message (fullscreen, auto-fit) */}
+      {freeText !== null && (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center"
+          style={{ padding: '6vh 6vw' }}
+        >
+          <div
+            style={{
+              color: bg.contentTextColor ?? '#ffffff',
+              fontWeight: 700,
+              textAlign: 'center',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.25,
+              textShadow: '0 2px 16px rgba(0,0,0,0.55)',
+              fontSize: `calc(clamp(2rem, ${freeTextVw(freeText)}vw, 9rem) * ${(bg.projectionFontSize ?? 1.2) * zoomLevel})`,
+            }}
+          >
+            {freeText || ' '}
+          </div>
+        </div>
       )}
 
       {/* ── Content (above background, hidden when video is active) ── */}

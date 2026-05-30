@@ -224,7 +224,7 @@ function matchBibleBook(query: string, booksList: BibleBook[]): BibleBook | null
     return scored.length > 0 ? scored[0].book : null;
 }
 
-type Tab = 'imnuri' | 'biblia' | 'video';
+type Tab = 'imnuri' | 'biblia' | 'video' | 'timer' | 'mesaj';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // App
@@ -329,6 +329,8 @@ function App() {
         imnuri: { sidebarWidth: 200, previewWidth: 640 },
         biblia: { sidebarWidth: 200, previewWidth: 640 },
         video: { sidebarWidth: 200, previewWidth: 640 },
+        timer: { sidebarWidth: 200, previewWidth: 640 },
+        mesaj: { sidebarWidth: 200, previewWidth: 640 },
     });
     const tabRef = useRef<Tab>('imnuri');
 
@@ -1132,11 +1134,23 @@ function App() {
                     >
                         Video
                     </button>
+                    <button
+                        className={`tab-btn ${tab === 'timer' ? 'active' : ''}`}
+                        onClick={() => switchTab('timer')}
+                    >
+                        Cronometru
+                    </button>
+                    <button
+                        className={`tab-btn ${tab === 'mesaj' ? 'active' : ''}`}
+                        onClick={() => switchTab('mesaj')}
+                    >
+                        Mesaj
+                    </button>
                 </div>
 
                 {/* Search boxes */}
                 <div className="search-area">
-                    {tab !== 'video' && (<>
+                    {(tab === 'imnuri' || tab === 'biblia') && (<>
                         <div className="search-box">
                             <Search className="search-icon" />
                             <input
@@ -1303,7 +1317,11 @@ function App() {
 
                 {/* Content */}
                 <div className="content">
-                    {tab === 'imnuri' ? (
+                    {tab === 'timer' ? (
+                        <TimerPanel />
+                    ) : tab === 'mesaj' ? (
+                        <MessagePanel />
+                    ) : tab === 'imnuri' ? (
                         <HymnList
                             hymns={hymns}
                             categories={categories}
@@ -3166,6 +3184,217 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
 
                 </div>
             </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Timer panel — countdown (default) / stopwatch / clock, projected full-screen
+// ═════════════════════════════════════════════════════════════════════════════
+function TimerPanel() {
+    const [mode, setMode] = useState<'countdown' | 'stopwatch' | 'clock'>('countdown');
+    const [minutes, setMinutes] = useState(5);
+    const [seconds, setSeconds] = useState(0);
+    const [title, setTitle] = useState('');
+    const [zeroMessage, setZeroMessage] = useState('');
+    const [clock24h, setClock24h] = useState(true);
+    const [running, setRunning] = useState(false);
+    const [projected, setProjected] = useState(false);
+
+    // Anchors for the currently projected timer (so Pause can freeze accurately)
+    const anchorRef = useRef<{ targetEpochMs?: number; startEpochMs?: number }>({});
+
+    const durationMs = Math.max(0, (minutes * 60 + seconds) * 1000);
+
+    const send = useCallback((data: import('./vite-env').ProjectionTimerData) => {
+        window.electron.projection.showTimer(data);
+        setProjected(true);
+    }, []);
+
+    const startCountdown = useCallback(() => {
+        const target = Date.now() + durationMs;
+        anchorRef.current = { targetEpochMs: target };
+        setRunning(true);
+        send({ mode: 'countdown', targetEpochMs: target, running: true, title: title || undefined, zeroMessage: zeroMessage || undefined });
+    }, [durationMs, title, zeroMessage, send]);
+
+    const startStopwatch = useCallback(() => {
+        const start = Date.now();
+        anchorRef.current = { startEpochMs: start };
+        setRunning(true);
+        send({ mode: 'stopwatch', startEpochMs: start, running: true, title: title || undefined });
+    }, [title, send]);
+
+    const showClock = useCallback(() => {
+        setRunning(true);
+        send({ mode: 'clock', running: true, title: title || undefined, clock24h });
+    }, [title, clock24h, send]);
+
+    const pause = useCallback(() => {
+        const now = Date.now();
+        if (mode === 'countdown' && anchorRef.current.targetEpochMs != null) {
+            const remaining = Math.max(0, anchorRef.current.targetEpochMs - now);
+            setRunning(false);
+            send({ mode: 'countdown', running: false, frozenValueMs: remaining, title: title || undefined, zeroMessage: zeroMessage || undefined });
+        } else if (mode === 'stopwatch' && anchorRef.current.startEpochMs != null) {
+            const elapsed = now - anchorRef.current.startEpochMs;
+            setRunning(false);
+            send({ mode: 'stopwatch', running: false, frozenValueMs: elapsed, title: title || undefined });
+        }
+    }, [mode, title, zeroMessage, send]);
+
+    const resume = useCallback(() => {
+        if (mode === 'countdown') startCountdown();
+        else if (mode === 'stopwatch') startStopwatch();
+    }, [mode, startCountdown, startStopwatch]);
+
+    const start = useCallback(() => {
+        if (mode === 'countdown') startCountdown();
+        else if (mode === 'stopwatch') startStopwatch();
+        else showClock();
+    }, [mode, startCountdown, startStopwatch, showClock]);
+
+    const stop = useCallback(() => {
+        setRunning(false);
+        setProjected(false);
+        anchorRef.current = {};
+        window.electron.projection.close();
+    }, []);
+
+    const presets = [1, 3, 5, 10, 15, 20];
+
+    return (
+        <div className="content-inner timer-panel">
+            <div className="timer-mode-switch">
+                {(['countdown', 'stopwatch', 'clock'] as const).map(m => (
+                    <button
+                        key={m}
+                        className={`timer-mode-btn ${mode === m ? 'active' : ''}`}
+                        onClick={() => { setMode(m); setRunning(false); }}
+                    >
+                        {m === 'countdown' ? 'Numărătoare inversă' : m === 'stopwatch' ? 'Cronometru' : 'Ceas'}
+                    </button>
+                ))}
+            </div>
+
+            {mode === 'countdown' && (
+                <div className="timer-section">
+                    <label className="timer-label">Presetări</label>
+                    <div className="timer-presets">
+                        {presets.map(p => (
+                            <button key={p} className="timer-preset-btn" onClick={() => { setMinutes(p); setSeconds(0); }}>
+                                {p} min
+                            </button>
+                        ))}
+                    </div>
+                    <label className="timer-label">Durată</label>
+                    <div className="timer-duration">
+                        <input type="number" min={0} max={599} value={minutes}
+                            onChange={e => setMinutes(Math.max(0, Math.min(599, parseInt(e.target.value) || 0)))} />
+                        <span>min</span>
+                        <input type="number" min={0} max={59} value={seconds}
+                            onChange={e => setSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
+                        <span>sec</span>
+                    </div>
+                    <label className="timer-label">Mesaj la final (opțional)</label>
+                    <input className="timer-text-input" type="text" placeholder="ex: Bine ați venit!"
+                        value={zeroMessage} onChange={e => setZeroMessage(e.target.value)} />
+                </div>
+            )}
+
+            {mode === 'clock' && (
+                <div className="timer-section">
+                    <label className="timer-checkbox">
+                        <input type="checkbox" checked={clock24h} onChange={e => setClock24h(e.target.checked)} />
+                        Format 24 de ore
+                    </label>
+                </div>
+            )}
+
+            <div className="timer-section">
+                <label className="timer-label">Titlu (opțional)</label>
+                <input className="timer-text-input" type="text" placeholder="ex: Serviciul începe în"
+                    value={title} onChange={e => setTitle(e.target.value)} />
+            </div>
+
+            <div className="timer-actions">
+                {!projected || mode === 'clock' ? (
+                    <button className="btn-project timer-start" onClick={start}>
+                        {mode === 'clock' ? 'Proiectează ceasul' : 'Proiectează'}
+                    </button>
+                ) : running ? (
+                    <button className="btn-sm timer-pause" onClick={pause}>Pauză</button>
+                ) : (
+                    <button className="btn-project timer-start" onClick={resume}>Continuă</button>
+                )}
+                {projected && (
+                    <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
+                )}
+            </div>
+            <p className="timer-hint">
+                {mode === 'countdown' ? 'Numărătoarea inversă apare pe ecranul de proiecție.'
+                    : mode === 'stopwatch' ? 'Cronometrul pornește de la zero și urcă.'
+                        : 'Se afișează ora curentă pe ecranul de proiecție.'}
+            </p>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Message panel — free text projected live as you type
+// ═════════════════════════════════════════════════════════════════════════════
+function MessagePanel() {
+    const [text, setText] = useState('');
+    const [live, setLive] = useState(true);
+    const [projected, setProjected] = useState(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const project = useCallback((value: string) => {
+        window.electron.projection.showText({ text: value });
+        setProjected(true);
+    }, []);
+
+    // Live mode: push to projection as the user types (debounced), but only once
+    // it's already projected (so opening the screen is an explicit first action).
+    useEffect(() => {
+        if (!live || !projected) return;
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => project(text), 250);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, [text, live, projected, project]);
+
+    const stop = useCallback(() => {
+        setProjected(false);
+        window.electron.projection.close();
+    }, []);
+
+    return (
+        <div className="content-inner message-panel">
+            <label className="timer-label">Mesaj de proiectat</label>
+            <textarea
+                className="message-textarea"
+                placeholder="Scrie un mesaj... apare pe proiecție în timp real."
+                value={text}
+                onChange={e => setText(e.target.value)}
+                rows={6}
+            />
+            <label className="timer-checkbox">
+                <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
+                Actualizare în timp real (pe măsură ce scrii)
+            </label>
+            <div className="timer-actions">
+                {!projected ? (
+                    <button className="btn-project timer-start" onClick={() => project(text)}>Proiectează</button>
+                ) : (
+                    <>
+                        {!live && (
+                            <button className="btn-project timer-start" onClick={() => project(text)}>Trimite</button>
+                        )}
+                        <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
+                    </>
+                )}
+            </div>
+            <p className="timer-hint">Bun pentru anunțuri, urări, un verset tastat manual sau „Pauză 10 min".</p>
         </div>
     );
 }

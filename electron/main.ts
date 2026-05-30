@@ -1111,6 +1111,24 @@ app.whenReady().then(() => {
     sendSlideToProjection(idx)
   })
 
+  // ── Special full-screen modes: timer / clock / free text ──────────────────
+  // Same lifecycle as video: ensure the projection window exists + is ready, then
+  // push the payload. The projection renderer takes over rendering. We don't tick
+  // here — the renderer computes time from the timestamps in the payload.
+  const showSpecial = async (channel: 'projection:timer' | 'projection:text', data: unknown) => {
+    projState = null  // leave hymn/bible mode so returning to a slide re-pushes cleanly
+    if (!isWinAlive(projectionWin)) {
+      createProjectionWindow()
+      await waitForProjectionReady()
+    } else {
+      projectionWin.focus()
+    }
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send(channel, data)
+    setTimeout(() => win?.focus(), 200)
+  }
+  ipcMain.handle('projection:show-timer', async (_e, data) => { await showSpecial('projection:timer', data) })
+  ipcMain.handle('projection:show-text', async (_e, data) => { await showSpecial('projection:text', data) })
+
   ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') => {
     if (action === 'close') { if (isWinAlive(projectionWin)) projectionWin.close(); return }
     if (action === 'zoom-in' || action === 'zoom-out') {
