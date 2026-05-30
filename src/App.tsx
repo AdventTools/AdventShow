@@ -21,6 +21,7 @@ import {
     Upload,
     Volume2,
     X,
+    Youtube,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
@@ -1232,7 +1233,7 @@ function App() {
                     )}
                     {/* Update banner */}
                     {(updateInfo?.available || updateReady) && (
-                        <div className="update-banner">
+                        <div className="update-banner update-banner-sidebar">
                             <div className="update-banner-title">
                                 <Download className="icon-sm" />
                                 {updateReady
@@ -2005,8 +2006,8 @@ function VideoController({
             <div className="content-inner video-controller">
                 <div className="video-dropzone">
                     <div className="video-converting-spinner" />
-                    <p className="video-dropzone-title">Se convertește video-ul...</p>
-                    <p className="video-dropzone-sub">Formatul nu e suportat nativ. Se convertește în MP4.</p>
+                    <p className="video-dropzone-title">Se pregătește videoclipul...</p>
+                    <p className="video-dropzone-sub">Se optimizează pentru redare fără probleme. Poate dura puțin.</p>
                 </div>
             </div>
         );
@@ -2015,59 +2016,60 @@ function VideoController({
     // ── Idle / Prepared state ──
     return (
         <div className="content-inner video-controller">
-            {/* ── Add sources row ── */}
+            {/* ── Add sources: two clear, separate zones ── */}
             <div className="video-section">
                 <div className="video-section-header">
                     <Film className="icon-sm opacity-60" />
                     <span>Adaugă video în playlist</span>
                 </div>
 
-                {/* Local file picker */}
-                <div className="video-dropzone-compact" onClick={onPickFile}>
-                    {videoLoading ? (
-                        <Loader className="icon-sm animate-spin opacity-50" />
-                    ) : (
-                        <Upload className="icon-sm opacity-40" />
-                    )}
-                    <span>{videoLoading ? 'Se încarcă...' : 'Adaugă fișier local (MP4, MKV, AVI, MOV...)'}</span>
+                <div className="video-add-grid">
+                    {/* Zone 1 — local file */}
+                    <div className="video-add-card">
+                        <div className="video-add-card-head">
+                            <Upload className="icon-sm" /> Fișier de pe calculator
+                        </div>
+                        <button className="video-add-btn video-add-btn-local" onClick={onPickFile} disabled={videoLoading}>
+                            {videoLoading
+                                ? <Loader className="icon-sm animate-spin" />
+                                : <FolderOpen className="icon-sm" />}
+                            <span>{videoLoading ? 'Se încarcă...' : 'Alege fișier video'}</span>
+                        </button>
+                        <p className="video-add-hint">Orice format uzual — MP4, MKV, AVI, MOV, WMV… Cele neacceptate se convertesc automat.</p>
+                    </div>
+
+                    {/* Zone 2 — YouTube link */}
+                    <div className="video-add-card">
+                        <div className="video-add-card-head">
+                            <Youtube className="icon-sm" /> Link YouTube
+                        </div>
+                        {ytdlpInstalled === false ? (
+                            <>
+                                <button className="video-add-btn" onClick={installYtDlp} disabled={ytdlpBusy}>
+                                    <Download className="icon-sm" />
+                                    <span>{ytdlpBusy ? 'Se instalează...' : 'Instalează yt-dlp'}</span>
+                                </button>
+                                <p className="video-add-hint">Necesar o singură dată pentru descărcările de pe YouTube.</p>
+                            </>
+                        ) : (
+                            <>
+                                <input
+                                    type="text"
+                                    className="video-youtube-input"
+                                    placeholder="Lipește un link YouTube..."
+                                    value={ytUrl}
+                                    onChange={(e) => setYtUrl(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') addYouTube(); }}
+                                />
+                                <button className="video-add-btn" onClick={addYouTube} disabled={ytAdding || !ytUrl.trim()}>
+                                    {ytAdding ? <Loader className="icon-sm animate-spin" /> : <Plus className="icon-sm" />}
+                                    <span>{ytAdding ? 'Se adaugă...' : 'Adaugă în listă'}</span>
+                                </button>
+                                <p className="video-add-hint">Se descarcă local și rămâne disponibil și fără internet.</p>
+                            </>
+                        )}
+                    </div>
                 </div>
-
-                {/* YouTube URL input */}
-                {ytdlpInstalled === false && (
-                    <div className="video-youtube-install">
-                        <p className="text-white/60 text-sm mb-2">
-                            Pentru videoclipuri YouTube, este nevoie de yt-dlp.
-                        </p>
-                        <button
-                            className="video-youtube-btn"
-                            onClick={installYtDlp}
-                            disabled={ytdlpBusy}
-                        >
-                            {ytdlpBusy ? 'Se instalează...' : 'Instalează yt-dlp'}
-                        </button>
-                    </div>
-                )}
-
-                {ytdlpInstalled !== false && (
-                    <div className="video-youtube-input-row">
-                        <input
-                            type="text"
-                            className="video-youtube-input"
-                            placeholder="https://www.youtube.com/watch?v=..."
-                            value={ytUrl}
-                            onChange={(e) => setYtUrl(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') addYouTube(); }}
-                        />
-                        <button
-                            className="video-youtube-btn"
-                            onClick={addYouTube}
-                            disabled={ytAdding || !ytUrl.trim()}
-                        >
-                            {ytAdding ? <Loader className="icon-sm animate-spin" /> : <Plus className="icon-sm" />}
-                            <span>{ytAdding ? 'Se adaugă...' : 'YouTube'}</span>
-                        </button>
-                    </div>
-                )}
 
                 {ytError && <p className="video-youtube-error">{ytError}</p>}
             </div>
