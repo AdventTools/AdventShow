@@ -1,31 +1,16 @@
-; Custom NSIS installer script for AdventShow
-; Imports the self-signed certificate into Windows Trusted Root CA store on install
-; Removes it on uninstall
-
-!include "MUI2.nsh"
+; Custom NSIS installer script for AdventShow.
+; The app + installer are signed with a real Azure Trusted Signing certificate, so
+; there is NOTHING to import into the Windows trust store — Windows already trusts
+; the publisher. (Older builds imported a self-signed cert here; that is obsolete and
+; the Root-store fallback needed admin rights, which would break the silent per-user
+; auto-update. Removed.)
+;
+; Kept minimal: electron-builder's one-click NSIS already creates Start Menu +
+; Desktop shortcuts (createDesktopShortcut/createStartMenuShortcut in
+; electron-builder.json5), so we don't duplicate them here.
 
 !macro customInstall
-  ; Import the self-signed certificate into Trusted Root Certification Authorities
-  DetailPrint "Importing AdventShow certificate into Trusted Root store..."
-  nsExec::ExecToLog 'certutil -addstore "TrustedPublisher" "$INSTDIR\resources\adventshow.crt"'
-  Pop $0
-  ${If} $0 != 0
-    ; Try Root store as fallback (requires admin)
-    nsExec::ExecToLog 'certutil -addstore "Root" "$INSTDIR\resources\adventshow.crt"'
-    Pop $0
-  ${EndIf}
-  DetailPrint "Certificate import completed (exit code: $0)"
-
-  ; Create desktop shortcut
-  CreateShortCut "$DESKTOP\AdventShow.lnk" "$INSTDIR\AdventShow.exe" "" "$INSTDIR\AdventShow.exe" 0
 !macroend
 
 !macro customUnInstall
-  ; Remove the certificate from trusted stores on uninstall
-  DetailPrint "Removing AdventShow certificate from trusted stores..."
-  nsExec::ExecToLog 'certutil -delstore "TrustedPublisher" "AdventShow"'
-  nsExec::ExecToLog 'certutil -delstore "Root" "AdventShow"'
-
-  ; Remove desktop shortcut
-  Delete "$DESKTOP\AdventShow.lnk"
 !macroend

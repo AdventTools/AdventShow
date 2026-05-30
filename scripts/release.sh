@@ -233,12 +233,41 @@ for bm in "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap" \
     [ -f "$bm" ] && UPDATE_ASSETS+=("$bm")
 done
 
-gh release create "$TAG" \
-    --title "${TAG}" \
-    --notes "${NOTES}" \
-    "${UPDATE_ASSETS[@]}"
+# Create the release first (no assets), then upload separately WITH RETRIES.
+# Rationale: `gh release create <files...>` does create+upload in one shot, so a
+# network blip mid-upload leaves the release published with only some assets (this
+# is exactly what happened with 1.2.6). Splitting it lets us retry uploads
+# idempotently with --clobber until every asset is present.
+if gh release view "$TAG" >/dev/null 2>&1; then
+    echo "   (release $TAG există deja — actualizez asset-urile)"
+else
+    gh release create "$TAG" --title "${TAG}" --notes "${NOTES}" || fail "gh release create"
+fi
 
-ok "Release ${TAG} publicat (instalere + metadata auto-update)"
+upload_with_retries() {
+    local tries=0 max=5
+    while [ "$tries" -lt "$max" ]; do
+        if gh release upload "$TAG" "${UPDATE_ASSETS[@]}" --clobber; then
+            return 0
+        fi
+        tries=$((tries + 1))
+        echo "   ⚠️  upload eșuat (încercarea $tries/$max) — reîncerc în 10s..."
+        sleep 10
+    done
+    return 1
+}
+upload_with_retries || fail "Upload asset-uri a eșuat după 5 încercări"
+
+# Reconcile: confirm every required asset is actually on the release.
+REMOTE_ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+MISSING=""
+for a in "${UPDATE_ASSETS[@]}"; do
+    name=$(basename "$a")
+    echo "$REMOTE_ASSETS" | grep -qx "$name" || MISSING="${MISSING} ${name}"
+done
+[ -z "$MISSING" ] || fail "Asset-uri lipsă de pe release după upload:${MISSING}"
+
+ok "Release ${TAG} publicat (toate asset-urile verificate prezente)"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
