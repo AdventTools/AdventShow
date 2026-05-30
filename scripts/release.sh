@@ -112,8 +112,22 @@ sed -i '' "s|releases/download/v${OLD_VERSION}/AdventShow-Linux\.AppImage|releas
 sed -i '' "s|AdventShow-Mac-${OLD_VERSION}\.dmg|AdventShow-Mac-${NEW_VERSION}.dmg|g" README.md
 sed -i '' "s|releases/download/v${OLD_VERSION}/AdventShow-Mac|releases/download/v${NEW_VERSION}/AdventShow-Mac|g" README.md
 
-CHANGELOG_ENTRY="## v${NEW_VERSION} (${DATE})\n\n### Modificări\n- ${DESCRIPTION}\n\n---\n"
-sed -i '' "s/^# Changelog — AdventShow$/# Changelog — AdventShow\n\n${CHANGELOG_ENTRY}/" CHANGELOG.md
+# Insert the new CHANGELOG entry right after the title line. Done in Node (not sed)
+# because the description is free text — slashes, ampersands, backslashes etc. all
+# broke the old `sed s/.../.../` form (that's what crashed the 1.2.5 release). Passing
+# the values via env keeps them literal regardless of content.
+CL_VERSION="$NEW_VERSION" CL_DATE="$DATE" CL_DESC="$DESCRIPTION" node -e '
+  const fs = require("fs");
+  const f = "CHANGELOG.md";
+  const title = "# Changelog — AdventShow";
+  const entry = `## v${process.env.CL_VERSION} (${process.env.CL_DATE})\n\n### Modificări\n- ${process.env.CL_DESC}\n\n---\n`;
+  let s = fs.readFileSync(f, "utf8");
+  const i = s.indexOf(title);
+  if (i === -1) { console.error("CHANGELOG title not found"); process.exit(1); }
+  const after = i + title.length;
+  s = s.slice(0, after) + "\n\n" + entry + s.slice(after).replace(/^\n+/, "\n");
+  fs.writeFileSync(f, s);
+' || fail "Actualizarea CHANGELOG a eșuat"
 
 ok "package.json + README (badge + 3 linkuri download) + CHANGELOG actualizate"
 
@@ -127,6 +141,15 @@ rm -rf "$RELEASE_DIR"
 DMG="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
 [ -f "$DMG" ] || fail "DMG nu există: $DMG"
 ok "DMG: $DMG"
+
+# electron-updater downloads the ZIP on macOS (Squirrel.Mac), not the DMG.
+# The .app inside is the same signed bundle as in the DMG; notarizing the DMG
+# (below) registers that app's cdhash with Apple, so the ZIP's identical app
+# passes Gatekeeper's online check on update. latest-mac.yml references the ZIP.
+ZIP="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip"
+[ -f "$ZIP" ] || fail "ZIP mac nu există: $ZIP (necesar pentru auto-update; verifică target 'zip' în electron-builder.json5)"
+[ -f "${RELEASE_DIR}/latest-mac.yml" ] || fail "latest-mac.yml lipsă (necesar pentru auto-update macOS)"
+ok "ZIP + latest-mac.yml: prezente"
 
 # ── Notary în background ──────────────────────────────────────────────────────
 
@@ -148,7 +171,8 @@ step "5/8 Build Windows (signed) — paralel cu notary"
 
 EXE="${RELEASE_DIR}/AdventShow-Setup.exe"
 [ -f "$EXE" ] || fail "EXE nu există: $EXE"
-ok "EXE: $EXE"
+[ -f "${RELEASE_DIR}/latest.yml" ] || fail "latest.yml lipsă (necesar pentru auto-update Windows — build-win.sh trebuie să-l aducă de pe VM)"
+ok "EXE + latest.yml: prezente"
 
 # ── Așteaptă notary + staple ──────────────────────────────────────────────────
 
@@ -188,13 +212,33 @@ step "8/8 GitHub Release ${TAG}"
 
 NOTES=$(awk "/^## v${NEW_VERSION}/{f=1; next} f && /^---/{exit} f" CHANGELOG.md)
 
+# Upload EVERYTHING electron-updater needs, not just the installers:
+#   • Installers for humans: DMG (mac), Setup.exe (win)   [+ AppImage via CI]
+#   • Auto-update payload: ZIP (mac), Setup.exe (win)
+#   • Auto-update metadata: latest.yml (win), latest-mac.yml (mac)
+#   • Differential download: *.blockmap (best-effort)
+# Missing yml/zip is the #1 reason "the app doesn't see updates", so these are
+# first-class release assets.
+UPDATE_ASSETS=(
+    "$DMG"
+    "$ZIP"
+    "$EXE"
+    "${RELEASE_DIR}/latest.yml"
+    "${RELEASE_DIR}/latest-mac.yml"
+)
+# blockmaps are optional — include any that exist
+for bm in "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap" \
+          "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg.blockmap" \
+          "${RELEASE_DIR}/AdventShow-Setup.exe.blockmap"; do
+    [ -f "$bm" ] && UPDATE_ASSETS+=("$bm")
+done
+
 gh release create "$TAG" \
     --title "${TAG}" \
     --notes "${NOTES}" \
-    "$DMG" \
-    "$EXE"
+    "${UPDATE_ASSETS[@]}"
 
-ok "Release ${TAG} publicat"
+ok "Release ${TAG} publicat (instalere + metadata auto-update)"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
