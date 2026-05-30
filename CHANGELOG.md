@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## v1.2.4 (30 Mai 2026)
+
+### Modificări
+- căutare imnuri insensibilă la diacritice (titlu și conținut) — nu mai e nevoie să scrii cu diacritice
+
+---
+
+
 ## v1.2.3 (30 Mai 2026)
 
 ### Modificări
