@@ -84,10 +84,12 @@
     // auto-update seamless — electron-updater runs it silently, it closes the running
     // app, installs, and relaunches automatically (no cmd window, no manual steps).
     "oneClick": true,
-    // Per-machine (Program Files) install for all users. Requires one UAC prompt per
-    // update — the only click in the flow. electron-updater handles the elevation.
-    "perMachine": true,
-    "allowElevation": true,
+    // Per-user install in %LOCALAPPDATA% — NO UAC prompt, fully silent. This is what
+    // makes auto-update completely hands-off: electron-updater runs the installer
+    // silently, it closes the running app, installs, and relaunches — zero clicks,
+    // no admin prompt, no cmd window. (perMachine:true would force a UAC prompt on
+    // every update, which is the manual step we are eliminating.)
+    "perMachine": false,
     "deleteAppDataOnUninstall": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
