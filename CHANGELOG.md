@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.2.7 (30 Mai 2026)
+
+### Modificări
+- actualizare Windows 100% silentioasa: instalare per-user fara UAC, fara click-uri, fara pasi manuali; app si installer semnate
+
+---
+
 ## v1.2.6 (30 Mai 2026)
 
 ### Modificări
