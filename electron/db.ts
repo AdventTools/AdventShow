@@ -274,7 +274,7 @@ export function searchHymns(query: string, categoryId?: number) {
                COUNT(s.id) AS section_count
         FROM hymns h
         LEFT JOIN hymn_sections s ON s.hymn_id = h.id
-        WHERE h.category_id = ? AND (h.number LIKE ? OR h.title LIKE ? OR LOWER(h.title) LIKE ?)
+        WHERE h.category_id = ? AND (h.number LIKE ? OR h.title LIKE ? OR nrm(h.title) LIKE ?)
         GROUP BY h.id
         ORDER BY CAST(h.number AS INTEGER)
         LIMIT 50
@@ -287,7 +287,7 @@ export function searchHymns(query: string, categoryId?: number) {
              COUNT(s.id) AS section_count
       FROM hymns h
       LEFT JOIN hymn_sections s ON s.hymn_id = h.id
-      WHERE h.number LIKE ? OR h.title LIKE ? OR LOWER(h.title) LIKE ?
+      WHERE h.number LIKE ? OR h.title LIKE ? OR nrm(h.title) LIKE ?
       GROUP BY h.id
       ORDER BY CAST(h.number AS INTEGER)
       LIMIT 50
@@ -344,7 +344,7 @@ export function searchHymnsContent(query: string, categoryId?: number) {
                ${snippetSubquery}
         FROM hymns h
         INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
-        WHERE h.category_id = ? AND (sec.text LIKE ? OR h.search_text LIKE ?)
+        WHERE h.category_id = ? AND (sec.text LIKE ? OR nrm(sec.text) LIKE ?)
         ORDER BY CAST(h.number AS INTEGER)
         LIMIT 50
       `)
@@ -357,7 +357,7 @@ export function searchHymnsContent(query: string, categoryId?: number) {
              ${snippetSubquery}
       FROM hymns h
       INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
-      WHERE sec.text LIKE ? OR h.search_text LIKE ?
+      WHERE sec.text LIKE ? OR nrm(sec.text) LIKE ?
       ORDER BY CAST(h.number AS INTEGER)
       LIMIT 50
     `)
