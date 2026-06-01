@@ -37,3 +37,9 @@ docs/
 *.sln
 *.sw?
 CHAT_SESSION_CHANGES_SUMMARY.md
+.claude/
+.vscode/
+CLAUDE.md
+CLAUDE.local.md
+copilot-instructions.md
+COPILOT-INSTRUCTIONS.md
