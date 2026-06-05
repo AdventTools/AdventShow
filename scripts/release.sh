@@ -326,7 +326,9 @@ fi
 
 if [ ! -f "$STATE/git.done" ]; then
   step "9/11 Git commit + push main"
-  git add -A
+  # DOAR fișierele de bump — nu `git add -A`, care ar mătura în commit-ul de
+  # release orice lucrare în curs din working tree (pățit la v1.3.2)
+  git add package.json README.md CHANGELOG.md
   git commit -m "release: v${NEW_VERSION} — ${DESCRIPTION}" || true
   retry "git push main" 40 20 -- git push origin main || fail "git push"
   touch "$STATE/git.done"
