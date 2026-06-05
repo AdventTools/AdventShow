@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.0 (05 Iunie 2026)
+
+### Modificări
+- peste 250 de cântări noi pentru copii și tineret — colecțiile Licurici, Companioni, Tineret și Amicus, plus corecturi și completări la Exploratori; numele colecției apare în rezultatele căutării la «Toate»; bazele de date ale instalărilor existente (oricât de vechi) se aduc automat la zi, cu colecțiile noi și corecturile incluse
+
+---
+
 ## v1.2.7 (30 Mai 2026)
 
 ### Modificări
