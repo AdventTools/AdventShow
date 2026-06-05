@@ -35,6 +35,7 @@ import {
   hasBibleData,
   seedBibleFromJson,
   syncSeedCorrections,
+  syncSeedContent,
 } from './db'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
@@ -892,7 +893,12 @@ app.whenReady().then(() => {
         path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
       ]
       for (const sp of seedPaths) {
-        if (fs.existsSync(sp)) { syncSeedCorrections(sp); break }
+        if (fs.existsSync(sp)) {
+          syncSeedCorrections(sp)
+          // categorii/imnuri noi din seed ajung și la utilizatorii existenți
+          syncSeedContent(sp)
+          break
+        }
       }
     } catch (err) {
       debugLog('[startup] deferred seed/sync error:', String(err))

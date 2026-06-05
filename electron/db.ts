@@ -103,6 +103,7 @@ const BUILTIN_CATEGORIES = [
   'Exploratori',
   'Companioni',
   'Tineret',
+  'Amicus',
   'Imnuri Speciale',
 ];
 
@@ -522,16 +523,18 @@ export function updateHymnWithSections(id: number, input: { number: string; titl
     if (sections.length === 0) throw new Error('Adaugă cel puțin o secțiune cu text.');
 
     const searchText = normalizeSearchText(`${number} ${title} ${sections.map(s => s.text).join(' ')}`);
-    db.prepare('UPDATE hymns SET number = ?, title = ?, search_text = ? WHERE id = ?')
-      .run(number, title, searchText, id);
+    // updated_at protejează modificările utilizatorului de suprascrieri la syncSeedContent()
+    const now = new Date().toISOString();
+    db.prepare('UPDATE hymns SET number = ?, title = ?, search_text = ?, updated_at = ? WHERE id = ?')
+      .run(number, title, searchText, now, id);
 
     db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(id);
     const insertSection = db.prepare(`
-      INSERT INTO hymn_sections (hymn_id, order_index, type, text)
-      VALUES (@hymnId, @order_index, @type, @text)
+      INSERT INTO hymn_sections (hymn_id, order_index, type, text, updated_at)
+      VALUES (@hymnId, @order_index, @type, @text, @updated_at)
     `);
     sections.forEach((section, index) => {
-      insertSection.run({ hymnId: id, order_index: index, type: section.type, text: section.text });
+      insertSection.run({ hymnId: id, order_index: index, type: section.type, text: section.text, updated_at: now });
     });
   });
   tx();
@@ -1046,6 +1049,32 @@ export function syncSeedCorrections(seedDbPath: string) {
       return;
     }
 
+    // Guard: matching by hymn_id alone is unsafe — in user DBs cu imnuri proprii,
+    // id-urile pot să NU corespundă cu cele din seed. Confirmăm că imnul userului
+    // de la acel id e ACELAȘI imn (același număr + aceeași categorie, după nume).
+    const getSeedHymnIdentity = seedDb.prepare(`
+      SELECT h.number, c.name AS category_name
+      FROM hymns h LEFT JOIN categories c ON c.id = h.category_id
+      WHERE h.id = ?
+    `);
+    const getUserHymnIdentity = userDb.prepare(`
+      SELECT h.number, c.name AS category_name
+      FROM hymns h LEFT JOIN categories c ON c.id = h.category_id
+      WHERE h.id = ?
+    `);
+    const hymnIdentityOk = new Map<number, boolean>();
+    const isSameHymn = (hymnId: number): boolean => {
+      const cached = hymnIdentityOk.get(hymnId);
+      if (cached !== undefined) return cached;
+      const seedHymn = getSeedHymnIdentity.get(hymnId) as { number: string; category_name: string | null } | undefined;
+      const userHymn = getUserHymnIdentity.get(hymnId) as { number: string; category_name: string | null } | undefined;
+      const ok = !!seedHymn && !!userHymn &&
+        normalizeHymnNumber(seedHymn.number ?? '') === normalizeHymnNumber(userHymn.number ?? '') &&
+        (seedHymn.category_name ?? '') === (userHymn.category_name ?? '');
+      hymnIdentityOk.set(hymnId, ok);
+      return ok;
+    };
+
     const getUserSection = userDb.prepare(`
       SELECT id, text, updated_at FROM hymn_sections WHERE hymn_id = ? AND order_index = ?
     `);
@@ -1056,6 +1085,7 @@ export function syncSeedCorrections(seedDbPath: string) {
     let updated = 0;
     const tx = userDb.transaction(() => {
       for (const seed of seedSections) {
+        if (!isSameHymn(seed.hymn_id)) continue;
         const user = getUserSection.get(seed.hymn_id, seed.order_index) as { id: number; text: string; updated_at: string } | undefined;
         if (!user) continue;
 
@@ -1076,5 +1106,145 @@ export function syncSeedCorrections(seedDbPath: string) {
     seedDb.close();
   } catch (err) {
     console.error('[DB Sync] Failed:', err);
+  }
+}
+
+/**
+ * Sync NEW content from the seed (bundled) DB to the user's DB:
+ *  - categories missing from the user DB (matched by name) are created;
+ *  - hymns missing from the user DB (matched by category name + number) are inserted
+ *    with their sections — this is how existing users receive newly added collections
+ *    (e.g. Licurici / Companioni / Tineret / Amicus added in the seed);
+ *  - hymns that exist in both get their content replaced when the seed's updated_at
+ *    is >= every timestamp the user has on that hymn (hymn + sections). User edits
+ *    made in the app stamp updated_at, so anything the user touched later is preserved.
+ * Idempotent — safe to run at every startup.
+ */
+export function syncSeedContent(seedDbPath: string) {
+  if (!fs.existsSync(seedDbPath)) return;
+
+  try {
+    const userDb = getDb();
+    const seedDb = new Database(seedDbPath, { readonly: true });
+
+    // Seed DBs older than this feature have no updated_at on hymns — nothing to do.
+    const seedHymnCols = seedDb.pragma('table_info(hymns)') as { name: string }[];
+    if (!seedHymnCols.some(c => c.name === 'updated_at')) {
+      seedDb.close();
+      return;
+    }
+
+    // ── Categories: create the ones missing locally (matched by name) ────────
+    const seedCategories = seedDb.prepare('SELECT id, name, is_builtin FROM categories').all() as
+      { id: number; name: string; is_builtin: number }[];
+    const categoryIdMap = new Map<number, number>(); // seed id -> user id
+    let createdCategories = 0;
+    for (const seedCat of seedCategories) {
+      const local = userDb.prepare('SELECT id FROM categories WHERE name = ?').get(seedCat.name) as
+        { id: number } | undefined;
+      if (local) {
+        categoryIdMap.set(seedCat.id, local.id);
+      } else {
+        const result = userDb
+          .prepare('INSERT INTO categories (name, is_builtin) VALUES (?, ?)')
+          .run(seedCat.name, seedCat.is_builtin);
+        categoryIdMap.set(seedCat.id, Number(result.lastInsertRowid));
+        createdCategories++;
+      }
+    }
+
+    // ── Hymns: insert the missing, refresh the stale ──────────────────────────
+    const seedHymns = seedDb.prepare(`
+      SELECT id, number, title, search_text, category_id, created_at, updated_at
+      FROM hymns WHERE category_id IS NOT NULL
+    `).all() as { id: number; number: string; title: string; search_text: string;
+                  category_id: number; created_at: string; updated_at: string }[];
+    const getSeedSections = seedDb.prepare(
+      'SELECT order_index, type, text, updated_at FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
+    );
+
+    const getUserHymn = userDb.prepare(
+      'SELECT id, updated_at FROM hymns WHERE category_id = ? AND number = ? LIMIT 1'
+    );
+    const getUserSections = userDb.prepare(
+      'SELECT type, text, updated_at FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
+    );
+    const insertHymn = userDb.prepare(`
+      INSERT INTO hymns (number, title, search_text, category_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const insertSection = userDb.prepare(`
+      INSERT INTO hymn_sections (hymn_id, order_index, type, text, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const updateHymnRow = userDb.prepare(
+      'UPDATE hymns SET title = ?, search_text = ?, updated_at = ? WHERE id = ?'
+    );
+    const deleteSections = userDb.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?');
+
+    let inserted = 0;
+    let refreshed = 0;
+    const tx = userDb.transaction(() => {
+      for (const seedHymn of seedHymns) {
+        const userCatId = categoryIdMap.get(seedHymn.category_id);
+        if (userCatId == null) continue;
+        const number = normalizeHymnNumber(seedHymn.number ?? '');
+        const seedSections = getSeedSections.all(seedHymn.id) as
+          { order_index: number; type: 'strofa' | 'refren'; text: string; updated_at: string }[];
+        if (seedSections.length === 0) continue;
+
+        const userHymn = getUserHymn.get(userCatId, number) as
+          { id: number; updated_at: string } | undefined;
+
+        if (!userHymn) {
+          const result = insertHymn.run(
+            number, seedHymn.title, seedHymn.search_text, userCatId,
+            seedHymn.created_at ?? '', seedHymn.updated_at ?? ''
+          );
+          const hymnId = Number(result.lastInsertRowid);
+          for (const s of seedSections) {
+            insertSection.run(hymnId, s.order_index, s.type, s.text, s.updated_at ?? '');
+          }
+          inserted++;
+          continue;
+        }
+
+        // Existing hymn: refresh only if the seed is at least as new as everything
+        // the user has on it (untouched hymns have updated_at = '').
+        const seedTs = seedHymn.updated_at || '';
+        if (!seedTs) continue;
+        const userSections = getUserSections.all(userHymn.id) as
+          { type: string; text: string; updated_at: string }[];
+        const userNewest = [userHymn.updated_at || '', ...userSections.map(s => s.updated_at || '')]
+          .reduce((a, b) => (a > b ? a : b), '');
+        if (userNewest > seedTs) continue;
+
+        const sameContent =
+          userSections.length === seedSections.length &&
+          userSections.every((s, i) =>
+            s.type === seedSections[i].type && s.text.trim() === seedSections[i].text.trim());
+        const sameTitle = (userDb.prepare('SELECT title FROM hymns WHERE id = ?')
+          .get(userHymn.id) as { title: string }).title === seedHymn.title;
+        if (sameContent && sameTitle) continue;
+
+        updateHymnRow.run(seedHymn.title, seedHymn.search_text, seedTs, userHymn.id);
+        if (!sameContent) {
+          deleteSections.run(userHymn.id);
+          for (const s of seedSections) {
+            insertSection.run(userHymn.id, s.order_index, s.type, s.text, s.updated_at ?? '');
+          }
+        }
+        refreshed++;
+      }
+    });
+    tx();
+
+    if (createdCategories > 0 || inserted > 0 || refreshed > 0) {
+      console.log(`[DB Sync] Seed content: +${createdCategories} categorii, +${inserted} imnuri noi, ${refreshed} imnuri actualizate`);
+    }
+
+    seedDb.close();
+  } catch (err) {
+    console.error('[DB Sync] syncSeedContent failed:', err);
   }
 }
