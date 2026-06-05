@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.3 (06 Iunie 2026)
+
+### Modificări
+- panoul Ceas refăcut: ceas analogic sau digital la alegere, opțiune pentru afișarea secundelor, sugestii de text potrivite pentru fiecare mod; taburile redenumite: «Ceas» și «Realtime text»
+
+---
+
 ## v1.3.2 (05 Iunie 2026)
 
 ### Modificări
