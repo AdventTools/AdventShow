@@ -3235,8 +3235,11 @@ function TimerPanel() {
 
     const showClock = useCallback(() => {
         setRunning(true);
-        send({ mode: 'clock', running: true, title: title || undefined, clock24h });
-    }, [title, clock24h, send]);
+        send({
+            mode: 'clock', running: true, title: title || undefined,
+            clock24h, clockShowSeconds, clockAnalog,
+        });
+    }, [title, clock24h, clockShowSeconds, clockAnalog, send]);
 
     const pause = useCallback(() => {
         const now = Date.now();
@@ -3312,16 +3315,40 @@ function TimerPanel() {
 
             {mode === 'clock' && (
                 <div className="timer-section">
+                    <label className="timer-label">Tip ceas</label>
+                    <div className="timer-mode-switch">
+                        <button
+                            className={`timer-mode-btn ${!clockAnalog ? 'active' : ''}`}
+                            onClick={() => setClockAnalog(false)}
+                        >
+                            Digital
+                        </button>
+                        <button
+                            className={`timer-mode-btn ${clockAnalog ? 'active' : ''}`}
+                            onClick={() => setClockAnalog(true)}
+                        >
+                            Analogic
+                        </button>
+                    </div>
                     <label className="timer-checkbox">
-                        <input type="checkbox" checked={clock24h} onChange={e => setClock24h(e.target.checked)} />
-                        Format 24 de ore
+                        <input type="checkbox" checked={clockShowSeconds} onChange={e => setClockShowSeconds(e.target.checked)} />
+                        Afișează secundele
                     </label>
+                    {!clockAnalog && (
+                        <label className="timer-checkbox">
+                            <input type="checkbox" checked={clock24h} onChange={e => setClock24h(e.target.checked)} />
+                            Format 24 de ore
+                        </label>
+                    )}
                 </div>
             )}
 
             <div className="timer-section">
                 <label className="timer-label">Titlu (opțional)</label>
-                <input className="timer-text-input" type="text" placeholder="ex: Serviciul începe în"
+                <input className="timer-text-input" type="text"
+                    placeholder={mode === 'countdown' ? 'ex: Serviciul începe în'
+                        : mode === 'stopwatch' ? 'ex: Timp scurs'
+                            : 'ex: Bine ați venit!'}
                     value={title} onChange={e => setTitle(e.target.value)} />
             </div>
 
@@ -3378,7 +3405,7 @@ function MessagePanel() {
 
     return (
         <div className="content-inner message-panel">
-            <label className="timer-label">Mesaj de proiectat</label>
+            <label className="timer-label">Text de proiectat</label>
             <textarea
                 className="message-textarea"
                 placeholder="Scrie un mesaj... apare pe proiecție în timp real."
