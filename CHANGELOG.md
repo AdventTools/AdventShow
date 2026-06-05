@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.1 (05 Iunie 2026)
+
+### Modificări
+- reparat installerul și updaterul pe Windows: iconița de desktop se recrează la fiecare actualizare, instalarea nu mai poate rămâne la jumătate, iar actualizările descarcă installerul complet; mesajul de actualizare e aranjat la fel pe Windows și macOS; pe macOS fereastra de instalare DMG arată acum clar «trage aplicația în Applications»
+
+---
+
 ## v1.3.0 (05 Iunie 2026)
 
 ### Modificări
