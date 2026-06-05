@@ -48,7 +48,8 @@ function TimerDisplay({ data, color, fontScale }: {
     const suffix = h24 ? '' : (h >= 12 ? ' PM' : ' AM');
     if (!h24) { h = h % 12; if (h === 0) h = 12; }
     const pad = (n: number) => String(n).padStart(2, '0');
-    display = `${h24 ? pad(h) : h}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${suffix}`;
+    const secondsPart = data.clockShowSeconds !== false ? `:${pad(d.getSeconds())}` : '';
+    display = `${h24 ? pad(h) : h}:${pad(d.getMinutes())}${secondsPart}${suffix}`;
   } else if (data.mode === 'stopwatch') {
     const elapsed = !data.running && data.frozenValueMs != null
       ? data.frozenValueMs
@@ -64,6 +65,7 @@ function TimerDisplay({ data, color, fontScale }: {
   }
 
   const showZeroMsg = atZero && data.mode === 'countdown' && !!data.zeroMessage;
+  const analogClock = data.mode === 'clock' && data.clockAnalog === true;
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ padding: '4vh 4vw' }}>
@@ -76,14 +78,83 @@ function TimerDisplay({ data, color, fontScale }: {
           {data.title}
         </div>
       )}
-      <div style={{
-        color, fontWeight: 800, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
-        lineHeight: 1, letterSpacing: '0.02em', textShadow: '0 4px 28px rgba(0,0,0,0.6)',
-        fontSize: `calc(clamp(4rem, 22vw, 22rem) * ${fontScale})`,
-      }}>
-        {showZeroMsg ? data.zeroMessage : display}
-      </div>
+      {analogClock ? (
+        <AnalogClock now={now} color={color} showSeconds={data.clockShowSeconds !== false} fontScale={fontScale} />
+      ) : (
+        <div style={{
+          color, fontWeight: 800, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1, letterSpacing: '0.02em', textShadow: '0 4px 28px rgba(0,0,0,0.6)',
+          fontSize: `calc(clamp(4rem, 22vw, 22rem) * ${fontScale})`,
+        }}>
+          {showZeroMsg ? data.zeroMessage : display}
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analog clock — SVG face with hour marks; smooth hour/minute hands, optional
+// second hand. Sized relative to the screen (vmin) so it fills the projection.
+// ─────────────────────────────────────────────────────────────────────────────
+function AnalogClock({ now, color, showSeconds, fontScale }: {
+  now: number; color: string; showSeconds: boolean; fontScale: number;
+}) {
+  const d = new Date(now);
+  const sec = d.getSeconds() + d.getMilliseconds() / 1000;
+  const min = d.getMinutes() + sec / 60;
+  const hr = (d.getHours() % 12) + min / 60;
+
+  const hourAngle = hr * 30;
+  const minAngle = min * 6;
+  const secAngle = Math.floor(sec) * 6; // tick pe secundă întreagă
+
+  // repere: 12 liniuțe, cele de la 12/3/6/9 mai groase
+  const marks = Array.from({ length: 12 }, (_, i) => {
+    const major = i % 3 === 0;
+    return (
+      <line
+        key={i}
+        x1={100} y1={major ? 12 : 15} x2={100} y2={major ? 24 : 21}
+        stroke={color} strokeWidth={major ? 5 : 2.5} strokeLinecap="round"
+        transform={`rotate(${i * 30} 100 100)`}
+      />
+    );
+  });
+
+  return (
+    <svg
+      viewBox="0 0 200 200"
+      style={{
+        width: `calc(min(68vmin, 68vh) * ${fontScale})`,
+        height: `calc(min(68vmin, 68vh) * ${fontScale})`,
+        filter: 'drop-shadow(0 4px 28px rgba(0,0,0,0.6))',
+      }}
+    >
+      <circle cx={100} cy={100} r={96} fill="rgba(0,0,0,0.25)" stroke={color} strokeWidth={4} />
+      {marks}
+      {/* orar */}
+      <line
+        x1={100} y1={100} x2={100} y2={48}
+        stroke={color} strokeWidth={7} strokeLinecap="round"
+        transform={`rotate(${hourAngle} 100 100)`}
+      />
+      {/* minutar */}
+      <line
+        x1={100} y1={100} x2={100} y2={30}
+        stroke={color} strokeWidth={4.5} strokeLinecap="round"
+        transform={`rotate(${minAngle} 100 100)`}
+      />
+      {/* secundar (opțional) */}
+      {showSeconds && (
+        <line
+          x1={100} y1={112} x2={100} y2={26}
+          stroke={color} strokeWidth={1.8} strokeLinecap="round" opacity={0.85}
+          transform={`rotate(${secAngle} 100 100)`}
+        />
+      )}
+      <circle cx={100} cy={100} r={5} fill={color} />
+    </svg>
   );
 }
 
