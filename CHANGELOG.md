@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.2 (05 Iunie 2026)
+
+### Modificări
+- iconița AdventShow de pe desktop revine garantat după fiecare actualizare (installerul o recrea doar la instalări noi); actualizările apar pe GitHub doar complet încărcate, ca să nu mai existe erori de descărcare în timpul publicării
+
+---
+
 ## v1.3.1 (05 Iunie 2026)
 
 ### Modificări

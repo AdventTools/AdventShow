@@ -1138,13 +1138,13 @@ function App() {
                         className={`tab-btn ${tab === 'timer' ? 'active' : ''}`}
                         onClick={() => switchTab('timer')}
                     >
-                        Cronometru
+                        Ceas
                     </button>
                     <button
                         className={`tab-btn ${tab === 'mesaj' ? 'active' : ''}`}
                         onClick={() => switchTab('mesaj')}
                     >
-                        Mesaj
+                        Realtime text
                     </button>
                 </div>
 
@@ -3204,6 +3204,8 @@ function TimerPanel() {
     const [title, setTitle] = useState('');
     const [zeroMessage, setZeroMessage] = useState('');
     const [clock24h, setClock24h] = useState(true);
+    const [clockShowSeconds, setClockShowSeconds] = useState(true);
+    const [clockAnalog, setClockAnalog] = useState(false);
     const [running, setRunning] = useState(false);
     const [projected, setProjected] = useState(false);
 

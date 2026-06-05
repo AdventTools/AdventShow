@@ -1,0 +1,11 @@
+#!/bin/bash
+# Shim cu retry pentru codesign — absoarbe micro-întreruperile de internet
+# (serverul de timestamp Apple e cerut la fiecare fișier semnat).
+rc=1
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  /usr/bin/codesign "$@" && exit 0
+  rc=$?
+  echo "[codesign-shim] încercarea $i a eșuat (rc=$rc), reîncerc în 15s..." >&2
+  sleep 15
+done
+exit $rc

@@ -97,7 +97,9 @@ export interface ProjectionTimerData {
   frozenValueMs?: number;   // when paused, the exact ms to display
   title?: string;           // optional heading, e.g. "Serviciul începe în"
   zeroMessage?: string;     // countdown: shown when it reaches 0, e.g. "Bine ați venit!"
-  clock24h?: boolean;       // clock: 24h (default) vs 12h; also show seconds
+  clock24h?: boolean;       // clock: 24h (default) vs 12h
+  clockShowSeconds?: boolean; // clock: afișează secundele (default true)
+  clockAnalog?: boolean;    // clock: cadran analogic în loc de digital
 }
 
 export interface ProjectionTextData {
