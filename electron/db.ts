@@ -1163,8 +1163,18 @@ export function syncSeedContent(seedDbPath: string) {
       'SELECT order_index, type, text, updated_at FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
     );
 
+    const seedCatNameById = new Map(seedCategories.map(c => [c.id, c.name]));
     const getUserHymn = userDb.prepare(
       'SELECT id, updated_at FROM hymns WHERE category_id = ? AND number = ? LIMIT 1'
+    );
+    // DB-urile foarte vechi (dinainte de categorii) au imnurile cu category_id NULL —
+    // pentru „Imnuri Creștine" le potrivim după număr și le adoptăm în categorie,
+    // altfel sync-ul le-ar duplica.
+    const getUserHymnNullCategory = userDb.prepare(
+      'SELECT id, updated_at FROM hymns WHERE category_id IS NULL AND number = ? LIMIT 1'
+    );
+    const adoptHymnIntoCategory = userDb.prepare(
+      'UPDATE hymns SET category_id = ? WHERE id = ?'
     );
     const getUserSections = userDb.prepare(
       'SELECT type, text, updated_at FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
@@ -1184,6 +1194,7 @@ export function syncSeedContent(seedDbPath: string) {
 
     let inserted = 0;
     let refreshed = 0;
+    let adopted = 0;
     const tx = userDb.transaction(() => {
       for (const seedHymn of seedHymns) {
         const userCatId = categoryIdMap.get(seedHymn.category_id);
@@ -1193,8 +1204,16 @@ export function syncSeedContent(seedDbPath: string) {
           { order_index: number; type: 'strofa' | 'refren'; text: string; updated_at: string }[];
         if (seedSections.length === 0) continue;
 
-        const userHymn = getUserHymn.get(userCatId, number) as
+        let userHymn = getUserHymn.get(userCatId, number) as
           { id: number; updated_at: string } | undefined;
+        if (!userHymn && seedCatNameById.get(seedHymn.category_id) === 'Imnuri Creștine') {
+          userHymn = getUserHymnNullCategory.get(number) as
+            { id: number; updated_at: string } | undefined;
+          if (userHymn) {
+            adoptHymnIntoCategory.run(userCatId, userHymn.id);
+            adopted++;
+          }
+        }
 
         if (!userHymn) {
           const result = insertHymn.run(
@@ -1213,6 +1232,8 @@ export function syncSeedContent(seedDbPath: string) {
         // the user has on it (untouched hymns have updated_at = '').
         const seedTs = seedHymn.updated_at || '';
         if (!seedTs) continue;
+        // deja sincronizat la acest seed — sărim comparația de conținut
+        if ((userHymn.updated_at || '') === seedTs) continue;
         const userSections = getUserSections.all(userHymn.id) as
           { type: string; text: string; updated_at: string }[];
         const userNewest = [userHymn.updated_at || '', ...userSections.map(s => s.updated_at || '')]
@@ -1239,8 +1260,8 @@ export function syncSeedContent(seedDbPath: string) {
     });
     tx();
 
-    if (createdCategories > 0 || inserted > 0 || refreshed > 0) {
-      console.log(`[DB Sync] Seed content: +${createdCategories} categorii, +${inserted} imnuri noi, ${refreshed} imnuri actualizate`);
+    if (createdCategories > 0 || inserted > 0 || refreshed > 0 || adopted > 0) {
+      console.log(`[DB Sync] Seed content: +${createdCategories} categorii, +${inserted} imnuri noi, ${refreshed} imnuri actualizate, ${adopted} adoptate în categorie`);
     }
 
     seedDb.close();
