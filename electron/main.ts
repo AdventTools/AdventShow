@@ -153,6 +153,11 @@ function wireAutoUpdater() {
   autoUpdater.autoDownload = false
   // If an update was downloaded but the user didn't click install, apply on quit.
   autoUpdater.autoInstallOnAppQuit = true
+  // Always download the FULL installer. Differential download assembles the
+  // installer from the old one + blockmap diffs — one corrupt block and NSIS
+  // dies mid-install (v1.2.7→v1.3.0 a lăsat aplicația dezinstalată, fără iconiță,
+  // fără relansare). 113MB întregi sunt mai robuști decât un patch fragil.
+  autoUpdater.disableDifferentialDownload = true
   autoUpdater.logger = {
     info: (m: unknown) => debugLog('[autoUpdater]', String(m)),
     warn: (m: unknown) => debugLog('[autoUpdater][warn]', String(m)),
@@ -1207,8 +1212,22 @@ app.whenReady().then(() => {
   ipcMain.handle('update:install', () => {
     if (!updatesSupported()) return
     try {
-      // isSilent=true (no installer UI), isForceRunAfter=true (relaunch after install).
-      autoUpdater.quitAndInstall(true, true)
+      debugLog('[Update] quitAndInstall: închid ferestrele și pornesc installerul')
+      // Închidere FORȚATĂ și completă înainte de quitAndInstall: dacă vreo fereastră
+      // (ex. proiecția) sau vreun listener amână quit-ul, installerul NSIS pornește
+      // peste un proces încă viu și moare la jumătate (v1.2.7→v1.3.0: aplicație
+      // dezinstalată, iconiță ștearsă, fără relansare). Rețeta canonică:
+      app.removeAllListeners('window-all-closed')
+      for (const w of BrowserWindow.getAllWindows()) {
+        try {
+          w.removeAllListeners('close')
+          w.destroy()
+        } catch { /* fereastra poate fi deja distrusă */ }
+      }
+      setImmediate(() => {
+        // isSilent=true (no installer UI), isForceRunAfter=true (relaunch after install).
+        autoUpdater.quitAndInstall(true, true)
+      })
     } catch (err: any) {
       debugLog('[Update] install failed:', err?.message ?? String(err))
       if (isWinAlive(win)) win.webContents.send('update:error', err?.message ?? 'Instalarea a eșuat')

@@ -65,6 +65,30 @@
     ],
     "artifactName": "AdventShow-Mac-${version}.${ext}"
   },
+  "dmg": {
+    // Fereastra DMG cu instrucțiuni vizuale: fundalul (generat de
+    // scripts/create_dmg_background.py) pictează titlul + săgeata, iar Finder
+    // desenează iconițele pe pozițiile de mai jos (centrele lor).
+    "background": "build/dmg-background.png",
+    "window": {
+      "width": 540,
+      "height": 380
+    },
+    "iconSize": 128,
+    "contents": [
+      {
+        "x": 140,
+        "y": 230,
+        "type": "file"
+      },
+      {
+        "x": 400,
+        "y": 230,
+        "type": "link",
+        "path": "/Applications"
+      }
+    ]
+  },
   "win": {
     "icon": "build/icons/win/icon.ico",
     "target": [
@@ -91,7 +115,10 @@
     // every update, which is the manual step we are eliminating.)
     "perMachine": false,
     "deleteAppDataOnUninstall": false,
-    "createDesktopShortcut": true,
+    // "always" — recrează shortcut-ul de desktop la FIECARE instalare/update. Cu
+    // `true`, NSIS nu mai recreează un shortcut pe care îl consideră șters de user;
+    // după un update eșuat care a șters iconița, instalările următoare o lăsau lipsă.
+    "createDesktopShortcut": "always",
     "createStartMenuShortcut": true,
     "shortcutName": "AdventShow",
     "include": "build/installer.nsh"
