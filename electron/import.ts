@@ -99,10 +99,20 @@ function normalizeLegacyPptText(text: string): string {
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .split('\n')
+    .flatMap(line => splitJoinedVerses(line))
     .map(line => normalize(line))
     .filter(Boolean)
     .join('\n')
     .trim();
+}
+
+/**
+ * Două+ spații urmate de literă mare în interiorul unui rând = două versuri lipite
+ * (autorul le-a scris pe același paragraf, separate doar prin spații).
+ * Le despărțim înainte ca normalize() să colapseze spațiile duble.
+ */
+function splitJoinedVerses(line: string): string[] {
+  return line.split(/ {2,}(?=[A-ZĂÎÂŞŢȘȚ„"«])/);
 }
 
 function isLikelyFooterText(text: string): boolean {
@@ -225,6 +235,51 @@ function extractLegacyPptSlides(data: Buffer): LegacyPptSlide[] {
   );
 }
 
+// Fallback pentru PPT-uri foarte vechi (97/2000) sau salvări atipice: textul nu e
+// în SlideListWithText, ci în containerele Slide (ClientTextbox). Ex.: o parte din
+// colecția „Cartea Verde / TINERET" și PPT-urile de dinainte de ~2007.
+const PPT_RECORD_TYPE_SLIDE_CONTAINER = 1006;
+
+function extractLegacyPptSlidesFromContainers(data: Buffer): LegacyPptSlide[] {
+  const slides: LegacyPptSlide[] = [];
+  // containerele Slide sunt la nivelul superior al fluxului "PowerPoint Document"
+  let offset = 0;
+  while (offset + 8 <= data.length) {
+    const record = readPptRecordHeader(data, offset);
+    if (!record) break;
+    if (record.recType === PPT_RECORD_TYPE_SLIDE_CONTAINER && record.recVer === 0x0f) {
+      const slide: LegacyPptSlide = { textBlocks: [] };
+      let currentTextType: number | null = null;
+      let currentTextChunks: string[] = [];
+      const flush = () => {
+        if (currentTextType == null || currentTextChunks.length === 0) {
+          currentTextChunks = [];
+          return;
+        }
+        const text = normalizeLegacyPptText(currentTextChunks.join(''));
+        if (text) slide.textBlocks.push({ textType: currentTextType, text });
+        currentTextChunks = [];
+      };
+      walkPptRecords(data, record.contentStart, record.contentEnd, r => {
+        if (r.recType === PPT_RECORD_TYPE_TEXT_HEADER_ATOM) {
+          flush();
+          currentTextType = r.recLen >= 4 ? data.readUInt32LE(r.contentStart) : null;
+        } else if (r.recType === PPT_RECORD_TYPE_TEXT_CHARS_ATOM && currentTextType != null) {
+          currentTextChunks.push(data.toString('utf16le', r.contentStart, r.contentEnd));
+        } else if (r.recType === PPT_RECORD_TYPE_TEXT_BYTES_ATOM && currentTextType != null) {
+          currentTextChunks.push(data.toString('latin1', r.contentStart, r.contentEnd));
+        }
+      });
+      flush();
+      slides.push(slide);
+    }
+    offset = record.contentEnd;
+  }
+  return slides.filter(slide =>
+    slide.textBlocks.some(block => block.text.length > 0 && !isLikelyFooterText(block.text)),
+  );
+}
+
 function inferTitleFromLegacyPpt(slide: LegacyPptSlide, file: string) {
   const blocks = slide.textBlocks
     .map(block => ({ ...block, text: normalizeLegacyPptText(block.text) }))
@@ -314,7 +369,20 @@ async function extractLegacyPptImportData(
   }
 
   const documentBuffer = Buffer.from(documentStream.content);
-  const slides = extractLegacyPptSlides(documentBuffer);
+  let slides: LegacyPptSlide[] = [];
+  try {
+    slides = extractLegacyPptSlides(documentBuffer);
+  } catch {
+    // lista de slide-uri lipsește — încercăm fallback-ul de mai jos
+  }
+  // Fallback și când lista oficială există dar e (aproape) goală: la unele fișiere
+  // SlideListWithText conține doar un divider, textul real fiind în containerele Slide.
+  const totalText = (list: LegacyPptSlide[]) =>
+    list.reduce((n, sl) => n + sl.textBlocks.reduce((m, b) => m + b.text.length, 0), 0);
+  const fromContainers = extractLegacyPptSlidesFromContainers(documentBuffer);
+  if ((slides.length === 0 || totalText(fromContainers) > totalText(slides) * 1.5) && fromContainers.length > 0) {
+    slides = fromContainers;
+  }
   if (slides.length === 0) {
     throw new Error('Nu am găsit slide-uri cu text în fișierul .ppt.');
   }
@@ -463,8 +531,11 @@ const R_ALONE = /^\s*R\.?\s*$/i;
 /** "R. O, ce har..."  — marker followed immediately by refren text on the same line */
 const R_INLINE = /^\s*R\.?\s+(.+)$/i;
 
-/** "Refren"  "REFREN"  "Refren:"  alone */
-const REFREN_WORD = /^\s*refren:?\s*$/i;
+/** "Refren"  "REFREN"  "Refren:"  "Refren :" (spațiu înainte de ":") alone */
+const REFREN_WORD = /^\s*refren\s*:?\s*$/i;
+
+/** "Refren: O, ce har..." — marker + prima linie de refren pe aceeași linie */
+const REFREN_INLINE = /^\s*refren\s*:\s+(.+)$/i;
 
 /** "1."  "2."  "Strofa 1"  "Strofa 2" — stanza header */
 const STROFA_HDR = /^\s*(strofa\s*)?\d+\.?\s*$/i;
@@ -502,6 +573,15 @@ function processLines(lines: string[]): { type: 'strofa' | 'refren'; text: strin
       flush();
       mode = 'refren';
       buf.push(inlineMatch[1].trim()); // text after "R. "
+      continue;
+    }
+
+    // ── Inline "Refren: ..." marker + first refren line on the same line ────
+    const refrenInline = line.match(REFREN_INLINE);
+    if (refrenInline) {
+      flush();
+      mode = 'refren';
+      buf.push(refrenInline[1].trim()); // text after "Refren: "
       continue;
     }
 
@@ -573,8 +653,10 @@ async function extractPptxImportData(
     const allLines: string[] = [];
     for (const shape of contentShapes) {
       for (const paragraph of shape.paragraphs) {
-        const line = normalize(paragraph);
-        if (line.length > 0) allLines.push(line);
+        for (const piece of splitJoinedVerses(paragraph)) {
+          const line = normalize(piece);
+          if (line.length > 0) allLines.push(line);
+        }
       }
     }
 

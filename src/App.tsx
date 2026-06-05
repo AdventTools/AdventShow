@@ -1683,6 +1683,11 @@ function HymnList({
                 <div className="hymn-list" ref={listRef}>
                     {hymns.map(hymn => {
                         const snippetLine = getSnippetFirstLine(hymn.snippet);
+                        // În „Toate" arătăm din ce colecție face parte fiecare imn —
+                        // același titlu poate exista în mai multe colecții.
+                        const collectionName = activeCategoryId === undefined && hymn.category_id != null
+                            ? categories.find(c => c.id === hymn.category_id)?.name
+                            : undefined;
                         return (
                             <div
                                 key={hymn.id}
@@ -1694,6 +1699,7 @@ function HymnList({
                                 <span className="hymn-num">{hymn.number}</span>
                                 <div className="hymn-info">
                                     <span className="hymn-title">{hymn.title}</span>
+                                    {collectionName && <span className="hymn-collection">{collectionName}</span>}
                                     {snippetLine && <span className="hymn-snippet">— {snippetLine}</span>}
                                 </div>
                             </div>

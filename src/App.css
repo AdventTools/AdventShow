@@ -536,6 +536,19 @@
     flex: 1;
 }
 
+/* Numele colecției — afișat doar în categoria „Toate" */
+.hymn-collection {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-glow);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-self: center;
+}
+
 /* ── Bible ── */
 .bible-breadcrumb {
     display: flex;
