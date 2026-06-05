@@ -8,6 +8,10 @@ on:
   push:
     tags:
       - 'v*'
+  # fallback manual: gh workflow run build.yml --ref vX.Y.Z
+  # (util cand tag-ul e creat prin publicarea unui release draft si evenimentul
+  # push nu se declanseaza)
+  workflow_dispatch:
 
 permissions:
   contents: write
