@@ -397,24 +397,33 @@
 }
 
 /* Sidebar update banner: force a clean vertical stack so nothing gets cramped
-   in a narrow sidebar (overrides the shared horizontal .update-banner rule
-   that is defined later in this file). */
-.update-banner-sidebar {
+   in a narrow sidebar. Double-class selectors so these ALWAYS beat the shared
+   horizontal .update-banner rule (defined later in this file) regardless of
+   cascade order — on Windows the banner was rendering inline/cramped. */
+.update-banner.update-banner-sidebar {
     display: flex;
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+    margin: 8px 8px 10px;
+    padding: 10px 12px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: var(--radius);
 }
 
-.update-banner-sidebar .update-banner-title {
+.update-banner.update-banner-sidebar .update-banner-title {
     flex-direction: column;
     align-items: center;
     text-align: center;
     gap: 4px;
+    margin-bottom: 0;
 }
 
-.update-banner-sidebar .update-banner-btn {
+.update-banner.update-banner-sidebar .update-banner-btn {
+    display: block;
     width: 100%;
+    padding: 6px;
 }
 
 /* ── Content ── */
