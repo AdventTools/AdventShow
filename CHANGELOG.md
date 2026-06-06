@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.5 (06 Iunie 2026)
+
+### Modificări
+- eliminat textul fantomă «Se încarcă...» care se întrezărea pe ecranul de proiecție în spatele ceasului și la tranziții
+
+---
+
 ## v1.3.4 (06 Iunie 2026)
 
 ### Modificări
