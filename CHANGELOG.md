@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.4 (06 Iunie 2026)
+
+### Modificări
+- contribuții: corecturile și imnurile adăugate de utilizatori ajung automat la autori pentru verificare (anonim, după 7 zile de stabilitate, cu opțiune de oprire în Setări), iar autorii pot publica corecturi care ajung la toată lumea la pornirea aplicației, fără instalare de versiune nouă
+
+---
+
 ## v1.3.3 (06 Iunie 2026)
 
 ### Modificări
