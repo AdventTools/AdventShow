@@ -634,9 +634,9 @@ export function ProjectionPage() {
                 {section.text}
               </p>
             </div>
-          ) : (
-            <p className="text-white/10 text-4xl font-thin">Se încarcă...</p>
-          )}
+          ) : null /* fără placeholder pe proiecție — orice text de sistem
+                      („Se încarcă...") se vedea fantomatic prin overlay-ul
+                      ceasului și la tranziții; ecran gol = corect aici */}
         </div>
       )}
 
