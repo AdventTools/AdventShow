@@ -2881,7 +2881,12 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
 }) {
-    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'about'>('projection');
+    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'contrib' | 'about'>('projection');
+    const [contribStatus, setContribStatus] = useState<{ pending: number; sent: number } | null>(null);
+    useEffect(() => {
+        if (activeTab !== 'contrib') return;
+        window.electron.contrib.status().then(setContribStatus).catch(() => setContribStatus(null));
+    }, [activeTab]);
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
 
@@ -2913,13 +2918,13 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                 </div>
                 <div className="modal-body">
                     <div className="settings-tabs">
-                        {(['projection', 'import', 'about'] as const).map(t => (
+                        {(['projection', 'import', 'contrib', 'about'] as const).map(t => (
                             <button
                                 key={t}
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : 'Despre'}
+                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'contrib' ? 'Contribuții' : 'Despre'}
                             </button>
                         ))}
                     </div>
@@ -3115,6 +3120,49 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                         </div>
                     )}
 
+                    {activeTab === 'contrib' && (
+                        <div className="settings-content">
+                            <p className="text-white/70 text-sm leading-relaxed">
+                                Dacă ai corectat un imn sau ai adăugat unul propriu, aplicația poate trimite
+                                automat modificarea către autorii AdventShow, pentru a fi verificată și — dacă
+                                e corectă — inclusă în baza oficială, pentru toată lumea.
+                            </p>
+                            <ul className="list-disc list-inside text-white/50 text-xs leading-relaxed mt-2 mb-3">
+                                <li>se trimite doar ce e neschimbat de cel puțin 7 zile (modificările „în lucru" nu pleacă)</li>
+                                <li>nu se trimit date personale — doar textul imnurilor modificate{settings.contribName ? ' și numele de mai jos' : ''}</li>
+                                <li>autorii decid manual ce intră în baza oficială</li>
+                            </ul>
+                            <div className="field">
+                                <label className="timer-checkbox">
+                                    <input
+                                        type="checkbox"
+                                        checked={settings.contribEnabled !== false}
+                                        onChange={e => saveSettings({ contribEnabled: e.target.checked })}
+                                    />
+                                    Trimite automat corecturile mele către AdventShow
+                                </label>
+                            </div>
+                            <div className="field">
+                                <label>Nume sau biserică (opțional, atașat contribuțiilor)</label>
+                                <input
+                                    type="text"
+                                    className="timer-text-input"
+                                    placeholder="ex: Biserica Speranța, Cluj"
+                                    value={settings.contribName ?? ''}
+                                    onChange={e => saveSettings({ contribName: e.target.value })}
+                                />
+                            </div>
+                            {contribStatus && (
+                                <p className="text-white/40 text-xs mt-2">
+                                    {contribStatus.pending === 0
+                                        ? 'Nicio modificare în așteptare.'
+                                        : `${contribStatus.pending} ${contribStatus.pending === 1 ? 'modificare așteaptă' : 'modificări așteaptă'} trimiterea (după carantina de 7 zile).`}
+                                    {contribStatus.sent > 0 && ` Trimise până acum: ${contribStatus.sent}.`}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     {activeTab === 'about' && (
                         <div className="settings-content">
                             <div className="flex flex-col items-center gap-5 py-6 text-center">
@@ -3134,7 +3182,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                 <div className="text-sm text-white/60 leading-relaxed max-w-sm w-full text-left">
                                     <p className="font-semibold text-white/80 mb-2 text-center">Ce include</p>
                                     <ul className="list-disc list-inside space-y-1">
-                                        <li><strong>922 imnuri</strong> din colecția „Imnuri Creștine"</li>
+                                        <li><strong>1.324 de imnuri și cântări</strong> — Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus</li>
                                         <li><strong>Biblia Cornilescu</strong> — 66 cărți, 31.102 versete</li>
                                         <li>Proiecție fullscreen pe ecran secundar</li>
                                         <li>Redare video — fișiere locale și YouTube</li>

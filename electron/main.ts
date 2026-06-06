@@ -37,6 +37,7 @@ import {
   syncSeedCorrections,
   syncSeedContent,
 } from './db'
+import { applyOtaCorrections, maybeSendContributions, getContributionStatus, ContribDeps } from './contrib'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -93,6 +94,14 @@ interface AppSettings {
     biblia?: { sidebarWidth: number; previewWidth: number }
     video?: { sidebarWidth: number; previewWidth: number }
   }
+  // ── Contribuții + corecturi OTA ──
+  contribEnabled?: boolean
+  contribName?: string
+  contribInstallId?: string
+  contribLastCheckAt?: string
+  contribSentHashes?: Record<string, string>
+  correctionsLastSeq?: number
+  correctionsLastCheckAt?: string
 }
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
@@ -129,6 +138,18 @@ function readSettings(): AppSettings {
 
 function writeSettings(settings: AppSettings) {
   fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
+}
+
+// dependențele modulului de contribuții/OTA — main.ts rămâne singurul proprietar
+// al settings.json (citire-modificare-scriere atomică aici, nu în contrib.ts)
+function contribDeps(seedDbPath: string): ContribDeps {
+  return {
+    seedDbPath,
+    appVersion: app.getVersion(),
+    getSettings: () => readSettings(),
+    patchSettings: (patch) => writeSettings({ ...readSettings(), ...patch }),
+    log: debugLog,
+  }
 }
 
 // ── Auto-update (electron-updater) ────────────────────────────────────────────
@@ -902,6 +923,12 @@ app.whenReady().then(() => {
           syncSeedCorrections(sp)
           // categorii/imnuri noi din seed ajung și la utilizatorii existenți
           syncSeedContent(sp)
+          // corecturi OTA + contribuții (async, silențioase, max 1/zi, timeout scurt;
+          // offline = se sar instant — nimic nu blochează pornirea sau proiecția)
+          const deps = contribDeps(sp)
+          applyOtaCorrections(deps)
+            .then(() => maybeSendContributions(deps))
+            .catch(err => debugLog('[startup] contrib/OTA error:', String(err)))
           break
         }
       }
@@ -921,6 +948,17 @@ app.whenReady().then(() => {
     const merged = { ...readSettings(), ...patch }
     writeSettings(merged)
     debugLog('[Settings] Saved:', Object.keys(patch).join(', '))
+  })
+
+  // status contribuții pentru panoul Setări (câte modificări așteaptă / trimise)
+  ipcMain.handle('contrib:status', () => {
+    const seedPaths = [
+      path.join(process.resourcesPath ?? '', 'hymns.db'),
+      path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
+    ]
+    const sp = seedPaths.find(p => fs.existsSync(p))
+    if (!sp) return { pending: 0, sent: 0 }
+    return getContributionStatus(contribDeps(sp))
   })
 
   // ── Screen / display info ─────────────────────────────────────────────────
