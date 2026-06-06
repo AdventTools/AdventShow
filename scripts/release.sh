@@ -125,8 +125,9 @@ CANDIDATE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 
 STATE_ROOT="scripts/.release-state"
 mkdir -p "$STATE_ROOT"
-# reluare: dacă package.json e DEJA la o versiune cu release început, continuăm acela
-if [ -f "$STATE_ROOT/${OLD_VERSION}/bump.done" ]; then
+# reluare: DOAR dacă package.json e la o versiune cu release început și NETERMINAT
+# (un release terminat are ci.done — atunci pornim un release NOU cu bump)
+if [ -f "$STATE_ROOT/${OLD_VERSION}/bump.done" ] && [ ! -f "$STATE_ROOT/${OLD_VERSION}/ci.done" ]; then
     NEW_VERSION="$OLD_VERSION"
 else
     NEW_VERSION="$CANDIDATE_VERSION"
