@@ -15,3 +15,9 @@ body.projection-mode,
 body.projection-mode #root {
   background: transparent !important;
 }
+
+/* ── Realtime: randarea slide-urilor de prezentare pe PROIECȚIE ──
+   (index.css e încărcat și de fereastra de proiecție; App.css nu) */
+.pres-shape-view ul, .pres-shape-view ol { padding-left: 1.2em; margin: 0.1em 0; }
+.pres-shape-view li { margin: 0.15em 0; }
+.pres-shape-view p { margin: 0.1em 0; }

@@ -102,8 +102,27 @@ export interface ProjectionTimerData {
   clockAnalog?: boolean;    // clock: cadran analogic în loc de digital
 }
 
+export interface PresShape {
+  x: number; y: number; w: number; h: number;  // procente din slide (0–100)
+  html: string;                                 // subset restrâns (p/ul/ol/li/b/i/u/br)
+}
+
+export interface PresSlide {
+  bgColor?: string;
+  shapes: PresShape[];
+}
+
+export interface Presentation {
+  name: string;
+  slides: PresSlide[];
+}
+
+export interface TemplateInfo { file: string; name: string }
+
 export interface ProjectionTextData {
-  text: string;             // free-text message, rendered centered + auto-fit
+  text?: string;            // free-text message, rendered centered + auto-fit
+  shapes?: PresShape[];     // slide de prezentare (forme poziționate procentual)
+  background?: { type: 'color' | 'gradient' | 'image'; value: string } | null;
 }
 
 export interface DisplayInfo {
@@ -217,6 +236,17 @@ export interface IElectronAPI {
   contrib: {
     status: () => Promise<{ pending: number; sent: number }>;
   };
+  presentation: {
+    pickFile: () => Promise<string | undefined>;
+    parse: (filePath: string) => Promise<{ ok: true; data: Presentation } | { ok: false; error: string }>;
+    parseHymn: (filePath: string) => Promise<{ ok: true; data: { number: string; title: string; sections: { type: 'strofa' | 'refren'; text: string }[] } } | { ok: false; error: string }>;
+  };
+  templates: {
+    list: () => Promise<TemplateInfo[]>;
+    load: (file: string) => Promise<Presentation>;
+    save: (name: string, data: Presentation) => Promise<TemplateInfo>;
+    delete: (file: string) => Promise<void>;
+  };
   screen: {
     getDisplays: () => Promise<DisplayInfo[]>;
   };
@@ -240,6 +270,7 @@ export interface IElectronAPI {
     // takes over the projection; sendSlide/hymn/bible returns to normal content.
     showTimer: (data: ProjectionTimerData) => Promise<void>;
     showText: (data: ProjectionTextData) => Promise<void>;
+    updateText: (data: ProjectionTextData) => Promise<void>;
     onTimer: (cb: (data: ProjectionTimerData) => void) => void;
     offTimer: () => void;
     onText: (cb: (data: ProjectionTextData) => void) => void;

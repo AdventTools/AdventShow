@@ -1,0 +1,23 @@
+{
+ "name": "Pauză",
+ "slides": [
+  {
+   "shapes": [
+    {
+     "x": 6,
+     "y": 32,
+     "w": 88,
+     "h": 22,
+     "html": "<p style=\"text-align:center\"><b>PAUZĂ</b></p>"
+    },
+    {
+     "x": 14,
+     "y": 58,
+     "w": 72,
+     "h": 14,
+     "html": "<p style=\"text-align:center\">Revenim în câteva minute</p>"
+    }
+   ]
+  }
+ ]
+}

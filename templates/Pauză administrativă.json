@@ -1,0 +1,23 @@
+{
+ "name": "Pauză administrativă",
+ "slides": [
+  {
+   "shapes": [
+    {
+     "x": 6,
+     "y": 32,
+     "w": 88,
+     "h": 22,
+     "html": "<p style=\"text-align:center\"><b>Pauză administrativă</b></p>"
+    },
+    {
+     "x": 14,
+     "y": 58,
+     "w": 72,
+     "h": 14,
+     "html": "<p style=\"text-align:center\">Mulțumim pentru răbdare</p>"
+    }
+   ]
+  }
+ ]
+}

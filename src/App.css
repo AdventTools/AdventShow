@@ -2510,3 +2510,73 @@
     color: var(--text-muted);
     line-height: 1.4;
 }
+
+/* ── Realtime: fundaluri predefinite ── */
+.bg-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.bg-swatch {
+    width: 34px;
+    height: 24px;
+    border-radius: 5px;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.bg-swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+.bg-swatch-img { display: flex; align-items: center; justify-content: center; font-size: 13px; background: var(--bg-elevated); }
+
+.live-indicator {
+    color: #ef4444;
+    font-size: 12px;
+    font-weight: 700;
+    align-self: center;
+    animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* ── Realtime: editorul de prezentare ── */
+.pres-sources { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pres-sources .editor-select { max-width: 220px; }
+
+.pres-toolbar { display: flex; gap: 4px; }
+.pres-toolbar button {
+    padding: 4px 10px;
+    font-size: 12px;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.pres-toolbar button:hover { border-color: var(--accent); }
+
+.pres-canvas {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #0a0a14;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    color: #fff;
+    line-height: 1.3;
+}
+.pres-shape {
+    position: absolute;
+    outline: 1px dashed rgba(255, 255, 255, 0.18);
+    border-radius: 3px;
+    padding: 1px 3px;
+    overflow: hidden;
+}
+.pres-shape:hover { outline-color: rgba(255, 255, 255, 0.4); }
+.pres-shape:focus { outline: 2px solid var(--accent); }
+.pres-shape ul, .pres-shape ol { padding-left: 1.2em; margin: 0.1em 0; }
+.pres-shape li { margin: 0.15em 0; }
+.pres-shape p { margin: 0.1em 0; }
+
+.pres-nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pres-save { display: flex; gap: 8px; align-items: center; }
+.pres-save .timer-text-input { flex: 1; }

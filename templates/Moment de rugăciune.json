@@ -1,0 +1,23 @@
+{
+ "name": "Moment de rugăciune",
+ "slides": [
+  {
+   "shapes": [
+    {
+     "x": 6,
+     "y": 30,
+     "w": 88,
+     "h": 22,
+     "html": "<p style=\"text-align:center\"><b>Moment de rugăciune</b></p>"
+    },
+    {
+     "x": 14,
+     "y": 56,
+     "w": 72,
+     "h": 16,
+     "html": "<p style=\"text-align:center\">Vă invităm la liniște și reculegere</p>"
+    }
+   ]
+  }
+ ]
+}
