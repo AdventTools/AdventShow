@@ -38,6 +38,11 @@ import {
   syncSeedContent,
 } from './db'
 import { applyOtaCorrections, maybeSendContributions, getContributionStatus, ContribDeps } from './contrib'
+import {
+  parsePresentationFile, seedTemplatesIfNeeded, listTemplates, loadTemplate,
+  saveTemplate, deleteTemplate, Presentation,
+} from './presentation'
+import { parsePresentationToHymn } from './import'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -912,6 +917,15 @@ app.whenReady().then(() => {
   // synchronous startup (window creation) finishes, so nothing is actually lost.
   setImmediate(() => {
     try {
+      // șabloanele standard se copiază în userData/templates DOAR dacă lipsesc —
+      // cele custom ale bisericii nu sunt atinse niciodată (supraviețuiesc la upgrade)
+      const resourceTemplates = [
+        path.join(process.resourcesPath ?? '', 'templates'),
+        path.join(process.env.APP_ROOT!, 'templates'),
+      ].find(p => fs.existsSync(p))
+      if (resourceTemplates) {
+        seedTemplatesIfNeeded(resourceTemplates, path.join(app.getPath('userData'), 'templates'))
+      }
       seedBibleFromJson()
       // Sync corrections from seed DB to user DB (e.g., fixed hymns)
       const seedPaths = [
@@ -948,6 +962,39 @@ app.whenReady().then(() => {
     const merged = { ...readSettings(), ...patch }
     writeSettings(merged)
     debugLog('[Settings] Saved:', Object.keys(patch).join(', '))
+  })
+
+  // ── Prezentări (Realtime) + șabloane ───────────────────────────────────────
+  const userTemplatesDir = () => path.join(app.getPath('userData'), 'templates')
+
+  ipcMain.handle('presentation:parse', async (_e, filePath: string) => {
+    try {
+      return { ok: true, data: await parsePresentationFile(filePath) }
+    } catch (err: unknown) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Nu am putut citi prezentarea.' }
+    }
+  })
+  ipcMain.handle('presentation:pick-file', async () => {
+    if (!win) return undefined
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      filters: [{ name: 'Prezentări PowerPoint', extensions: ['ppt', 'pptx'] }],
+    })
+    return result.canceled ? undefined : result.filePaths[0]
+  })
+  ipcMain.handle('templates:list', () => listTemplates(userTemplatesDir()))
+  ipcMain.handle('templates:load', (_e, file: string) => loadTemplate(userTemplatesDir(), file))
+  ipcMain.handle('templates:save', (_e, name: string, data: Presentation) =>
+    saveTemplate(userTemplatesDir(), name, data))
+  ipcMain.handle('templates:delete', (_e, file: string) => deleteTemplate(userTemplatesDir(), file))
+
+  // parsare PPT ca IMN, fără inserare — pentru fluxul „importă → editează → salvează"
+  ipcMain.handle('import:parse-hymn', async (_e, filePath: string) => {
+    try {
+      return { ok: true, data: await parsePresentationToHymn(filePath) }
+    } catch (err: unknown) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Nu am putut citi fișierul.' }
+    }
   })
 
   // status contribuții pentru panoul Setări (câte modificări așteaptă / trimise)
@@ -1177,6 +1224,14 @@ app.whenReady().then(() => {
   }
   ipcMain.handle('projection:show-timer', async (_e, data) => { await showSpecial('projection:timer', data) })
   ipcMain.handle('projection:show-text', async (_e, data) => { await showSpecial('projection:text', data) })
+
+  // Actualizare LIVE pentru textul deja proiectat: canal PUR de date — fără creare
+  // de fereastră, fără focus. showSpecial fura focusul de pe câmpul de text la
+  // fiecare propagare (focus proiecție → 200ms → focus înapoi), ceea ce înghițea
+  // tastele în timpul scrisului. Dacă proiecția nu (mai) există, nu facem nimic.
+  ipcMain.handle('projection:update-text', (_e, data) => {
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:text', data)
+  })
 
   ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') => {
     if (action === 'close') { if (isWinAlive(projectionWin)) projectionWin.close(); return }

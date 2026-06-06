@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData } from './vite-env';
+import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, ProjectionTextData } from './vite-env';
 
 // Convert a local file path to a proper file:// URL (handles Windows drive letters)
 function toFileUrl(p: string): string {
@@ -9,6 +9,12 @@ function toFileUrl(p: string): string {
 }
 
 // Rough viewport-width sizing for free text: fewer chars on the longest line → bigger.
+function textBackgroundCss(background?: { type: 'color' | 'gradient' | 'image'; value: string } | null): string | undefined {
+  if (!background?.value) return undefined;
+  if (background.type === 'image') return `url('localfile://${encodeURI(background.value)}') center / cover no-repeat`;
+  return background.value; // culoare sau gradient CSS
+}
+
 function freeTextVw(text: string): number {
   const longest = Math.max(1, ...text.split('\n').map(l => l.trim().length));
   return Math.min(9, Math.max(3, 140 / longest));
@@ -173,9 +179,9 @@ export function ProjectionPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Special modes: timer/clock + free text ──
+  // ── Special modes: timer/clock + free text / prezentare ──
   const [timer, setTimer] = useState<ProjectionTimerData | null>(null);
-  const [freeText, setFreeText] = useState<string | null>(null);
+  const [freeText, setFreeText] = useState<ProjectionTextData | null>(null);
 
   // Load background settings once on mount
   useEffect(() => {
@@ -210,7 +216,7 @@ export function ProjectionPage() {
       setVideoUrl(null);
     });
     window.electron.projection.onText((incoming) => {
-      setFreeText(incoming?.text ?? '');
+      setFreeText(incoming ?? { text: '' });
       setTimer(null);
       setData(null);
       setVisible(true);
@@ -474,25 +480,51 @@ export function ProjectionPage() {
         />
       )}
 
-      {/* Free-text message (fullscreen, auto-fit) */}
+      {/* Realtime: text simplu (auto-fit) sau slide de prezentare (forme), cu
+          fundal opțional per-mesaj peste fundalul global */}
       {freeText !== null && (
-        <div
-          className="absolute inset-0 z-20 flex items-center justify-center"
-          style={{ padding: '6vh 6vw' }}
-        >
-          <div
-            style={{
-              color: bg.contentTextColor ?? '#ffffff',
-              fontWeight: 700,
-              textAlign: 'center',
-              whiteSpace: 'pre-wrap',
-              lineHeight: 1.25,
-              textShadow: '0 2px 16px rgba(0,0,0,0.55)',
-              fontSize: `calc(clamp(2rem, ${freeTextVw(freeText)}vw, 9rem) * ${(bg.projectionFontSize ?? 1.2) * zoomLevel})`,
-            }}
-          >
-            {freeText || ' '}
-          </div>
+        <div className="absolute inset-0 z-20" style={{ background: textBackgroundCss(freeText.background) }}>
+          {freeText.shapes ? (
+            /* slide de prezentare: forme poziționate procentual; font relativ la
+               lățimea ecranului ca să fie identic cu editorul (scalat) */
+            <div
+              className="absolute inset-0"
+              style={{
+                fontSize: `calc(3.2vw * ${(bg.projectionFontSize ?? 1.2) * zoomLevel / 1.2})`,
+                color: bg.contentTextColor ?? '#ffffff',
+              }}
+            >
+              {freeText.shapes.map((sh, i) => (
+                <div
+                  key={i}
+                  className="pres-shape-view"
+                  style={{
+                    position: 'absolute',
+                    left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, minHeight: `${sh.h}%`,
+                    textShadow: '0 2px 16px rgba(0,0,0,0.55)',
+                    lineHeight: 1.3,
+                  }}
+                  dangerouslySetInnerHTML={{ __html: sh.html }}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ padding: '6vh 6vw' }}>
+              <div
+                style={{
+                  color: bg.contentTextColor ?? '#ffffff',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  whiteSpace: 'pre-wrap',
+                  lineHeight: 1.25,
+                  textShadow: '0 2px 16px rgba(0,0,0,0.55)',
+                  fontSize: `calc(clamp(2rem, ${freeTextVw(freeText.text ?? '')}vw, 9rem) * ${(bg.projectionFontSize ?? 1.2) * zoomLevel})`,
+                }}
+              >
+                {freeText.text || ' '}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

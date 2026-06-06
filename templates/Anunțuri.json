@@ -1,0 +1,23 @@
+{
+ "name": "Anunțuri",
+ "slides": [
+  {
+   "shapes": [
+    {
+     "x": 6,
+     "y": 8,
+     "w": 88,
+     "h": 16,
+     "html": "<p style=\"text-align:center\"><b>Anunțuri</b></p>"
+    },
+    {
+     "x": 10,
+     "y": 30,
+     "w": 80,
+     "h": 60,
+     "html": "<ul><li>Primul anunț</li><li>Al doilea anunț</li><li>Al treilea anunț</li></ul>"
+    }
+   ]
+  }
+ ]
+}

@@ -33,6 +33,9 @@ import type {
     Category,
     Hymn,
     HymnSection,
+    Presentation,
+    ProjectionTextData,
+    TemplateInfo,
     YouTubeEntry,
 } from './vite-env';
 
@@ -1144,7 +1147,7 @@ function App() {
                         className={`tab-btn ${tab === 'mesaj' ? 'active' : ''}`}
                         onClick={() => switchTab('mesaj')}
                     >
-                        Realtime text
+                        Realtime
                     </button>
                 </div>
 
@@ -2594,6 +2597,7 @@ function HymnEditorModal({
         : [{ type: 'strofa' as const, text: '' }]);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [importing, setImporting] = useState(false);
 
     const addSection = (type: 'strofa' | 'refren') => {
         setSections([...sections, { type, text: '' }]);
@@ -2651,6 +2655,36 @@ function HymnEditorModal({
                 </div>
                 <div className="modal-body">
                     <div className="hymn-editor">
+                        {editor.mode === 'add' && (
+                            <div className="field">
+                                <button
+                                    className="btn-sm"
+                                    disabled={importing}
+                                    onClick={async () => {
+                                        setError('');
+                                        const file = await window.electron.presentation.pickFile();
+                                        if (!file) return;
+                                        setImporting(true);
+                                        try {
+                                            const res = await window.electron.presentation.parseHymn(file);
+                                            if (res.ok) {
+                                                // precompletăm — userul revizuiește/corectează,
+                                                // imnul se salvează DOAR la „Salvează"
+                                                setNumber(res.data.number || '');
+                                                setTitle(res.data.title || '');
+                                                if (res.data.sections.length > 0) setSections(res.data.sections);
+                                            } else {
+                                                setError(res.error);
+                                            }
+                                        } finally {
+                                            setImporting(false);
+                                        }
+                                    }}
+                                >
+                                    {importing ? 'Se citește prezentarea...' : 'Din PowerPoint... (precompletează din .ppt/.pptx)'}
+                                </button>
+                            </div>
+                        )}
                         <div className="editor-row">
                             <div className="field">
                                 <label>Număr</label>
@@ -3426,58 +3460,366 @@ function TimerPanel() {
 // ═════════════════════════════════════════════════════════════════════════════
 // Message panel — free text projected live as you type
 // ═════════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════════
+// Realtime — text liber proiectat live + prezentări editabile (PPT/șabloane)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// fundaluri predefinite pentru Realtime (CSS — fără asset-uri)
+const BG_PRESETS: { name: string; css: string }[] = [
+    { name: 'Fundalul aplicației', css: '' },
+    { name: 'Albastru noapte', css: 'linear-gradient(135deg,#0b1026,#1b2a5b)' },
+    { name: 'Vișiniu', css: 'linear-gradient(135deg,#2a0a12,#5b1b2a)' },
+    { name: 'Verde pădure', css: 'linear-gradient(135deg,#06170f,#1b4332)' },
+    { name: 'Auriu apus', css: 'linear-gradient(135deg,#3a2305,#7a4a0f)' },
+    { name: 'Ardezie', css: 'linear-gradient(135deg,#0f172a,#334155)' },
+    { name: 'Negru', css: '#000000' },
+];
+
+// igienizare strictă a HTML-ului din editorul contenteditable: doar structura de
+// text (p/div/ul/ol/li/b/i/u/br/span) și doar text-align / margin-left din style
+const SANITIZE_ALLOWED = new Set(['P', 'DIV', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'BR', 'SPAN']);
+function sanitizePresHtml(html: string): string {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    const clean = (parent: Node) => {
+        for (const node of Array.from(parent.childNodes)) {
+            if (node.nodeType === Node.COMMENT_NODE) { node.remove(); continue; }
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            const el = node as HTMLElement;
+            clean(el); // întâi copiii (unwrap-ul de mai jos îi mută în părinte)
+            if (!SANITIZE_ALLOWED.has(el.tagName)) {
+                el.replaceWith(...Array.from(el.childNodes));
+                continue;
+            }
+            const align = el.style?.textAlign;
+            const marginLeft = el.style?.marginLeft;
+            for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
+            let style = '';
+            if (align) style += `text-align:${align};`;
+            if (marginLeft) style += `margin-left:${marginLeft};`;
+            if (style) el.setAttribute('style', style);
+        }
+    };
+    clean(tpl.content);
+    return tpl.innerHTML;
+}
+
+type BgChoice = { kind: 'preset'; css: string } | { kind: 'image'; path: string };
+
+function bgToPayload(bg: BgChoice, slideBgColor?: string): ProjectionTextData['background'] {
+    if (bg.kind === 'image') return { type: 'image', value: bg.path };
+    if (bg.css) return { type: 'gradient', value: bg.css };
+    if (slideBgColor) return { type: 'color', value: slideBgColor };
+    return null; // fundalul global al aplicației
+}
+
+function BackgroundPicker({ bg, onChange }: { bg: BgChoice; onChange: (b: BgChoice) => void }) {
+    return (
+        <div className="field">
+            <label className="timer-label">Fundal</label>
+            <div className="bg-presets">
+                {BG_PRESETS.map(p => (
+                    <button
+                        key={p.name}
+                        type="button"
+                        title={p.name}
+                        className={`bg-swatch ${bg.kind === 'preset' && bg.css === p.css ? 'active' : ''}`}
+                        style={{ background: p.css || 'repeating-conic-gradient(#444 0 25%, #222 0 50%) 0 0/12px 12px' }}
+                        onClick={() => onChange({ kind: 'preset', css: p.css })}
+                    />
+                ))}
+                <button
+                    type="button"
+                    className={`bg-swatch bg-swatch-img ${bg.kind === 'image' ? 'active' : ''}`}
+                    title="Imagine de pe disc..."
+                    onClick={async () => {
+                        const p = await window.electron.dialog.pickMedia('image');
+                        if (p) onChange({ kind: 'image', path: p });
+                    }}
+                >🖼</button>
+            </div>
+            {bg.kind === 'image' && (
+                <span className="text-white/40 text-xs">{bg.path.split('/').pop()}</span>
+            )}
+        </div>
+    );
+}
+
 function MessagePanel() {
+    const [mode, setMode] = useState<'text' | 'pres'>('text');
+
+    // ── Text simplu ──────────────────────────────────────────────────────────
     const [text, setText] = useState('');
     const [live, setLive] = useState(true);
     const [projected, setProjected] = useState(false);
+    const [bgChoice, setBgChoice] = useState<BgChoice>({ kind: 'preset', css: '' });
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Prima proiectare: deschide fereastra (cu dansul de focus, O SINGURĂ dată).
     const project = useCallback((value: string) => {
-        window.electron.projection.showText({ text: value });
+        window.electron.projection.showText({ text: value, background: bgToPayload(bgChoice) });
         setProjected(true);
-    }, []);
+    }, [bgChoice]);
 
-    // Live mode: push to projection as the user types (debounced), but only once
-    // it's already projected (so opening the screen is an explicit first action).
+    // Actualizările ulterioare: canal PUR de date — fără creare de fereastră, fără
+    // focus. showText la fiecare propagare fura focusul de pe textarea și înghițea
+    // tastele: scriai „pe sărite".
+    const update = useCallback((value: string) => {
+        window.electron.projection.updateText({ text: value, background: bgToPayload(bgChoice) });
+    }, [bgChoice]);
+
     useEffect(() => {
-        if (!live || !projected) return;
+        if (mode !== 'text' || !live || !projected) return;
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        debounceRef.current = setTimeout(() => project(text), 250);
+        debounceRef.current = setTimeout(() => update(text), 400);
         return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    }, [text, live, projected, project]);
+    }, [text, live, projected, update, mode]);
+
+    // schimbarea fundalului se propagă imediat dacă suntem proiectați
+    useEffect(() => {
+        if (mode === 'text' && projected) update(text);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [bgChoice]);
 
     const stop = useCallback(() => {
         setProjected(false);
         window.electron.projection.close();
     }, []);
 
+    // ── Prezentare (PPT convertit / șabloane) ────────────────────────────────
+    const presRef = useRef<Presentation | null>(null);
+    const [presName, setPresName] = useState<string | null>(null);
+    const [slideCount, setSlideCount] = useState(0);
+    const [curSlide, setCurSlide] = useState(0);
+    const [presProjected, setPresProjected] = useState(false);
+    const [templates, setTemplates] = useState<TemplateInfo[]>([]);
+    const [selTemplate, setSelTemplate] = useState('');
+    const [saveName, setSaveName] = useState('');
+    const [presStatus, setPresStatus] = useState('');
+    const [canvasFont, setCanvasFont] = useState(16);
+    const canvasRef = useRef<HTMLDivElement>(null);
+    const presDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const refreshTemplates = useCallback(() => {
+        window.electron.templates.list().then(setTemplates).catch(() => setTemplates([]));
+    }, []);
+    useEffect(() => { if (mode === 'pres') refreshTemplates(); }, [mode, refreshTemplates]);
+
+    // fontul din canvas scalează cu lățimea, ca pe proiecție (3.2vw acolo)
+    useEffect(() => {
+        if (mode !== 'pres') return;
+        const el = canvasRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(() => setCanvasFont(el.clientWidth * 0.032));
+        ro.observe(el);
+        setCanvasFont(el.clientWidth * 0.032);
+        return () => ro.disconnect();
+    }, [mode, presName, slideCount]);
+
+    const setPresentation = (p: Presentation | null) => {
+        presRef.current = p;
+        setPresName(p?.name ?? null);
+        setSlideCount(p?.slides.length ?? 0);
+        setCurSlide(0);
+        setPresProjected(false);
+    };
+
+    const slidePayload = useCallback((idx: number): ProjectionTextData => {
+        const p = presRef.current!;
+        const slide = p.slides[idx];
+        return { shapes: slide.shapes, background: bgToPayload(bgChoice, slide.bgColor) };
+    }, [bgChoice]);
+
+    const projectSlide = useCallback((idx: number, first: boolean) => {
+        const payload = slidePayload(idx);
+        if (first) window.electron.projection.showText(payload);
+        else window.electron.projection.updateText(payload);
+        setPresProjected(true);
+    }, [slidePayload]);
+
+    const schedulePresUpdate = useCallback(() => {
+        if (!presProjected) return;
+        if (presDebounce.current) clearTimeout(presDebounce.current);
+        presDebounce.current = setTimeout(() => {
+            if (presRef.current) window.electron.projection.updateText(slidePayload(curSlide));
+        }, 500);
+    }, [presProjected, slidePayload, curSlide]);
+
+    const goSlide = (idx: number) => {
+        if (!presRef.current) return;
+        const n = presRef.current.slides.length;
+        const clamped = Math.max(0, Math.min(n - 1, idx));
+        setCurSlide(clamped);
+        if (presProjected) projectSlide(clamped, false);
+    };
+
+    const onShapeInput = (shapeIdx: number, el: HTMLElement) => {
+        const p = presRef.current;
+        if (!p) return;
+        p.slides[curSlide].shapes[shapeIdx].html = sanitizePresHtml(el.innerHTML);
+        schedulePresUpdate();
+    };
+
+    const exec = (cmd: string) => {
+        // butoanele folosesc onMouseDown+preventDefault ca selecția să rămână în casetă
+        document.execCommand(cmd, false);
+    };
+
+    const slide = presRef.current?.slides[curSlide];
+
     return (
         <div className="content-inner message-panel">
-            <label className="timer-label">Text de proiectat</label>
-            <textarea
-                className="message-textarea"
-                placeholder="Scrie un mesaj... apare pe proiecție în timp real."
-                value={text}
-                onChange={e => setText(e.target.value)}
-                rows={6}
-            />
-            <label className="timer-checkbox">
-                <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
-                Actualizare în timp real (pe măsură ce scrii)
-            </label>
-            <div className="timer-actions">
-                {!projected ? (
-                    <button className="btn-project timer-start" onClick={() => project(text)}>Proiectează</button>
-                ) : (
-                    <>
-                        {!live && (
-                            <button className="btn-project timer-start" onClick={() => project(text)}>Trimite</button>
-                        )}
-                        <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
-                    </>
-                )}
+            <div className="timer-mode-switch">
+                <button className={`timer-mode-btn ${mode === 'text' ? 'active' : ''}`} onClick={() => setMode('text')}>
+                    Text simplu
+                </button>
+                <button className={`timer-mode-btn ${mode === 'pres' ? 'active' : ''}`} onClick={() => setMode('pres')}>
+                    Prezentare
+                </button>
             </div>
-            <p className="timer-hint">Bun pentru anunțuri, urări, un verset tastat manual sau „Pauză 10 min".</p>
+
+            {mode === 'text' && (<>
+                <label className="timer-label">Text de proiectat</label>
+                <textarea
+                    className="message-textarea"
+                    placeholder="Scrie un mesaj... apare pe proiecție în timp real."
+                    value={text}
+                    onChange={e => setText(e.target.value)}
+                    rows={6}
+                />
+                <label className="timer-checkbox">
+                    <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
+                    Actualizare în timp real (pe măsură ce scrii)
+                </label>
+                <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
+                <div className="timer-actions">
+                    {!projected ? (
+                        <button className="btn-project timer-start" onClick={() => project(text)}>Proiectează</button>
+                    ) : (
+                        <>
+                            {live && <span className="live-indicator">● LIVE</span>}
+                            {!live && (
+                                <button className="btn-project timer-start" onClick={() => update(text)}>Trimite</button>
+                            )}
+                            <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
+                        </>
+                    )}
+                </div>
+                <p className="timer-hint">Bun pentru anunțuri, urări, un verset tastat manual sau „Pauză 10 min".</p>
+            </>)}
+
+            {mode === 'pres' && (<>
+                <div className="pres-sources">
+                    <select
+                        className="editor-select"
+                        value={selTemplate}
+                        onChange={e => setSelTemplate(e.target.value)}
+                    >
+                        <option value="">— Șabloane —</option>
+                        {templates.map(t => <option key={t.file} value={t.file}>{t.name}</option>)}
+                    </select>
+                    <button className="btn-sm" disabled={!selTemplate} onClick={async () => {
+                        try {
+                            const p = await window.electron.templates.load(selTemplate);
+                            setPresentation(p);
+                            setPresStatus('');
+                        } catch { setPresStatus('Nu am putut încărca șablonul.'); }
+                    }}>Încarcă</button>
+                    <button className="btn-sm" onClick={async () => {
+                        const file = await window.electron.presentation.pickFile();
+                        if (!file) return;
+                        setPresStatus('Se convertește prezentarea...');
+                        const res = await window.electron.presentation.parse(file);
+                        if (res.ok) { setPresentation(res.data); setPresStatus(''); }
+                        else setPresStatus(res.error);
+                    }}>Deschide PPT...</button>
+                </div>
+
+                {presName !== null && presRef.current && (<>
+                    <div className="pres-toolbar">
+                        <button onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Listă cu buline">•&nbsp;Listă</button>
+                        <button onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Listă numerotată">1.&nbsp;Listă</button>
+                        <button onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Îngroșat"><b>B</b></button>
+                        <button onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Înclinat"><i>I</i></button>
+                        <button onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }} title="Aliniere stânga">⟸</button>
+                        <button onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }} title="Centrat">≡</button>
+                    </div>
+
+                    <div className="pres-canvas" ref={canvasRef} style={{ fontSize: canvasFont }}>
+                        {slide?.shapes.map((sh, i) => (
+                            <div
+                                key={`${presName}-${curSlide}-${i}`}
+                                className="pres-shape"
+                                contentEditable
+                                suppressContentEditableWarning
+                                style={{ left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, minHeight: `${sh.h}%` }}
+                                onInput={e => onShapeInput(i, e.currentTarget)}
+                                dangerouslySetInnerHTML={{ __html: sh.html }}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="pres-nav">
+                        <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
+                        <span className="text-white/60 text-xs">slide {curSlide + 1} / {slideCount}</span>
+                        <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
+                        <button className="btn-sm" onClick={() => {
+                            const p = presRef.current!;
+                            p.slides.splice(curSlide + 1, 0, { shapes: [{ x: 8, y: 12, w: 84, h: 76, html: '<p style="text-align:center">Text nou</p>' }] });
+                            setSlideCount(p.slides.length);
+                            goSlide(curSlide + 1);
+                        }}>+ Slide</button>
+                        <button className="btn-sm" disabled={slideCount <= 1} onClick={() => {
+                            const p = presRef.current!;
+                            p.slides.splice(curSlide, 1);
+                            setSlideCount(p.slides.length);
+                            goSlide(Math.min(curSlide, p.slides.length - 1));
+                            if (presProjected) projectSlide(Math.min(curSlide, p.slides.length - 1), false);
+                        }}>Șterge slide</button>
+                    </div>
+
+                    <BackgroundPicker bg={bgChoice} onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }} />
+
+                    <div className="timer-actions">
+                        {!presProjected ? (
+                            <button className="btn-project timer-start" onClick={() => projectSlide(curSlide, true)}>Proiectează</button>
+                        ) : (
+                            <>
+                                <span className="live-indicator">● LIVE</span>
+                                <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>Oprește</button>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="pres-save">
+                        <input
+                            className="timer-text-input"
+                            type="text"
+                            placeholder="Nume șablon (ex: Anunțuri duminică)"
+                            value={saveName}
+                            onChange={e => setSaveName(e.target.value)}
+                        />
+                        <button className="btn-sm" disabled={!saveName.trim()} onClick={async () => {
+                            try {
+                                const info = await window.electron.templates.save(saveName, { ...presRef.current!, name: saveName.trim() });
+                                setSaveName('');
+                                refreshTemplates();
+                                setSelTemplate(info.file);
+                                setPresStatus(`Șablon salvat: ${info.name}`);
+                            } catch { setPresStatus('Salvarea șablonului a eșuat.'); }
+                        }}>Salvează ca șablon</button>
+                    </div>
+                </>)}
+
+                {presStatus && <p className="timer-hint">{presStatus}</p>}
+                {presName === null && !presStatus && (
+                    <p className="timer-hint">
+                        Încarcă un șablon sau deschide un PowerPoint de pe disc — se convertește în
+                        slide-uri pe care le poți edita aici, cu propagare live pe proiecție.
+                        Buleturile și numerotarea se păstrează și poți adăuga altele.
+                    </p>
+                )}
+            </>)}
         </div>
     );
 }

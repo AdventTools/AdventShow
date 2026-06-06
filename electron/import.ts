@@ -667,6 +667,41 @@ async function extractPptxImportData(
   return buildImportData(info, dedupeSections(sections), categoryId);
 }
 
+/**
+ * Extrage blocurile de text per slide dintr-un .ppt legacy (cu fallback-ul pentru
+ * containerele Slide). Partajat cu electron/presentation.ts.
+ */
+export async function parseLegacyPptTextSlides(filePath: string): Promise<{ textType: number; text: string }[][]> {
+  const buffer = await fs.readFile(filePath);
+  const cfb = CFB.read(buffer, { type: 'buffer' });
+  const documentStream = CFB.find(cfb, 'PowerPoint Document');
+  if (!documentStream?.content) throw new Error('Nu am găsit fluxul "PowerPoint Document".');
+  const documentBuffer = Buffer.from(documentStream.content);
+  let slides: LegacyPptSlide[] = [];
+  try {
+    slides = extractLegacyPptSlides(documentBuffer);
+  } catch { /* cade pe fallback */ }
+  const totalText = (list: LegacyPptSlide[]) =>
+    list.reduce((n, sl) => n + sl.textBlocks.reduce((m, b) => m + b.text.length, 0), 0);
+  const fromContainers = extractLegacyPptSlidesFromContainers(documentBuffer);
+  if ((slides.length === 0 || totalText(fromContainers) > totalText(slides) * 1.5) && fromContainers.length > 0) {
+    slides = fromContainers;
+  }
+  if (slides.length === 0) throw new Error('Nu am găsit slide-uri cu text în fișierul .ppt.');
+  return slides.map(s => s.textBlocks);
+}
+
+/**
+ * Parsează un PPT/PPTX ca IMN, FĂRĂ să-l insereze în baza de date — pentru fluxul
+ * „importă → revizuiește în editor → salvează ca imn nou".
+ */
+export async function parsePresentationToHymn(filePath: string): Promise<HymnImportData> {
+  const ext = path.extname(filePath).toLowerCase();
+  return ext === '.ppt'
+    ? extractLegacyPptImportData(filePath, filePath)
+    : extractPptxImportData(filePath, filePath);
+}
+
 export async function importPresentationFiles(
   filePaths: string[],
   categoryId?: number

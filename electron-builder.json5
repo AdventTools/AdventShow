@@ -23,6 +23,13 @@
       "filter": ["**/*"]
     },
     {
+      // șabloane standard de prezentare (Realtime) — copiate la pornire în
+      // userData/templates doar dacă lipsesc; cele custom nu sunt atinse
+      "from": "templates",
+      "to": "templates",
+      "filter": ["**/*.json"]
+    },
+    {
       "from": "scripts/cornilescu.json",
       "to": "cornilescu.json",
       "filter": ["**/*"]

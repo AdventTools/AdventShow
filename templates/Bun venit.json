@@ -1,0 +1,23 @@
+{
+ "name": "Bun venit",
+ "slides": [
+  {
+   "shapes": [
+    {
+     "x": 6,
+     "y": 30,
+     "w": 88,
+     "h": 24,
+     "html": "<p style=\"text-align:center\"><b>Bun venit!</b></p>"
+    },
+    {
+     "x": 12,
+     "y": 58,
+     "w": 76,
+     "h": 16,
+     "html": "<p style=\"text-align:center\">Ne bucurăm că sunteți alături de noi</p>"
+    }
+   ]
+  }
+ ]
+}

@@ -84,6 +84,19 @@ contextBridge.exposeInMainWorld('electron', {
     status: () => ipcRenderer.invoke('contrib:status'),
   },
 
+  presentation: {
+    pickFile: () => ipcRenderer.invoke('presentation:pick-file'),
+    parse: (filePath: string) => ipcRenderer.invoke('presentation:parse', filePath),
+    parseHymn: (filePath: string) => ipcRenderer.invoke('import:parse-hymn', filePath),
+  },
+
+  templates: {
+    list: () => ipcRenderer.invoke('templates:list'),
+    load: (file: string) => ipcRenderer.invoke('templates:load', file),
+    save: (name: string, data: unknown) => ipcRenderer.invoke('templates:save', name, data),
+    delete: (file: string) => ipcRenderer.invoke('templates:delete', file),
+  },
+
   screen: {
     getDisplays: () => ipcRenderer.invoke('screen:get-displays'),
   },
@@ -128,6 +141,7 @@ contextBridge.exposeInMainWorld('electron', {
     // Special full-screen modes (timer/clock/free text)
     showTimer: (data: any) => ipcRenderer.invoke('projection:show-timer', data),
     showText: (data: any) => ipcRenderer.invoke('projection:show-text', data),
+    updateText: (data: unknown) => ipcRenderer.invoke('projection:update-text', data),
     onTimer: (cb: (data: any) => void) =>
       ipcRenderer.on('projection:timer', (_e, data) => cb(data)),
     offTimer: () => ipcRenderer.removeAllListeners('projection:timer'),
