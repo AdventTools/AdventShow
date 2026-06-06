@@ -1,0 +1,4 @@
+{
+  "_descriere": "Feed de corecturi OTA — aplicația îl citește la pornire (max 1/zi) și aplică intrările cu seq mai mare decât ultimul aplicat local. Publicare DOAR prin scripts/publish_correction.py, rulat manual de autori. force=true suprascrie inclusiv modificările proprii ale utilizatorului; altfel ele au prioritate.",
+  "entries": []
+}

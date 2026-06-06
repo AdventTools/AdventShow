@@ -141,6 +141,14 @@ export interface AppSettings {
     biblia?: { sidebarWidth: number; previewWidth: number };
     video?: { sidebarWidth: number; previewWidth: number };
   };
+  // ── Contribuții + corecturi OTA ──
+  contribEnabled?: boolean;   // trimite automat corecturile către AdventShow (default true)
+  contribName?: string;       // nume/biserică, opțional, atașat contribuțiilor
+  contribInstallId?: string;  // ID anonim al instalării (generat la prima trimitere)
+  contribLastCheckAt?: string; // ISO — ultima verificare de trimitere (max 1/zi)
+  contribSentHashes?: Record<string, string>; // cheie imn -> hash ultima trimitere (dedup)
+  correctionsLastSeq?: number; // ultimul seq aplicat din feed-ul OTA
+  correctionsLastCheckAt?: string; // ISO — ultima verificare a feed-ului (max 1/zi)
 }
 
 export interface YouTubeEntry {
@@ -205,6 +213,9 @@ export interface IElectronAPI {
   settings: {
     get: () => Promise<AppSettings>;
     set: (patch: Partial<AppSettings>) => Promise<void>;
+  };
+  contrib: {
+    status: () => Promise<{ pending: number; sent: number }>;
   };
   screen: {
     getDisplays: () => Promise<DisplayInfo[]>;

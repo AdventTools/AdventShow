@@ -80,6 +80,10 @@ contextBridge.exposeInMainWorld('electron', {
     set: (patch: Record<string, unknown>) => ipcRenderer.invoke('settings:set', patch),
   },
 
+  contrib: {
+    status: () => ipcRenderer.invoke('contrib:status'),
+  },
+
   screen: {
     getDisplays: () => ipcRenderer.invoke('screen:get-displays'),
   },
