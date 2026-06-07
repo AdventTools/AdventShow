@@ -166,7 +166,7 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 
 ### 🤝 Corecturi care circulă singure
 
-- Dacă **corectezi un imn** sau **adaugi unul propriu**, modificarea se trimite automat autorilor pentru verificare — anonim, abia după ce a stat neschimbată 7 zile (deci nu pleacă lucru în curs). Se poate opri oricând din Setări → Contribuții.
+- Dacă **corectezi un imn** sau **adaugi unul propriu**, aplicația trimite modificarea autorilor, ca să o verifice și — dacă e corectă — să o includă în baza oficială, pentru toată lumea. Trimiterea se face automat și abia după ce modificarea a rămas neschimbată 7 zile: pleacă doar forma finală, nu și încercările intermediare.
 - În sens invers, **corecturile oficiale** publicate de autori ajung automat la toate instalațiile, la pornirea aplicației — fără să aștepți o versiune nouă.
 - La actualizare, **baza ta de imnuri se aduce singură la zi** cu colecțiile și corecturile noi, fără să-ți atingă modificările proprii.
 

@@ -3307,12 +3307,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     onChangePassword: () => void;
     onForgotPassword: () => void;
 }) {
-    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'contrib' | 'admin' | 'about'>('projection');
-    const [contribStatus, setContribStatus] = useState<{ pending: number; sent: number } | null>(null);
-    useEffect(() => {
-        if (activeTab !== 'contrib') return;
-        window.electron.contrib.status().then(setContribStatus).catch(() => setContribStatus(null));
-    }, [activeTab]);
+    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'admin' | 'about'>('projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
 
@@ -3344,13 +3339,13 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                 </div>
                 <div className="modal-body">
                     <div className="settings-tabs">
-                        {(['projection', 'import', 'contrib', 'admin', 'about'] as const).map(t => (
+                        {(['projection', 'import', 'admin', 'about'] as const).map(t => (
                             <button
                                 key={t}
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'contrib' ? 'Contribuții' : t === 'admin' ? 'Administrare' : 'Despre'}
+                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'admin' ? 'Administrare' : 'Despre'}
                             </button>
                         ))}
                     </div>
@@ -3543,49 +3538,6 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 </button>
                             </div>
                             {importStatus && <div className="import-msg">{importStatus}</div>}
-                        </div>
-                    )}
-
-                    {activeTab === 'contrib' && (
-                        <div className="settings-content">
-                            <p className="text-white/70 text-sm leading-relaxed">
-                                Dacă ai corectat un imn sau ai adăugat unul propriu, aplicația poate trimite
-                                automat modificarea către autorii AdventShow, pentru a fi verificată și — dacă
-                                e corectă — inclusă în baza oficială, pentru toată lumea.
-                            </p>
-                            <ul className="list-disc list-inside text-white/50 text-xs leading-relaxed mt-2 mb-3">
-                                <li>se trimite doar ce e neschimbat de cel puțin 7 zile (modificările „în lucru" nu pleacă)</li>
-                                <li>nu se trimit date personale — doar textul imnurilor modificate{settings.contribName ? ' și numele de mai jos' : ''}</li>
-                                <li>autorii decid manual ce intră în baza oficială</li>
-                            </ul>
-                            <div className="field">
-                                <label className="timer-checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={settings.contribEnabled !== false}
-                                        onChange={e => saveSettings({ contribEnabled: e.target.checked })}
-                                    />
-                                    Trimite automat corecturile mele către AdventShow
-                                </label>
-                            </div>
-                            <div className="field">
-                                <label>Nume sau biserică (opțional, atașat contribuțiilor)</label>
-                                <input
-                                    type="text"
-                                    className="timer-text-input"
-                                    placeholder="ex: Biserica Speranța, Cluj"
-                                    value={settings.contribName ?? ''}
-                                    onChange={e => saveSettings({ contribName: e.target.value })}
-                                />
-                            </div>
-                            {contribStatus && (
-                                <p className="text-white/40 text-xs mt-2">
-                                    {contribStatus.pending === 0
-                                        ? 'Nicio modificare în așteptare.'
-                                        : `${contribStatus.pending} ${contribStatus.pending === 1 ? 'modificare așteaptă' : 'modificări așteaptă'} trimiterea (după carantina de 7 zile).`}
-                                    {contribStatus.sent > 0 && ` Trimise până acum: ${contribStatus.sent}.`}
-                                </p>
-                            )}
                         </div>
                     )}
 
