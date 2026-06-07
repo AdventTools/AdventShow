@@ -374,6 +374,19 @@ export async function parsePresentationFile(filePath: string, cacheDir?: string)
 
 export interface TemplateInfo { file: string; name: string }
 
+// Fișierele livrate au DOAR nume ASCII: numele cu diacritice rupeau sigiliul
+// semnăturii macOS la dezarhivarea zip-ului de auto-update (NFC pe disc vs NFD
+// după unzip → codesign vedea «file added» + «file missing» → app „damaged").
+// Numele afișat vine din câmpul `name` din JSON, nu din numele fișierului.
+// Instalările care au apucat numele vechi cu diacritice nu primesc duplicate:
+const LEGACY_SEED_NAMES: Record<string, string> = {
+  'anunturi.json': 'Anunțuri.json',
+  'bun-venit.json': 'Bun venit.json',
+  'moment-de-rugaciune.json': 'Moment de rugăciune.json',
+  'pauza-administrativa.json': 'Pauză administrativă.json',
+  'pauza.json': 'Pauză.json',
+};
+
 export function seedTemplatesIfNeeded(resourceTemplatesDir: string, userTemplatesDir: string) {
   try {
     if (!fsSync.existsSync(userTemplatesDir)) fsSync.mkdirSync(userTemplatesDir, { recursive: true });
@@ -381,9 +394,11 @@ export function seedTemplatesIfNeeded(resourceTemplatesDir: string, userTemplate
     for (const f of fsSync.readdirSync(resourceTemplatesDir)) {
       if (!f.endsWith('.json')) continue;
       const dest = path.join(userTemplatesDir, f);
-      if (!fsSync.existsSync(dest)) {
-        fsSync.copyFileSync(path.join(resourceTemplatesDir, f), dest);
-      }
+      if (fsSync.existsSync(dest)) continue;
+      const legacy = LEGACY_SEED_NAMES[f];
+      if (legacy && [legacy.normalize('NFC'), legacy.normalize('NFD')].some(n =>
+        fsSync.existsSync(path.join(userTemplatesDir, n)))) continue;
+      fsSync.copyFileSync(path.join(resourceTemplatesDir, f), dest);
     }
   } catch (err) {
     console.error('[Templates] seed failed:', err);
