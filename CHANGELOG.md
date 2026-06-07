@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.6 (07 Iunie 2026)
+
+### Modificări
+- Realtime: prezentări PowerPoint deschise cu formatarea lor și editabile în timp real chiar în timpul proiecției, editor pe tot ecranul (liste, coloane, casete mutabile), șabloane incluse și personale, păstrate la actualizări; Ceas cu fundal la alegere, schimbabil live; recuperarea parolei direct din aplicație — cod de deblocare dictat telefonic de autori, plus schimbarea parolei din Setări → Administrare; la instalare se cer biserica și localitatea (instalările existente le completează la prima pornire după actualizare), pentru evidența instalărilor și sprijin la recuperarea parolei; acțiunile sensibile (editare imnuri, importuri, ștergere șabloane) cer parola; pornirea aplicației maximizată; consum redus — video-ul de fundal se oprește când nu se vede
+
+---
+
 ## v1.3.5 (06 Iunie 2026)
 
 ### Modificări
