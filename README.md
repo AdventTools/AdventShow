@@ -2,7 +2,7 @@
 
 ### Proiectează imnuri, versete și mesaje pe ecranul bisericii — simplu, gratuit, fără internet.
 
-**AdventShow** este aplicația de proiecție gândită pentru slujbe, Școala de Sabat, întâlniri de tineret și orice eveniment din biserică. Pornește pe al doilea ecran (proiector sau televizor), iar tu controlezi tot de pe laptop. Totul e deja înăuntru: **Biblia Cornilescu completă** (66 cărți, 31.102 versete) și **922 de imnuri** din „Imnuri Creștine".
+**AdventShow** este aplicația de proiecție gândită pentru slujbe, Școala de Sabat, întâlniri de tineret și orice eveniment din biserică. Pornește pe al doilea ecran (proiector sau televizor), iar tu controlezi tot de pe laptop. Totul e deja înăuntru: **Biblia Cornilescu completă** (66 cărți, 31.102 versete) și **1.324 de imnuri și cântări** din șase colecții.
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 ![version](https://img.shields.io/badge/versiune-1.3.5-green)
@@ -14,12 +14,15 @@
 
 ## ⚡ Pe scurt
 
-- 🎵 **922 de imnuri** + editor și import din PowerPoint
+- 🎵 **1.324 de imnuri și cântări** — Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus
 - 📖 **Biblia Cornilescu** cu căutare deșteaptă (`ioa 3 16` → Ioan 3:16)
 - 🖥️ **Proiecție pe al doilea ecran** cu fundal, video și font reglabil
 - 🎬 **Redare video** din fișier sau direct de pe **YouTube**
-- ⏱️ **Cronometru** — numărătoare inversă, cronometru și ceas pe proiector
-- 💬 **Mesaj liber** — scrii un text și apare instant pe ecran
+- 🕰️ **Ceas** — numărătoare inversă, cronometru și ceas (digital sau analogic) pe proiector
+- 💬 **Realtime** — scrii și apare instant pe ecran; sau deschizi un **PowerPoint** și îl editezi live, în timpul proiecției
+- 📋 **Șabloane** — ecrane gata făcute (Bun venit, Anunțuri, Pauză…) plus ale tale, păstrate la actualizări
+- 🔐 **Parolă de administrare** — protejează imnurile de modificări accidentale; se recuperează telefonic, direct din aplicație
+- 🤝 **Corecturi care circulă** — corecturile tale ajung la autori, corecturile oficiale ajung automat la toată lumea
 - 🔄 **Actualizare automată** — aplicația se ține singură la zi
 - 🔎 **Căutare fără diacritice** — scrii „rugaciune", găsește „rugăciune"
 
@@ -35,7 +38,9 @@ Apasă pe linkul potrivit calculatorului tău — descărcarea pornește direct:
 | **macOS** | [AdventShow-Mac-1.3.5.dmg](https://github.com/AdventTools/AdventShow/releases/download/v1.3.5/AdventShow-Mac-1.3.5.dmg) |
 | **Linux** | [AdventShow-Linux.AppImage](https://github.com/AdventTools/AdventShow/releases/download/v1.3.5/AdventShow-Linux.AppImage) |
 
-> 💡 La prima pornire, aplicația se pregătește singură — nu trebuie să imporți nimic. Toate cele 922 de imnuri și întreaga Biblie Cornilescu sunt deja incluse.
+> 💡 La prima pornire, aplicația se pregătește singură — nu trebuie să imporți nimic. Toate cele 1.324 de imnuri și întreaga Biblie Cornilescu sunt deja incluse.
+
+La prima pornire îți setezi o **parolă de administrare** și completezi **biserica și localitatea** — acestea se trimit autorilor pentru evidența instalărilor și ca să te poată ajuta dacă uiți parola. Nu se trimite nimic altceva.
 
 ### 🪟 Pe Windows
 
@@ -72,13 +77,13 @@ Apasă pe linkul potrivit calculatorului tău — descărcarea pornește direct:
 
 ## ✨ Ce poate face AdventShow
 
-### 🎵 Imnuri
+### 🎵 Imnuri și cântări
 
-- **922 de imnuri** din „Imnuri Creștine", organizate pe categorii (Adunare, Speciale, etc.)
-- Caută rapid după **număr**, **titlu** sau **cuvânt din text** — rezultatele apar pe măsură ce scrii
+- **1.324 de imnuri și cântări**, organizate pe colecții: **Imnuri Creștine**, **Licurici**, **Exploratori**, **Companioni**, **Tineret** și **Amicus**
+- Caută rapid după **număr**, **titlu** sau **cuvânt din text** — rezultatele apar pe măsură ce scrii; la „Toate", fiecare rezultat arată și din ce colecție vine
 - **Nu trebuie să scrii cu diacritice** — „inchinare" găsește „închinare"
 - Vezi prima linie a fiecărui imn direct în listă, fără să-l deschizi
-- Poți **adăuga imnuri noi** dintr-un fișier PowerPoint (`.pptx`)
+- **Adaugi imnuri noi dintr-un PowerPoint** (`.ppt` / `.pptx`): deschizi fișierul, textul apare gata împărțit pe strofe în editor, îl verifici și îl salvezi; sau imporți un folder întreg deodată
 - **Editor integrat** — schimbi versurile, adaugi sau ștergi strofe, reordonezi cu mouse-ul
 
 ### 📖 Biblia Cornilescu
@@ -115,13 +120,14 @@ Apasă pe linkul potrivit calculatorului tău — descărcarea pornește direct:
 - **Selectare boxe / cască** pentru sunet din meniul Setări
 - **Suport pentru YouTube** — lipești un link YouTube și videoul se redă direct pe proiector (necesită yt-dlp; se descarcă cu un singur clic din Setări)
 
-### ⏱️ Cronometru, numărătoare inversă și ceas
+### 🕰️ Ceas — numărătoare inversă, cronometru și ora exactă
 
-Trei instrumente de timp pe care le pui pe ecranul mare, cu cifre cât tot proiectorul. Le găsești în fila **Cronometru**.
+Trei instrumente de timp pe care le pui pe ecranul mare, cu cifre cât tot proiectorul. Le găsești în fila **Ceas**.
 
 - **Numărătoare inversă** — alegi durata (ai și presetări: 1, 3, 5, 10, 15, 20 min), pui un titlu opțional („Serviciul începe în…") și un mesaj care apare la final („Bine ați venit!"). Poți pune pe **pauză** și **continua** oricând.
 - **Cronometru** — pornește de la zero și urcă; măsori cât durează o activitate.
-- **Ceas** — afișează ora curentă, în format de 24 sau 12 ore.
+- **Ceas** — ora curentă, **digital sau analogic** (cadran clasic cu limbi), format 24 / 12 ore, cu sau fără secunde.
+- **Fundal la alegere** pentru toate trei — gradiente predefinite sau o imagine de pe calculator; îl poți schimba și în timp ce e proiectat, fără să se întrerupă.
 
 **La ce ajută, concret:**
 - ⏳ **Mese rotunde și dezbateri** — fiecare vorbitor vede pe ecran cât timp mai are
@@ -132,16 +138,37 @@ Trei instrumente de timp pe care le pui pe ecranul mare, cu cifre cât tot proie
 - 🎤 **Prezentări limitate** — speakerul își vede singur timpul rămas
 - 🕰️ **Ceasul** — discret, înainte de program sau în pauze, ca toată lumea să știe ora
 
-### 💬 Mesaj liber pe ecran
+### 💬 Realtime — text live și prezentări editabile
 
-În fila **Mesaj** scrii orice text și apare imediat pe proiector. Cu opțiunea **„Actualizare în timp real"**, ecranul se schimbă pe măsură ce scrii — practic ai o tablă live.
+Fila **Realtime** are două moduri:
+
+**Text simplu** — scrii și textul apare imediat pe proiector, pe măsură ce tastezi: practic o tablă live. Alegi un fundal (gradiente predefinite sau o imagine), iar mărimea textului se potrivește singură.
+
+**Prezentare** — deschizi un **PowerPoint adevărat** (`.ppt` / `.pptx`) și acesta apare pe proiector **cu formatarea lui**: mărimi și culori de text, aldin / cursiv, liste cu buline sau numerotate, fundalurile slide-urilor (culori, gradiente, imagini), poziția casetelor de text. Și partea cea mai bună: **îl editezi direct din AdventShow, în timp real** — ce corectezi se vede pe ecran în timp ce e proiectat.
+
+- **Editor pe tot ecranul**, cu tot ce trebuie: aldin / cursiv / subliniat, aliniere stânga–centru–dreapta, liste cu buline și numerotate, **împărțire pe 1–3 coloane**, mărirea/micșorarea textului, casete noi care se **mută și se redimensionează cu mouse-ul**
+- **Navigare ușoară** între slide-uri, cu butoane mari sau săgeți
+- **Șabloane** — ecrane gata făcute, incluse în aplicație: *Bun venit*, *Anunțuri*, *Moment de rugăciune*, *Pauză*, *Pauză administrativă*. Orice slide îl poți **salva ca șablon al tău**, cu un clic; șabloanele se pot **reordona** și **șterge** (ștergerea cere parola), iar ale tale **supraviețuiesc actualizărilor**.
 
 **Bun pentru:**
 - 🎂 **Cei sărbătoriți** — zile de naștere, aniversări, botezuri
-- 📢 **Anunțuri rapide** — „Vă rugăm închideți telefoanele", schimbări de program
+- 📢 **Anunțuri** — pregătite frumos dinainte ca șablon, sau scrise pe loc
 - 📋 **Enumerări** — cine slujește azi, programul zilei, ordinea cântărilor
 - 🙏 **Mulțumiri și urări** — bun venit oaspeților, cuvinte de încheiere
-- ✍️ **Un verset sau un citat** pe care vrei să-l scrii pe loc, fără să-l cauți
+- ✍️ **Prezentări aduse de invitați** — le deschizi și le poți corecta pe loc, fără PowerPoint instalat
+
+### 🔐 Parola de administrare
+
+Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, de un clic neatent), acțiunile sensibile cer **parola setată la prima pornire**: adăugarea, editarea sau ștergerea imnurilor, mutarea în altă categorie, importurile în baza de date și ștergerea ori suprascrierea șabloanelor. **Proiecția și folosirea de zi cu zi nu cer niciodată parola.**
+
+- **Schimbi parola** oricând din Setări → Administrare
+- **Ai uitat-o?** Se rezolvă din aplicație, fără reinstalare: după 5 încercări greșite (sau din Setări) apare „Am uitat parola" — lași numărul de telefon, aplicația trimite cererea autorilor, iar ei îți dictează un **cod de deblocare** cu care îți setezi parolă nouă. Codul e valabil 7 zile și se poate folosi o singură dată.
+
+### 🤝 Corecturi care circulă singure
+
+- Dacă **corectezi un imn** sau **adaugi unul propriu**, modificarea se trimite automat autorilor pentru verificare — anonim, abia după ce a stat neschimbată 7 zile (deci nu pleacă lucru în curs). Se poate opri oricând din Setări → Contribuții.
+- În sens invers, **corecturile oficiale** publicate de autori ajung automat la toate instalațiile, la pornirea aplicației — fără să aștepți o versiune nouă.
+- La actualizare, **baza ta de imnuri se aduce singură la zi** cu colecțiile și corecturile noi, fără să-ți atingă modificările proprii.
 
 ### 🔄 Actualizare automată
 
@@ -151,6 +178,7 @@ Trei instrumente de timp pe care le pui pe ecranul mare, cu cifre cât tot proie
 
 ### 🧰 Alte lucruri utile
 
+- **Pornește maximizată**, gata de lucru; pe ferestre mai înguste, căutarea coboară pe un rând propriu ca să nu se înghesuie
 - **Layout reglabil** — coloanele (lista de imnuri, conținut, previzualizare) se trag cu mouse-ul; pozițiile se rețin
 - **Schimbare lină** — treci de la un imn la altul fără să oprești proiecția
 - **Memorie de fereastră** — poziția și mărimea ferestrei se păstrează între sesiuni
@@ -165,7 +193,7 @@ Trei instrumente de timp pe care le pui pe ecranul mare, cu cifre cât tot proie
 | Tasta | Ce face |
 |-------|---------|
 | `Enter` | Încarcă în previzualizare / Pornește proiecția |
-| `Escape` | Oprește proiecția / Curăță previzualizarea |
+| `Escape` | Oprește proiecția / Curăță previzualizarea (în Realtime: întâi închide editorul mare, apoi oprește proiecția) |
 | `↑` `↓` | Navighează prin listă |
 | `←` `→` | Treci între strofe în timpul proiecției |
 | `/` | Pune cursorul în câmpul de căutare |
@@ -189,7 +217,7 @@ Trei instrumente de timp pe care le pui pe ecranul mare, cu cifre cât tot proie
 **AdventShow** este dezvoltat și distribuit **gratuit** de:
 
 - **Ovidius Zanfir** — autor original, interfață, structura aplicației
-- **Samy Balasa** — redare video și player universal, integrare YouTube, cronometru / numărătoare inversă / ceas, mesaj liber pe proiecție, căutare fără diacritice, actualizare automată, corecții
+- **Samy Balasa** — dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, sistemul de contribuții și corecturi, parola și recuperarea ei, actualizarea automată
 
 Organizație: **[AdventTools](https://github.com/AdventTools)**
 

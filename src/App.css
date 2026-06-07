@@ -2580,3 +2580,244 @@
 .pres-nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pres-save { display: flex; gap: 8px; align-items: center; }
 .pres-save .timer-text-input { flex: 1; }
+
+/* ── Realtime: editorul de prezentare pe tot ecranul ── */
+.pres-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-app);
+}
+.pres-overlay-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-header);
+    flex-shrink: 0;
+}
+.pres-overlay-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text-secondary);
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pres-overlay-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+.pres-overlay-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.pres-canvas-big {
+    width: auto;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 16 / 9;
+    margin: 0 auto;
+}
+.pres-overlay-footer {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-header);
+    flex-shrink: 0;
+}
+.pres-overlay-footer .field { margin: 0; }
+.pres-overlay-footer .pres-save { flex: 1; min-width: 260px; }
+
+/* Ceas / Realtime: fără coloanele de sidebar/preview — tot spațiul pentru conținut
+   (!important ca să bată gridTemplateColumns din style-ul inline) */
+.main-area-full { grid-template-columns: 1fr !important; }
+.main-area-full > :not(.content) { display: none; }
+
+/* buleturile/numerele înapoi la viață — preflight-ul Tailwind le resetează global */
+.pres-shape ul { list-style: disc outside; }
+.pres-shape ol { list-style: decimal outside; }
+
+/* săgeți mari de navigare în editorul fullscreen */
+.pres-overlay-body { position: relative; }
+.pres-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: rgba(20, 22, 40, 0.85);
+    color: var(--text-primary);
+    font-size: 30px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.pres-arrow:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+.pres-arrow:disabled { opacity: 0.25; cursor: default; }
+.pres-arrow-left { left: 14px; }
+.pres-arrow-right { right: 14px; }
+
+.pres-toolbar-sep {
+    width: 1px;
+    align-self: stretch;
+    background: var(--border);
+    margin: 0 4px;
+}
+.pres-shape-focused { outline: 2px solid var(--accent) !important; }
+
+/* mânere de mutare/redimensionare pe casete (vizibile la hover/focus) */
+.pres-shape { overflow: visible; }
+.pres-shape-inner {
+    width: 100%;
+    min-height: inherit;
+    outline: none;
+    overflow: hidden;
+}
+.pres-grip {
+    position: absolute;
+    z-index: 6;
+    opacity: 0;
+    transition: opacity 0.12s;
+    user-select: none;
+}
+.pres-shape:hover .pres-grip,
+.pres-shape-focused .pres-grip { opacity: 1; }
+.pres-grip-move {
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0 10px;
+    height: 16px;
+    line-height: 14px;
+    font-size: 11px;
+    color: #fff;
+    background: var(--accent);
+    border-radius: 8px;
+    cursor: grab;
+}
+.pres-grip-move:active { cursor: grabbing; }
+.pres-grip-resize {
+    right: -6px;
+    bottom: -6px;
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border: 2px solid #fff;
+    border-radius: 3px;
+    cursor: nwse-resize;
+}
+
+/* ── Manager de șabloane ── */
+.tpl-manager { display: flex; flex-direction: column; gap: 4px; }
+.tpl-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.tpl-name {
+    flex: 1;
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tpl-name:hover { border-color: var(--accent); }
+.tpl-btn {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.tpl-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent); }
+.tpl-btn:disabled { opacity: 0.25; cursor: default; }
+.tpl-btn-danger {
+    width: auto;
+    padding: 0 8px;
+    color: #fff;
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+/* ── Header responsiv: pe ferestre înguste, căutările coboară pe rândul 2 ── */
+@media (max-width: 1180px) {
+    .header {
+        flex-wrap: wrap;
+        height: auto;
+        min-height: 48px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        row-gap: 6px;
+    }
+    .search-area {
+        order: 10;            /* după toate celelalte → rândul 2 */
+        flex-basis: 100%;
+        max-width: none;
+    }
+}
+
+.setup-hint-pw {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: rgba(99 102 241 / 0.08);
+    border: 1px solid rgba(99 102 241 / 0.2);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    line-height: 1.5;
+}
+
+/* ── Recuperare parolă ── */
+.unlock-request-code {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: 0.25em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--primary, #818cf8);
+    background: rgba(99 102 241 / 0.1);
+    border: 1px dashed rgba(99 102 241 / 0.4);
+    border-radius: var(--radius-sm);
+    padding: 12px 8px 12px 16px; /* compensează letter-spacing-ul ultimei litere */
+    margin-top: 4px;
+    user-select: text;
+}
+
+.btn-link-forgot {
+    background: none;
+    border: none;
+    padding: 4px 0;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--primary, #818cf8);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.btn-link-forgot:hover {
+    opacity: 0.8;
+}

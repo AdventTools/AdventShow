@@ -34,6 +34,7 @@ import type {
     Hymn,
     HymnSection,
     Presentation,
+    PresShape,
     ProjectionTextData,
     TemplateInfo,
     YouTubeEntry,
@@ -301,6 +302,9 @@ function App() {
     // ── Password state ──
     const [adminPasswordHash, setAdminPasswordHash] = useState<string | null>(null);
     const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+    const [needsChurchInfo, setNeedsChurchInfo] = useState(false);
+    const [forgotPwOpen, setForgotPwOpen] = useState(false);
+    const [setPwOpen, setSetPwOpen] = useState<'change' | 'reset' | null>(null);
     const [passwordModal, setPasswordModal] = useState<{
         action: () => void;
         title: string;
@@ -364,6 +368,9 @@ function App() {
         window.electron.settings.get().then(s => {
             if (s.adminPasswordHash) {
                 setAdminPasswordHash(s.adminPasswordHash);
+                // instalări de dinainte de registru: biserica + localitatea se
+                // completează la prima pornire după upgrade (o singură dată)
+                if (!s.churchName || !s.churchCity) setNeedsChurchInfo(true);
             } else {
                 setNeedsPasswordSetup(true);
             }
@@ -609,6 +616,7 @@ function App() {
         window.electron.projection.onClosed(() => {
             setProjecting(false);
             setProjSlideIndex(0);
+            realtimeCtl.notifyClosed();
         });
         window.electron.projection.onControllerSync(({ currentIndex }) => {
             setProjSlideIndex(currentIndex);
@@ -846,6 +854,10 @@ function App() {
         setPasswordModal({ action, title });
     }, [adminPasswordHash]);
 
+    useEffect(() => {
+        adminGate.require = requirePassword;
+    }, [requirePassword]);
+
     // ── Context menu actions ──
     const openEditHymn = useCallback(async (hymnId: number) => {
         const data = await window.electron.db.getHymnWithSections(hymnId);
@@ -891,12 +903,17 @@ function App() {
     // ── Global keyboard ──
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
-            const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-            if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup) return;
+            const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+                || (e.target instanceof HTMLElement && e.target.isContentEditable);
+            if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup
+                || needsChurchInfo || forgotPwOpen || setPwOpen) return;
 
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopImmediatePropagation();
+                // Realtime: primul Esc închide editorul mare, al doilea oprește proiecția
+                if (realtimeCtl.overlayOpen) { realtimeCtl.closeOverlay(); return; }
+                if (realtimeCtl.projected) { realtimeCtl.stop(); return; }
                 // Stop video if active
                 if (videoStatus) {
                     videoStop();
@@ -959,6 +976,7 @@ function App() {
         window.addEventListener('keydown', handler, true);
         return () => window.removeEventListener('keydown', handler, true);
     }, [projecting, previewSections, modalOpen, hymnEditor, passwordModal, needsPasswordSetup,
+        needsChurchInfo, forgotPwOpen, setPwOpen,
         stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn,
         videoStatus, videoStop, verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
 
@@ -1214,7 +1232,7 @@ function App() {
 
             {/* ── Main content area (3-column layout) ── */}
             <div
-                className="main-area"
+                className={`main-area ${tab === 'timer' || tab === 'mesaj' ? 'main-area-full' : ''}`}
                 ref={mainAreaRef}
                 style={{ gridTemplateColumns: `${sidebarWidth}px auto 1fr auto ${previewWidth}px` }}
             >
@@ -1241,6 +1259,9 @@ function App() {
                                 setBibleSearchResults(null);
                             }}
                         />
+                    ) : tab !== 'video' ? (
+                        /* Ceas / Realtime: fără liste în sidebar */
+                        <div className="sidebar-list" />
                     ) : (
                         <SidebarVideoFilter
                             filter={videoFilter}
@@ -1457,6 +1478,8 @@ function App() {
                     onClose={() => setModalOpen(null)}
                     onCategoriesChanged={loadCategories}
                     onHymnsChanged={loadHymns}
+                    onChangePassword={() => { setModalOpen(null); setSetPwOpen('change'); }}
+                    onForgotPassword={() => { setModalOpen(null); setForgotPwOpen(true); }}
                 />
             )}
 
@@ -1483,19 +1506,63 @@ function App() {
                         setPasswordModal(null);
                     }}
                     onCancel={() => setPasswordModal(null)}
+                    onForgot={() => { setPasswordModal(null); setForgotPwOpen(true); }}
                 />
             )}
 
             {/* ── First Launch Password Setup ── */}
             {needsPasswordSetup && (
                 <PasswordSetupModal
-                    onSave={async (pw, folder) => {
+                    onSave={async (pw, church, city, folder) => {
                         const hash = hashPassword(pw);
                         setAdminPasswordHash(hash);
-                        const patch: Partial<AppSettings> = { adminPasswordHash: hash };
+                        const patch: Partial<AppSettings> = {
+                            adminPasswordHash: hash, churchName: church, churchCity: city,
+                        };
                         if (folder) patch.downloadFolder = folder;
                         await window.electron.settings.set(patch);
                         setNeedsPasswordSetup(false);
+                        // înregistrarea instalării — fire-and-forget; offline
+                        // reîncearcă singură la următoarea pornire
+                        window.electron.registry.submit().catch(() => { });
+                    }}
+                />
+            )}
+
+            {/* ── Instalări existente: completarea bisericii la prima pornire după upgrade ── */}
+            {needsChurchInfo && !needsPasswordSetup && (
+                <ChurchInfoModal
+                    onSave={async (church, city) => {
+                        await window.electron.settings.set({ churchName: church, churchCity: city });
+                        setNeedsChurchInfo(false);
+                        window.electron.registry.submit().catch(() => { });
+                    }}
+                />
+            )}
+
+            {/* ── Parolă uitată: cerere de deblocare + cod dictat telefonic ── */}
+            {forgotPwOpen && (
+                <ForgotPasswordModal
+                    onCancel={() => setForgotPwOpen(false)}
+                    onUnlocked={() => {
+                        // codul a fost acceptat — parola veche e ștearsă deja în main;
+                        // se cere imediat una nouă (dialog fără anulare)
+                        setForgotPwOpen(false);
+                        setAdminPasswordHash(null);
+                        setSetPwOpen('reset');
+                    }}
+                />
+            )}
+
+            {/* ── Parolă nouă (după deblocare) / schimbare parolă (din Setări) ── */}
+            {setPwOpen && (
+                <SetPasswordModal
+                    oldHash={setPwOpen === 'change' ? (adminPasswordHash ?? null) : null}
+                    onCancel={setPwOpen === 'change' ? () => setSetPwOpen(null) : undefined}
+                    onSave={async (newHash) => {
+                        setAdminPasswordHash(newHash);
+                        await window.electron.settings.set({ adminPasswordHash: newHash });
+                        setSetPwOpen(null);
                     }}
                 />
             )}
@@ -2767,15 +2834,17 @@ function HymnEditorModal({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function PasswordModal({
-    title, hash, onSuccess, onCancel,
+    title, hash, onSuccess, onCancel, onForgot,
 }: {
     title: string;
     hash: string;
     onSuccess: () => void;
     onCancel: () => void;
+    onForgot: () => void;
 }) {
     const [pw, setPw] = useState('');
     const [error, setError] = useState('');
+    const [fails, setFails] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { inputRef.current?.focus(); }, []);
@@ -2785,6 +2854,7 @@ function PasswordModal({
             onSuccess();
         } else {
             setError('Parolă incorectă');
+            setFails(f => f + 1);
             setPw('');
         }
     };
@@ -2810,6 +2880,11 @@ function PasswordModal({
                         />
                     </div>
                     {error && <div className="editor-error">{error}</div>}
+                    {fails >= 5 && (
+                        <button className="btn-link-forgot" onClick={onForgot}>
+                            Am uitat parola...
+                        </button>
+                    )}
                     <div className="editor-actions" style={{ marginTop: 12 }}>
                         <button className="btn-project" onClick={handleSubmit}>Confirmă</button>
                         <button className="btn-clear" onClick={onCancel}>Anulează</button>
@@ -2824,9 +2899,13 @@ function PasswordModal({
 // Password Setup Modal (first launch)
 // ═════════════════════════════════════════════════════════════════════════════
 
-function PasswordSetupModal({ onSave }: { onSave: (pw: string, downloadFolder?: string) => void }) {
+function PasswordSetupModal({ onSave }: {
+    onSave: (pw: string, church: string, city: string, downloadFolder?: string) => void;
+}) {
     const [pw, setPw] = useState('');
     const [confirm, setConfirm] = useState('');
+    const [church, setChurch] = useState('');
+    const [city, setCity] = useState('');
     const [downloadFolder, setDownloadFolder] = useState('');
     const [defaultFolder, setDefaultFolder] = useState('');
     const [error, setError] = useState('');
@@ -2838,13 +2917,20 @@ function PasswordSetupModal({ onSave }: { onSave: (pw: string, downloadFolder?: 
             setDefaultFolder(f);
             setDownloadFolder(f);
         });
+        // resetare de parolă întreruptă / reinstalare: biserica e deja cunoscută
+        window.electron.settings.get().then(s => {
+            if (s.churchName) setChurch(s.churchName);
+            if (s.churchCity) setCity(s.churchCity);
+        });
     }, []);
 
     const handleSave = () => {
         if (pw.length < 4) { setError('Parola trebuie să aibă cel puțin 4 caractere.'); return; }
         if (pw !== confirm) { setError('Parolele nu se potrivesc.'); return; }
+        if (!church.trim()) { setError('Completează numele bisericii.'); return; }
+        if (!city.trim()) { setError('Completează localitatea.'); return; }
         if (!downloadFolder) { setError('Selectează un folder pentru descărcări video.'); return; }
-        onSave(pw, downloadFolder !== defaultFolder ? downloadFolder : undefined);
+        onSave(pw, church.trim(), city.trim(), downloadFolder !== defaultFolder ? downloadFolder : undefined);
     };
 
     return (
@@ -2856,6 +2942,14 @@ function PasswordSetupModal({ onSave }: { onSave: (pw: string, downloadFolder?: 
                 <div className="modal-body">
                     <p className="setup-hint">
                         Bine ai venit în AdventShow! Configurează parola de administrare și folderul pentru videoclipuri descărcate.
+                    </p>
+                    <p className="setup-hint setup-hint-pw">
+                        Parola protejează acțiunile care pot strica baza de imnuri sau șabloanele
+                        — ți se va cere la: <b>adăugarea, editarea sau ștergerea imnurilor</b>,
+                        <b>mutarea unui imn în altă categorie</b>, <b>importurile în baza de date</b>
+                        (PPT în masă sau backup JSON) și <b>ștergerea ori suprascrierea șabloanelor</b>.
+                        Proiecția și folosirea de zi cu zi nu cer niciodată parola.
+                        Dacă o uiți, o poți recupera din Setări — Administrare, telefonic, de la autori.
                     </p>
                     <div className="field">
                         <label>Parolă admin</label>
@@ -2882,6 +2976,30 @@ function PasswordSetupModal({ onSave }: { onSave: (pw: string, downloadFolder?: 
                         />
                     </div>
                     <div className="field" style={{ marginTop: 8 }}>
+                        <label>Biserica</label>
+                        <input
+                            type="text"
+                            className="editor-input"
+                            value={church}
+                            onChange={e => { setChurch(e.target.value); setError(''); }}
+                            placeholder="ex: Biserica Adventistă Speranța"
+                        />
+                    </div>
+                    <div className="field">
+                        <label>Localitatea</label>
+                        <input
+                            type="text"
+                            className="editor-input"
+                            value={city}
+                            onChange={e => { setCity(e.target.value); setError(''); }}
+                            placeholder="ex: Cluj-Napoca"
+                        />
+                    </div>
+                    <p className="text-white/40 text-xs mt-1">
+                        Biserica și localitatea se trimit autorilor pentru evidența instalărilor
+                        și pentru ajutor la recuperarea parolei. Nu se trimit alte date.
+                    </p>
+                    <div className="field" style={{ marginTop: 8 }}>
                         <label>Folder descărcări video</label>
                         <div className="field-row">
                             <span className="field-value" title={downloadFolder}>
@@ -2907,15 +3025,289 @@ function PasswordSetupModal({ onSave }: { onSave: (pw: string, downloadFolder?: 
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Church Info Modal — instalările existente (de dinainte de registru) își
+// completează biserica + localitatea la prima pornire după upgrade
+// ═════════════════════════════════════════════════════════════════════════════
+
+function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) => void }) {
+    const [church, setChurch] = useState('');
+    const [city, setCity] = useState('');
+    const [error, setError] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    const handleSave = () => {
+        if (!church.trim()) { setError('Completează numele bisericii.'); return; }
+        if (!city.trim()) { setError('Completează localitatea.'); return; }
+        onSave(church.trim(), city.trim());
+    };
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal-dialog modal-sm">
+                <div className="modal-header">
+                    <h3>Despre instalarea ta</h3>
+                </div>
+                <div className="modal-body">
+                    <p className="setup-hint">
+                        AdventShow ține acum o evidență a bisericilor unde e instalat — ca autorii
+                        să știe pe cine ajută aplicația și ca să te poată sprijini la recuperarea
+                        parolei. Completează o singură dată:
+                    </p>
+                    <div className="field">
+                        <label>Biserica</label>
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            className="editor-input"
+                            value={church}
+                            onChange={e => { setChurch(e.target.value); setError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') document.getElementById('church-city')?.focus(); }}
+                            placeholder="ex: Biserica Adventistă Speranța"
+                        />
+                    </div>
+                    <div className="field">
+                        <label>Localitatea</label>
+                        <input
+                            id="church-city"
+                            type="text"
+                            className="editor-input"
+                            value={city}
+                            onChange={e => { setCity(e.target.value); setError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+                            placeholder="ex: Cluj-Napoca"
+                        />
+                    </div>
+                    <p className="text-white/40 text-xs mt-1">
+                        Se trimit doar aceste două câmpuri și versiunea aplicației. Nimic altceva.
+                    </p>
+                    {error && <div className="editor-error">{error}</div>}
+                    <div className="editor-actions" style={{ marginTop: 12 }}>
+                        <button className="btn-project" onClick={handleSave}>Salvează</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Parolă uitată — cerere de deblocare prin formular + cod dictat telefonic
+// ═════════════════════════════════════════════════════════════════════════════
+
+function ForgotPasswordModal({ onUnlocked, onCancel }: {
+    onUnlocked: () => void;
+    onCancel: () => void;
+}) {
+    const [phone, setPhone] = useState('');
+    const [requestCode, setRequestCode] = useState<string | null>(null);
+    const [code, setCode] = useState('');
+    const [error, setError] = useState('');
+    const [busy, setBusy] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { inputRef.current?.focus(); }, [requestCode]);
+
+    const sendRequest = async () => {
+        if (!phone.trim()) { setError('Introduceți numărul de telefon la care puteți fi sunat.'); return; }
+        setBusy(true);
+        setError('');
+        const res = await window.electron.registry.unlockRequest(phone.trim());
+        setBusy(false);
+        if (res.ok && res.requestCode) {
+            setRequestCode(res.requestCode);
+        } else {
+            setError(res.error ?? 'Cererea nu a putut fi trimisă.');
+        }
+    };
+
+    const verify = async () => {
+        if (!code.trim()) { setError('Introduceți codul de deblocare primit.'); return; }
+        setBusy(true);
+        setError('');
+        const ok = await window.electron.registry.unlockVerify(code.trim());
+        setBusy(false);
+        if (ok) {
+            onUnlocked();
+        } else {
+            setError('Cod incorect sau expirat. Verificați și reîncercați.');
+            setCode('');
+        }
+    };
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+            <div className="modal-dialog modal-sm">
+                <div className="modal-header">
+                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />Recuperare parolă</h3>
+                    <button className="modal-close" onClick={onCancel}><X className="icon-sm" /></button>
+                </div>
+                <div className="modal-body">
+                    {!requestCode ? (
+                        <>
+                            <p className="setup-hint">
+                                Aplicația trimite o cerere către autorii AdventShow. Vei fi contactat
+                                la numărul de mai jos și vei primi un cod de deblocare.
+                            </p>
+                            <div className="field">
+                                <label>Telefonul tău</label>
+                                <input
+                                    ref={inputRef}
+                                    type="tel"
+                                    className="editor-input"
+                                    value={phone}
+                                    onChange={e => { setPhone(e.target.value); setError(''); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') sendRequest(); }}
+                                    placeholder="ex: 07xx xxx xxx"
+                                />
+                            </div>
+                            {error && <div className="editor-error">{error}</div>}
+                            <div className="editor-actions" style={{ marginTop: 12 }}>
+                                <button className="btn-project" onClick={sendRequest} disabled={busy}>
+                                    {busy ? 'Se trimite...' : 'Trimite cererea'}
+                                </button>
+                                <button className="btn-clear" onClick={onCancel}>Anulează</button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <p className="setup-hint">
+                                Cererea a fost trimisă. Dacă nu ești contactat curând, sună tu autorii
+                                și comunică-le <b>codul cererii</b>:
+                            </p>
+                            <div className="unlock-request-code">{requestCode}</div>
+                            <div className="field" style={{ marginTop: 10 }}>
+                                <label>Codul de deblocare primit</label>
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    className="editor-input"
+                                    value={code}
+                                    onChange={e => { setCode(e.target.value); setError(''); }}
+                                    onKeyDown={e => { if (e.key === 'Enter') verify(); }}
+                                    placeholder="ex: ABCD-2345"
+                                    autoCapitalize="characters"
+                                />
+                            </div>
+                            <p className="text-white/40 text-xs mt-1">
+                                Codul e valabil 7 zile și poate fi folosit o singură dată.
+                            </p>
+                            {error && <div className="editor-error">{error}</div>}
+                            <div className="editor-actions" style={{ marginTop: 12 }}>
+                                <button className="btn-project" onClick={verify} disabled={busy}>
+                                    {busy ? 'Se verifică...' : 'Deblochează'}
+                                </button>
+                                <button className="btn-clear" onClick={onCancel}>Anulează</button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Setare parolă nouă — după deblocare (fără parola veche) sau din Setări (cu ea)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function SetPasswordModal({ oldHash, onSave, onCancel }: {
+    oldHash: string | null;        // null = resetare (nu se cere parola veche)
+    onSave: (newHash: string) => void;
+    onCancel?: () => void;         // absent = nu se poate închide (după deblocare)
+}) {
+    const [oldPw, setOldPw] = useState('');
+    const [pw, setPw] = useState('');
+    const [confirm, setConfirm] = useState('');
+    const [error, setError] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    const handleSave = () => {
+        if (oldHash && !checkPassword(oldPw, oldHash)) { setError('Parola actuală e incorectă.'); setOldPw(''); return; }
+        if (pw.length < 4) { setError('Parola trebuie să aibă cel puțin 4 caractere.'); return; }
+        if (pw !== confirm) { setError('Parolele nu se potrivesc.'); return; }
+        onSave(hashPassword(pw));
+    };
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget && onCancel) onCancel(); }}>
+            <div className="modal-dialog modal-sm">
+                <div className="modal-header">
+                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
+                        {oldHash ? 'Schimbă parola' : 'Setează parola nouă'}</h3>
+                    {onCancel && <button className="modal-close" onClick={onCancel}><X className="icon-sm" /></button>}
+                </div>
+                <div className="modal-body">
+                    {!oldHash && (
+                        <p className="setup-hint">
+                            Deblocare reușită — alege acum o parolă nouă de administrare.
+                        </p>
+                    )}
+                    {oldHash && (
+                        <div className="field">
+                            <label>Parola actuală</label>
+                            <input
+                                ref={inputRef}
+                                type="password"
+                                className="editor-input"
+                                value={oldPw}
+                                onChange={e => { setOldPw(e.target.value); setError(''); }}
+                                onKeyDown={e => { if (e.key === 'Enter') document.getElementById('new-pw')?.focus(); }}
+                                placeholder="Parola curentă..."
+                            />
+                        </div>
+                    )}
+                    <div className="field">
+                        <label>Parola nouă</label>
+                        <input
+                            id="new-pw"
+                            ref={oldHash ? undefined : inputRef}
+                            type="password"
+                            className="editor-input"
+                            value={pw}
+                            onChange={e => { setPw(e.target.value); setError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') document.getElementById('new-pw-confirm')?.focus(); }}
+                            placeholder="Minim 4 caractere..."
+                        />
+                    </div>
+                    <div className="field">
+                        <label>Confirmă parola nouă</label>
+                        <input
+                            id="new-pw-confirm"
+                            type="password"
+                            className="editor-input"
+                            value={confirm}
+                            onChange={e => { setConfirm(e.target.value); setError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
+                            placeholder="Repetă parola..."
+                        />
+                    </div>
+                    {error && <div className="editor-error">{error}</div>}
+                    <div className="editor-actions" style={{ marginTop: 12 }}>
+                        <button className="btn-project" onClick={handleSave}>Salvează</button>
+                        {onCancel && <button className="btn-clear" onClick={onCancel}>Anulează</button>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Settings Modal
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
+function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword }: {
     onClose: () => void;
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
+    onChangePassword: () => void;
+    onForgotPassword: () => void;
 }) {
-    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'contrib' | 'about'>('projection');
+    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'contrib' | 'admin' | 'about'>('projection');
     const [contribStatus, setContribStatus] = useState<{ pending: number; sent: number } | null>(null);
     useEffect(() => {
         if (activeTab !== 'contrib') return;
@@ -2952,13 +3344,13 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                 </div>
                 <div className="modal-body">
                     <div className="settings-tabs">
-                        {(['projection', 'import', 'contrib', 'about'] as const).map(t => (
+                        {(['projection', 'import', 'contrib', 'admin', 'about'] as const).map(t => (
                             <button
                                 key={t}
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'contrib' ? 'Contribuții' : 'Despre'}
+                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'contrib' ? 'Contribuții' : t === 'admin' ? 'Administrare' : 'Despre'}
                             </button>
                         ))}
                     </div>
@@ -3083,7 +3475,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                             </p>
                             <div className="field">
                                 <label>Import imnuri din folder cu fișiere PPTX</label>
-                                <button className="btn-action" onClick={async () => {
+                                <button className="btn-action" onClick={() => adminGate.require(async () => {
                                     const folder = await window.electron.dialog.selectFolder();
                                     if (!folder) return;
                                     setImportStatus('Se importă imnurile...');
@@ -3091,13 +3483,13 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                     onCategoriesChanged();
                                     onHymnsChanged();
                                     setImportStatus(`Import imnuri: ${result.success} reușite, ${result.failed} eșuate`);
-                                }}>
+                                }, 'Import imnuri din folder')}>
                                     <FolderOpen className="icon-xs" /> Alege folder cu PPTX
                                 </button>
                             </div>
                             <div className="field">
                                 <label>Import imnuri din fișiere PPTX individuale</label>
-                                <button className="btn-action" onClick={async () => {
+                                <button className="btn-action" onClick={() => adminGate.require(async () => {
                                     const files = await window.electron.dialog.selectPresentationFiles();
                                     if (!files?.length) return;
                                     setImportStatus('Se importă imnurile...');
@@ -3105,7 +3497,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                     onCategoriesChanged();
                                     onHymnsChanged();
                                     setImportStatus(`Import imnuri: ${result.success} reușite, ${result.failed} eșuate`);
-                                }}>
+                                }, 'Import imnuri PPT')}>
                                     <Upload className="icon-xs" /> Alege fișiere PPTX
                                 </button>
                             </div>
@@ -3125,7 +3517,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                     }}>
                                         <Download className="icon-xs" /> Exportă imnuri (JSON)
                                     </button>
-                                    <button className="btn-action" onClick={async () => {
+                                    <button className="btn-action" onClick={() => adminGate.require(async () => {
                                         const p = await window.electron.dialog.selectJsonFile();
                                         if (p) {
                                             await window.electron.db.importJsonBackup(p);
@@ -3133,7 +3525,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                             onHymnsChanged();
                                             setImportStatus('Import imnuri din JSON reușit!');
                                         }
-                                    }}>
+                                    }, 'Import bază de date (JSON)')}>
                                         <Upload className="icon-xs" /> Importă imnuri (JSON)
                                     </button>
                                 </div>
@@ -3194,6 +3586,52 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged }: {
                                     {contribStatus.sent > 0 && ` Trimise până acum: ${contribStatus.sent}.`}
                                 </p>
                             )}
+                        </div>
+                    )}
+
+                    {activeTab === 'admin' && (
+                        <div className="settings-content">
+                            <div className="field">
+                                <label>Biserica</label>
+                                <input
+                                    type="text"
+                                    className="timer-text-input"
+                                    placeholder="ex: Biserica Adventistă Speranța"
+                                    value={settings.churchName ?? ''}
+                                    onChange={e => saveSettings({ churchName: e.target.value })}
+                                    onBlur={() => { window.electron.registry.submit().catch(() => { }); }}
+                                />
+                            </div>
+                            <div className="field">
+                                <label>Localitatea</label>
+                                <input
+                                    type="text"
+                                    className="timer-text-input"
+                                    placeholder="ex: Cluj-Napoca"
+                                    value={settings.churchCity ?? ''}
+                                    onChange={e => saveSettings({ churchCity: e.target.value })}
+                                    onBlur={() => { window.electron.registry.submit().catch(() => { }); }}
+                                />
+                            </div>
+                            <p className="text-white/40 text-xs mb-3">
+                                Se trimit autorilor pentru evidența instalărilor și pentru ajutor
+                                la recuperarea parolei. Modificările se retrimit automat.
+                            </p>
+                            <div className="border-t border-white/10 w-full mb-3" />
+                            <div className="field">
+                                <label>Parola de administrare</label>
+                                <p className="text-white/40 text-xs mb-2">
+                                    Protejează modificarea imnurilor, importurile și ștergerea șabloanelor.
+                                </p>
+                                <div className="flex gap-2">
+                                    <button className="btn-action" onClick={onChangePassword}>
+                                        <Lock className="icon-xs" /> Schimbă parola
+                                    </button>
+                                    <button className="btn-clear" onClick={onForgotPassword}>
+                                        Am uitat parola...
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -3286,20 +3724,37 @@ function TimerPanel() {
     const [title, setTitle] = useState('');
     const [zeroMessage, setZeroMessage] = useState('');
     const [clock24h, setClock24h] = useState(true);
-    const [clockShowSeconds, setClockShowSeconds] = useState(true);
+    const [clockShowSeconds, setClockShowSeconds] = useState(false);
     const [clockAnalog, setClockAnalog] = useState(false);
     const [running, setRunning] = useState(false);
     const [projected, setProjected] = useState(false);
+    const [bgChoice, setBgChoice] = useState<BgChoice>({ kind: 'preset', css: '' });
 
     // Anchors for the currently projected timer (so Pause can freeze accurately)
     const anchorRef = useRef<{ targetEpochMs?: number; startEpochMs?: number }>({});
+    // ultima trimitere — ca schimbarea fundalului să se aplice LIVE fără a
+    // reseta ancorele cronometrului
+    const lastSentRef = useRef<import('./vite-env').ProjectionTimerData | null>(null);
 
     const durationMs = Math.max(0, (minutes * 60 + seconds) * 1000);
 
+    const bgRef = useRef(bgChoice);
+    bgRef.current = bgChoice;
     const send = useCallback((data: import('./vite-env').ProjectionTimerData) => {
-        window.electron.projection.showTimer(data);
+        const payload = { ...data, background: bgToPayload(bgRef.current) };
+        lastSentRef.current = payload;
+        window.electron.projection.showTimer(payload);
         setProjected(true);
     }, []);
+
+    // fundal schimbat în timp ce proiecția rulează → retrimite același payload
+    // cu noul fundal (ancorele rămân, ceasul nu sare)
+    useEffect(() => {
+        if (!projected || !lastSentRef.current) return;
+        const payload = { ...lastSentRef.current, background: bgToPayload(bgChoice) };
+        lastSentRef.current = payload;
+        window.electron.projection.showTimer(payload);
+    }, [bgChoice, projected]);
 
     const startCountdown = useCallback(() => {
         const target = Date.now() + durationMs;
@@ -3353,6 +3808,19 @@ function TimerPanel() {
         anchorRef.current = {};
         window.electron.projection.close();
     }, []);
+
+    // Esc oprește și ceasul/cronometrul; iar dacă proiecția se închide pe altă
+    // cale (Esc pe ecranul de proiecție), starea panoului se resetează și ea
+    useEffect(() => {
+        realtimeCtl.projected = projected;
+        realtimeCtl.stop = stop;
+        realtimeCtl.notifyClosed = () => {
+            setProjected(false);
+            setRunning(false);
+            anchorRef.current = {};
+        };
+        return () => { realtimeCtl.projected = false; };
+    }, [projected, stop]);
 
     const presets = [1, 3, 5, 10, 15, 20];
 
@@ -3434,6 +3902,10 @@ function TimerPanel() {
                     value={title} onChange={e => setTitle(e.target.value)} />
             </div>
 
+            <div className="timer-section">
+                <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
+            </div>
+
             <div className="timer-actions">
                 {!projected || mode === 'clock' ? (
                     <button className="btn-project timer-start" onClick={start}>
@@ -3464,6 +3936,27 @@ function TimerPanel() {
 // Realtime — text liber proiectat live + prezentări editabile (PPT/șabloane)
 // ═════════════════════════════════════════════════════════════════════════════
 
+// registru pentru handlerul global de taste: starea Realtime trăiește în
+// MessagePanel, dar Esc e gestionat global (primul Esc = închide editorul mare,
+// al doilea = oprește proiecția)
+// poarta de parolă admin, folosibilă și din componente fără acces la state-ul
+// App-ului (ex. managerul de șabloane); App o leagă la requirePassword la montare
+const adminGate: { require: (action: () => void, title: string) => void } = {
+    // implicit: rulează direct; App o înlocuiește cu requirePassword la montare
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    require: (action, _title) => { action(); },
+};
+
+const realtimeCtl = {
+    overlayOpen: false,
+    closeOverlay: () => { /* setat de MessagePanel */ },
+    projected: false,
+    stop: () => { /* setat de MessagePanel */ },
+    // proiecția s-a închis pe ORICE cale (Esc pe ecranul de proiecție, buton etc.)
+    // → indicatorii LIVE din Realtime trebuie să moară odată cu ea
+    notifyClosed: () => { /* setat de MessagePanel */ },
+};
+
 // fundaluri predefinite pentru Realtime (CSS — fără asset-uri)
 const BG_PRESETS: { name: string; css: string }[] = [
     { name: 'Fundalul aplicației', css: '' },
@@ -3493,10 +3986,14 @@ function sanitizePresHtml(html: string): string {
             }
             const align = el.style?.textAlign;
             const marginLeft = el.style?.marginLeft;
+            const fontSize = el.style?.fontSize;
+            const color = el.style?.color;
             for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
             let style = '';
             if (align) style += `text-align:${align};`;
             if (marginLeft) style += `margin-left:${marginLeft};`;
+            if (fontSize && /^[\d.]+em$/.test(fontSize)) style += `font-size:${fontSize};`;
+            if (color && /^(#[0-9a-fA-F]{3,8}|rgb\([\d, ]+\))$/.test(color)) style += `color:${color};`;
             if (style) el.setAttribute('style', style);
         }
     };
@@ -3506,10 +4003,13 @@ function sanitizePresHtml(html: string): string {
 
 type BgChoice = { kind: 'preset'; css: string } | { kind: 'image'; path: string };
 
-function bgToPayload(bg: BgChoice, slideBgColor?: string): ProjectionTextData['background'] {
+function bgToPayload(bg: BgChoice, slide?: { bgColor?: string; bgGradient?: string; bgImage?: string }): ProjectionTextData['background'] {
+    // alegerea explicită a userului bate fundalul venit din PPT
     if (bg.kind === 'image') return { type: 'image', value: bg.path };
     if (bg.css) return { type: 'gradient', value: bg.css };
-    if (slideBgColor) return { type: 'color', value: slideBgColor };
+    if (slide?.bgImage) return { type: 'image', value: slide.bgImage };
+    if (slide?.bgGradient) return { type: 'gradient', value: slide.bgGradient };
+    if (slide?.bgColor) return { type: 'color', value: slide.bgColor };
     return null; // fundalul global al aplicației
 }
 
@@ -3593,12 +4093,35 @@ function MessagePanel() {
     const [curSlide, setCurSlide] = useState(0);
     const [presProjected, setPresProjected] = useState(false);
     const [templates, setTemplates] = useState<TemplateInfo[]>([]);
-    const [selTemplate, setSelTemplate] = useState('');
+    const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [saveName, setSaveName] = useState('');
     const [presStatus, setPresStatus] = useState('');
+    const [overlayOpen, setOverlayOpen] = useState(false);
     const [canvasFont, setCanvasFont] = useState(16);
+    const [focusedShape, setFocusedShape] = useState<number | null>(null);
+    const [, setShapeTick] = useState(0); // forțează re-randarea după mutații pe model
     const canvasRef = useRef<HTMLDivElement>(null);
     const presDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Esc global: primul închide editorul mare, al doilea oprește proiecția
+    useEffect(() => {
+        realtimeCtl.overlayOpen = overlayOpen;
+        realtimeCtl.closeOverlay = () => setOverlayOpen(false);
+        return () => { realtimeCtl.overlayOpen = false; };
+    }, [overlayOpen]);
+    useEffect(() => {
+        realtimeCtl.projected = projected || presProjected;
+        realtimeCtl.stop = () => {
+            setProjected(false);
+            setPresProjected(false);
+            window.electron.projection.close();
+        };
+        realtimeCtl.notifyClosed = () => {
+            setProjected(false);
+            setPresProjected(false);
+        };
+        return () => { realtimeCtl.projected = false; };
+    }, [projected, presProjected]);
 
     const refreshTemplates = useCallback(() => {
         window.electron.templates.list().then(setTemplates).catch(() => setTemplates([]));
@@ -3607,14 +4130,14 @@ function MessagePanel() {
 
     // fontul din canvas scalează cu lățimea, ca pe proiecție (3.2vw acolo)
     useEffect(() => {
-        if (mode !== 'pres') return;
+        if (!overlayOpen) return;
         const el = canvasRef.current;
         if (!el) return;
         const ro = new ResizeObserver(() => setCanvasFont(el.clientWidth * 0.032));
         ro.observe(el);
         setCanvasFont(el.clientWidth * 0.032);
         return () => ro.disconnect();
-    }, [mode, presName, slideCount]);
+    }, [overlayOpen, presName, slideCount]);
 
     const setPresentation = (p: Presentation | null) => {
         presRef.current = p;
@@ -3627,7 +4150,7 @@ function MessagePanel() {
     const slidePayload = useCallback((idx: number): ProjectionTextData => {
         const p = presRef.current!;
         const slide = p.slides[idx];
-        return { shapes: slide.shapes, background: bgToPayload(bgChoice, slide.bgColor) };
+        return { shapes: slide.shapes, background: bgToPayload(bgChoice, slide) };
     }, [bgChoice]);
 
     const projectSlide = useCallback((idx: number, first: boolean) => {
@@ -3665,7 +4188,98 @@ function MessagePanel() {
         document.execCommand(cmd, false);
     };
 
+    // acțiuni la nivel de CASETĂ (pe cea focalizată)
+    const mutateShape = (fn: (sh: PresShape) => void) => {
+        const p = presRef.current;
+        if (!p || focusedShape == null) return;
+        const sh = p.slides[curSlide]?.shapes[focusedShape];
+        if (!sh) return;
+        fn(sh);
+        setShapeTick(t => t + 1);
+        schedulePresUpdate();
+    };
+    const cycleColumns = () => mutateShape(sh => {
+        sh.columns = ((sh.columns ?? 1) % 3) + 1;
+        if (sh.columns === 1) delete sh.columns;
+    });
+    const bumpFont = (delta: number) => mutateShape(sh => {
+        sh.fontScale = Math.max(0.4, Math.min(3, +( (sh.fontScale ?? 1) + delta ).toFixed(2)));
+        if (sh.fontScale === 1) delete sh.fontScale;
+    });
+    const addShape = () => {
+        const p = presRef.current;
+        if (!p) return;
+        p.slides[curSlide].shapes.push({ x: 10, y: 40, w: 80, h: 22, html: '<p>Text nou</p>' });
+        setShapeTick(t => t + 1);
+        setFocusedShape(p.slides[curSlide].shapes.length - 1);
+        schedulePresUpdate();
+    };
+    const deleteShape = () => {
+        const p = presRef.current;
+        if (!p || focusedShape == null) return;
+        if (p.slides[curSlide].shapes.length <= 1) return;
+        p.slides[curSlide].shapes.splice(focusedShape, 1);
+        setFocusedShape(null);
+        setShapeTick(t => t + 1);
+        schedulePresUpdate();
+    };
+
+    // mutarea / redimensionarea casetelor cu mouse-ul (mânerele de pe casetă)
+    const dragRef = useRef<{
+        mode: 'move' | 'resize';
+        idx: number;
+        startX: number;
+        startY: number;
+        orig: { x: number; y: number; w: number; h: number };
+    } | null>(null);
+
+    const onGripDown = (idx: number, gripMode: 'move' | 'resize', e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const sh = presRef.current?.slides[curSlide]?.shapes[idx];
+        const canvas = canvasRef.current;
+        if (!sh || !canvas) return;
+        setFocusedShape(idx);
+        dragRef.current = {
+            mode: gripMode, idx,
+            startX: e.clientX, startY: e.clientY,
+            orig: { x: sh.x, y: sh.y, w: sh.w, h: sh.h },
+        };
+        const rect = canvas.getBoundingClientRect();
+        const onMove = (ev: MouseEvent) => {
+            const d = dragRef.current;
+            const shape = presRef.current?.slides[curSlide]?.shapes[d?.idx ?? -1];
+            if (!d || !shape) return;
+            const dx = ((ev.clientX - d.startX) / rect.width) * 100;
+            const dy = ((ev.clientY - d.startY) / rect.height) * 100;
+            if (d.mode === 'move') {
+                shape.x = Math.max(0, Math.min(98 - Math.min(d.orig.w, 98), d.orig.x + dx));
+                shape.y = Math.max(0, Math.min(96, d.orig.y + dy));
+            } else {
+                shape.w = Math.max(6, Math.min(100 - d.orig.x, d.orig.w + dx));
+                shape.h = Math.max(4, Math.min(100 - d.orig.y, d.orig.h + dy));
+            }
+            setShapeTick(t => t + 1);
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            if (dragRef.current) {
+                dragRef.current = null;
+                schedulePresUpdate();
+            }
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
     const slide = presRef.current?.slides[curSlide];
+    const canvasBgCss = (() => {
+        if (!slide) return undefined;
+        const b = bgToPayload(bgChoice, slide);
+        if (!b) return undefined;
+        return b.type === 'image' ? `url('localfile://${encodeURI(b.value)}') center / cover no-repeat` : b.value;
+    })();
 
     return (
         <div className="content-inner message-panel">
@@ -3710,116 +4324,219 @@ function MessagePanel() {
 
             {mode === 'pres' && (<>
                 <div className="pres-sources">
-                    <select
-                        className="editor-select"
-                        value={selTemplate}
-                        onChange={e => setSelTemplate(e.target.value)}
-                    >
-                        <option value="">— Șabloane —</option>
-                        {templates.map(t => <option key={t.file} value={t.file}>{t.name}</option>)}
-                    </select>
-                    <button className="btn-sm" disabled={!selTemplate} onClick={async () => {
-                        try {
-                            const p = await window.electron.templates.load(selTemplate);
-                            setPresentation(p);
-                            setPresStatus('');
-                        } catch { setPresStatus('Nu am putut încărca șablonul.'); }
-                    }}>Încarcă</button>
                     <button className="btn-sm" onClick={async () => {
                         const file = await window.electron.presentation.pickFile();
                         if (!file) return;
                         setPresStatus('Se convertește prezentarea...');
                         const res = await window.electron.presentation.parse(file);
-                        if (res.ok) { setPresentation(res.data); setPresStatus(''); }
+                        if (res.ok) { setPresentation(res.data); setPresStatus(''); setOverlayOpen(true); }
                         else setPresStatus(res.error);
                     }}>Deschide PPT...</button>
                 </div>
 
-                {presName !== null && presRef.current && (<>
-                    <div className="pres-toolbar">
-                        <button onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Listă cu buline">•&nbsp;Listă</button>
-                        <button onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Listă numerotată">1.&nbsp;Listă</button>
-                        <button onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Îngroșat"><b>B</b></button>
-                        <button onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Înclinat"><i>I</i></button>
-                        <button onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }} title="Aliniere stânga">⟸</button>
-                        <button onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }} title="Centrat">≡</button>
-                    </div>
-
-                    <div className="pres-canvas" ref={canvasRef} style={{ fontSize: canvasFont }}>
-                        {slide?.shapes.map((sh, i) => (
-                            <div
-                                key={`${presName}-${curSlide}-${i}`}
-                                className="pres-shape"
-                                contentEditable
-                                suppressContentEditableWarning
-                                style={{ left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, minHeight: `${sh.h}%` }}
-                                onInput={e => onShapeInput(i, e.currentTarget)}
-                                dangerouslySetInnerHTML={{ __html: sh.html }}
-                            />
-                        ))}
-                    </div>
-
-                    <div className="pres-nav">
-                        <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
-                        <span className="text-white/60 text-xs">slide {curSlide + 1} / {slideCount}</span>
-                        <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
-                        <button className="btn-sm" onClick={() => {
-                            const p = presRef.current!;
-                            p.slides.splice(curSlide + 1, 0, { shapes: [{ x: 8, y: 12, w: 84, h: 76, html: '<p style="text-align:center">Text nou</p>' }] });
-                            setSlideCount(p.slides.length);
-                            goSlide(curSlide + 1);
-                        }}>+ Slide</button>
-                        <button className="btn-sm" disabled={slideCount <= 1} onClick={() => {
-                            const p = presRef.current!;
-                            p.slides.splice(curSlide, 1);
-                            setSlideCount(p.slides.length);
-                            goSlide(Math.min(curSlide, p.slides.length - 1));
-                            if (presProjected) projectSlide(Math.min(curSlide, p.slides.length - 1), false);
-                        }}>Șterge slide</button>
-                    </div>
-
-                    <BackgroundPicker bg={bgChoice} onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }} />
-
-                    <div className="timer-actions">
-                        {!presProjected ? (
-                            <button className="btn-project timer-start" onClick={() => projectSlide(curSlide, true)}>Proiectează</button>
-                        ) : (
-                            <>
-                                <span className="live-indicator">● LIVE</span>
-                                <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>Oprește</button>
-                            </>
-                        )}
-                    </div>
-
-                    <div className="pres-save">
-                        <input
-                            className="timer-text-input"
-                            type="text"
-                            placeholder="Nume șablon (ex: Anunțuri duminică)"
-                            value={saveName}
-                            onChange={e => setSaveName(e.target.value)}
-                        />
-                        <button className="btn-sm" disabled={!saveName.trim()} onClick={async () => {
-                            try {
-                                const info = await window.electron.templates.save(saveName, { ...presRef.current!, name: saveName.trim() });
-                                setSaveName('');
+                {/* Manager de șabloane: încarcă / reordonează / șterge */}
+                <div className="tpl-manager">
+                    <label className="timer-label">Șabloane</label>
+                    {templates.length === 0 && <p className="timer-hint">Niciun șablon încă — salvează o prezentare ca șablon din editor.</p>}
+                    {templates.map((t, i) => (
+                        <div key={t.file} className="tpl-row">
+                            <button
+                                className="tpl-name"
+                                title="Încarcă în editor"
+                                onClick={async () => {
+                                    try {
+                                        const p = await window.electron.templates.load(t.file);
+                                        setPresentation(p);
+                                        setPresStatus('');
+                                        setOverlayOpen(true);
+                                    } catch { setPresStatus('Nu am putut încărca șablonul.'); }
+                                }}
+                            >{t.name}</button>
+                            <button className="tpl-btn" disabled={i === 0} title="Mută mai sus" onClick={async () => {
+                                const files = templates.map(x => x.file);
+                                [files[i - 1], files[i]] = [files[i], files[i - 1]];
+                                await window.electron.templates.reorder(files);
                                 refreshTemplates();
-                                setSelTemplate(info.file);
-                                setPresStatus(`Șablon salvat: ${info.name}`);
-                            } catch { setPresStatus('Salvarea șablonului a eșuat.'); }
-                        }}>Salvează ca șablon</button>
+                            }}>↑</button>
+                            <button className="tpl-btn" disabled={i === templates.length - 1} title="Mută mai jos" onClick={async () => {
+                                const files = templates.map(x => x.file);
+                                [files[i + 1], files[i]] = [files[i], files[i + 1]];
+                                await window.electron.templates.reorder(files);
+                                refreshTemplates();
+                            }}>↓</button>
+                            {confirmDelete === t.file ? (
+                                <button className="tpl-btn tpl-btn-danger" title="Confirmă ștergerea" onClick={() => {
+                                    setConfirmDelete(null);
+                                    adminGate.require(async () => {
+                                        await window.electron.templates.delete(t.file);
+                                        refreshTemplates();
+                                    }, 'Ștergere șablon');
+                                }}>Sigur?</button>
+                            ) : (
+                                <button className="tpl-btn" title="Șterge șablonul" onClick={() => setConfirmDelete(t.file)}>✕</button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                {presName !== null && presRef.current && (
+                    <div className="timer-actions">
+                        <button className="btn-project timer-start" onClick={() => setOverlayOpen(true)}>
+                            Deschide editorul — {presName}
+                        </button>
+                        {presProjected && <span className="live-indicator">● LIVE</span>}
                     </div>
-                </>)}
+                )}
 
                 {presStatus && <p className="timer-hint">{presStatus}</p>}
                 {presName === null && !presStatus && (
                     <p className="timer-hint">
                         Încarcă un șablon sau deschide un PowerPoint de pe disc — se convertește în
-                        slide-uri pe care le poți edita aici, cu propagare live pe proiecție.
-                        Buleturile și numerotarea se păstrează și poți adăuga altele.
+                        slide-uri editabile pe tot ecranul, cu propagare live pe proiecție.
+                        Buleturile, numerotarea, mărimile și fundalul se păstrează.
                     </p>
                 )}
             </>)}
+
+            {overlayOpen && presRef.current && (
+                <div className="pres-overlay">
+                    <div className="pres-overlay-header">
+                        <span className="pres-overlay-title">{presName}</span>
+                        <div className="pres-toolbar">
+                            <button onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Listă cu buline">•&nbsp;Listă</button>
+                            <button onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Listă numerotată">1.&nbsp;Listă</button>
+                            <button onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Îngroșat"><b>B</b></button>
+                            <button onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Înclinat"><i>I</i></button>
+                            <button onMouseDown={e => { e.preventDefault(); exec('underline'); }} title="Subliniat"><u>U</u></button>
+                            <button onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }} title="Aliniere stânga">⟸</button>
+                            <button onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }} title="Centrat">≡</button>
+                            <button onMouseDown={e => { e.preventDefault(); exec('justifyRight'); }} title="Aliniere dreapta">⟹</button>
+                            <span className="pres-toolbar-sep" />
+                            <button onMouseDown={e => { e.preventDefault(); cycleColumns(); }} disabled={focusedShape == null} title="Împarte caseta pe coloane (1 → 2 → 3)">⫼&nbsp;Coloane{focusedShape != null && (slide?.shapes[focusedShape]?.columns ?? 1) > 1 ? `: ${slide?.shapes[focusedShape]?.columns}` : ''}</button>
+                            <button onMouseDown={e => { e.preventDefault(); bumpFont(0.15); }} disabled={focusedShape == null} title="Text mai mare în casetă">A+</button>
+                            <button onMouseDown={e => { e.preventDefault(); bumpFont(-0.15); }} disabled={focusedShape == null} title="Text mai mic în casetă">A−</button>
+                            <span className="pres-toolbar-sep" />
+                            <button onMouseDown={e => { e.preventDefault(); addShape(); }} title="Casetă de text nouă">+&nbsp;Casetă</button>
+                            <button onMouseDown={e => { e.preventDefault(); deleteShape(); }} disabled={focusedShape == null || (slide?.shapes.length ?? 0) <= 1} title="Șterge caseta focalizată">✕&nbsp;Casetă</button>
+                        </div>
+                        <div className="pres-overlay-actions">
+                            {!presProjected ? (
+                                <button className="btn-project timer-start" onClick={() => projectSlide(curSlide, true)}>Proiectează</button>
+                            ) : (
+                                <>
+                                    <span className="live-indicator">● LIVE</span>
+                                    <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>Oprește</button>
+                                </>
+                            )}
+                            <button className="btn-sm" onClick={() => setOverlayOpen(false)} title="Închide editorul (Esc)">
+                                Închide
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="pres-overlay-body">
+                        <button
+                            className="pres-arrow pres-arrow-left"
+                            disabled={curSlide === 0}
+                            onClick={() => goSlide(curSlide - 1)}
+                            title="Slide anterior"
+                        >‹</button>
+                        <button
+                            className="pres-arrow pres-arrow-right"
+                            disabled={curSlide >= slideCount - 1}
+                            onClick={() => goSlide(curSlide + 1)}
+                            title="Slide următor"
+                        >›</button>
+                        <div
+                            className="pres-canvas pres-canvas-big"
+                            ref={canvasRef}
+                            style={{ fontSize: canvasFont, background: canvasBgCss ?? '#0a0a14' }}
+                        >
+                            {slide?.shapes.map((sh, i) => (
+                                <div
+                                    key={`${presName}-${curSlide}-${i}`}
+                                    className={`pres-shape ${focusedShape === i ? 'pres-shape-focused' : ''}`}
+                                    style={{ left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, minHeight: `${sh.h}%` }}
+                                    onFocus={() => setFocusedShape(i)}
+                                >
+                                    {/* mânerele NU sunt în interiorul zonei editabile */}
+                                    <div
+                                        className="pres-grip pres-grip-move"
+                                        title="Trage pentru a muta caseta"
+                                        onMouseDown={e => onGripDown(i, 'move', e)}
+                                    >⠿</div>
+                                    <div
+                                        className="pres-grip pres-grip-resize"
+                                        title="Trage pentru a redimensiona"
+                                        onMouseDown={e => onGripDown(i, 'resize', e)}
+                                    />
+                                    <div
+                                        className="pres-shape-inner"
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        style={{
+                                            ...(sh.fontScale ? { fontSize: `${sh.fontScale}em` } : {}),
+                                            ...(sh.columns && sh.columns > 1 ? { columnCount: sh.columns, columnGap: '1.2em' } : {}),
+                                            ...(sh.anchor ? { display: 'flex', flexDirection: 'column', justifyContent: sh.anchor === 'middle' ? 'center' : 'flex-end', height: '100%' } : {}),
+                                        }}
+                                        onInput={e => onShapeInput(i, e.currentTarget)}
+                                        dangerouslySetInnerHTML={{ __html: sh.html }}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="pres-overlay-footer">
+                        <div className="pres-nav">
+                            <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
+                            <span className="text-white/60 text-xs">slide {curSlide + 1} / {slideCount}</span>
+                            <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
+                            <button className="btn-sm" onClick={() => {
+                                const p = presRef.current!;
+                                p.slides.splice(curSlide + 1, 0, { shapes: [{ x: 8, y: 12, w: 84, h: 76, html: '<p style="text-align:center">Text nou</p>' }] });
+                                setSlideCount(p.slides.length);
+                                goSlide(curSlide + 1);
+                            }}>+ Slide</button>
+                            <button className="btn-sm" disabled={slideCount <= 1} onClick={() => {
+                                const p = presRef.current!;
+                                p.slides.splice(curSlide, 1);
+                                setSlideCount(p.slides.length);
+                                const next = Math.min(curSlide, p.slides.length - 1);
+                                goSlide(next);
+                                if (presProjected) projectSlide(next, false);
+                            }}>Șterge slide</button>
+                        </div>
+                        <BackgroundPicker bg={bgChoice} onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }} />
+                        <div className="pres-save">
+                            <input
+                                className="timer-text-input"
+                                type="text"
+                                placeholder="Nume șablon (ex: Anunțuri duminică)"
+                                value={saveName}
+                                onChange={e => setSaveName(e.target.value)}
+                            />
+                            <button className="btn-sm" disabled={!saveName.trim()} onClick={() => {
+                                const doSave = async () => {
+                                    try {
+                                        const info = await window.electron.templates.save(saveName, { ...presRef.current!, name: saveName.trim() });
+                                        setSaveName('');
+                                        refreshTemplates();
+                                        setPresStatus(`Șablon salvat: ${info.name}`);
+                                    } catch { setPresStatus('Salvarea șablonului a eșuat.'); }
+                                };
+                                // suprascrierea unui șablon EXISTENT cere parola; nume nou = liber
+                                const safe = saveName.trim().replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60) || 'Șablon';
+                                if (templates.some(t => t.file === `${safe}.json`)) {
+                                    adminGate.require(doSave, 'Suprascriere șablon');
+                                } else {
+                                    doSave();
+                                }
+                            }}>Salvează ca șablon</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

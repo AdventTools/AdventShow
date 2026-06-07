@@ -84,6 +84,12 @@ contextBridge.exposeInMainWorld('electron', {
     status: () => ipcRenderer.invoke('contrib:status'),
   },
 
+  registry: {
+    submit: () => ipcRenderer.invoke('registry:submit'),
+    unlockRequest: (phone: string) => ipcRenderer.invoke('registry:unlock-request', phone),
+    unlockVerify: (code: string) => ipcRenderer.invoke('registry:unlock-verify', code),
+  },
+
   presentation: {
     pickFile: () => ipcRenderer.invoke('presentation:pick-file'),
     parse: (filePath: string) => ipcRenderer.invoke('presentation:parse', filePath),
@@ -95,6 +101,7 @@ contextBridge.exposeInMainWorld('electron', {
     load: (file: string) => ipcRenderer.invoke('templates:load', file),
     save: (name: string, data: unknown) => ipcRenderer.invoke('templates:save', name, data),
     delete: (file: string) => ipcRenderer.invoke('templates:delete', file),
+    reorder: (files: string[]) => ipcRenderer.invoke('templates:reorder', files),
   },
 
   screen: {
