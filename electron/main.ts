@@ -38,9 +38,10 @@ import {
   syncSeedContent,
 } from './db'
 import { applyOtaCorrections, maybeSendContributions, getContributionStatus, ContribDeps } from './contrib'
+import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
 import {
   parsePresentationFile, seedTemplatesIfNeeded, listTemplates, loadTemplate,
-  saveTemplate, deleteTemplate, Presentation,
+  saveTemplate, deleteTemplate, reorderTemplates, Presentation,
 } from './presentation'
 import { parsePresentationToHymn } from './import'
 import { importPresentationDirectory, importPresentationFiles } from './import'
@@ -70,9 +71,14 @@ function resetProjectionReady() {
   })
 }
 
-function waitForProjectionReady(): Promise<void> {
+function waitForProjectionReady(timeoutMs = 7000): Promise<void> {
   if (!projectionReadyPromise) resetProjectionReady()
-  return projectionReadyPromise!
+  // dacă renderer-ul proiecției crapă înainte să semnaleze „ready", promisiunea
+  // nu s-ar rezolva niciodată și handlerele ar rămâne agățate — limităm așteptarea
+  return Promise.race([
+    projectionReadyPromise!,
+    new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
+  ])
 }
 
 // ── App settings ──────────────────────────────────────────────────────────────
@@ -107,6 +113,12 @@ interface AppSettings {
   contribSentHashes?: Record<string, string>
   correctionsLastSeq?: number
   correctionsLastCheckAt?: string
+  // ── Registrul instalărilor + recuperare parolă ──
+  churchName?: string
+  churchCity?: string
+  registrySentKey?: string
+  unlockCodeHash?: string
+  unlockCodeExpiry?: string
 }
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
@@ -150,6 +162,15 @@ function writeSettings(settings: AppSettings) {
 function contribDeps(seedDbPath: string): ContribDeps {
   return {
     seedDbPath,
+    appVersion: app.getVersion(),
+    getSettings: () => readSettings(),
+    patchSettings: (patch) => writeSettings({ ...readSettings(), ...patch }),
+    log: debugLog,
+  }
+}
+
+function registryDeps(): RegistryDeps {
+  return {
     appVersion: app.getVersion(),
     getSettings: () => readSettings(),
     patchSettings: (patch) => writeSettings({ ...readSettings(), ...patch }),
@@ -319,7 +340,7 @@ function runFFmpeg(args: string[]): Promise<void> {
   // no work play instantly without a flashing spinner.
   if (isWinAlive(win)) win.webContents.send('video:converting', true)
   return new Promise((resolve, reject) => {
-    const proc = execFile(ffmpeg, args, { timeout: 600000, maxBuffer: 1024 * 1024 * 64 }, (err) => {
+    const proc = trackChild(execFile(ffmpeg, args, { timeout: 600000, maxBuffer: 1024 * 1024 * 64 }, (err) => {
       if (isWinAlive(win)) win.webContents.send('video:converting', false)
       if (err) {
         console.error('[FFmpeg] failed:', err)
@@ -327,7 +348,7 @@ function runFFmpeg(args: string[]): Promise<void> {
       } else {
         resolve()
       }
-    })
+    }))
     proc.stderr?.on('data', (d: Buffer) => {
       const line = d.toString()
       if (line.includes('time=') && isWinAlive(win)) {
@@ -591,7 +612,7 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
 
   const runStep = (bin: string, args: string[]): Promise<void> => new Promise((resolve, reject) => {
     debugLog(`[yt-dlp-download:${stage}]`, bin, args.join(' '))
-    const proc = spawn(bin, args)
+    const proc = trackChild(spawn(bin, args))
     const onData = (data: Buffer) => {
       const line = data.toString().trim()
       debugLog(`[yt-dlp-download:${stage}]`, line)
@@ -806,6 +827,7 @@ function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     ...bounds,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
@@ -828,6 +850,14 @@ function createWindow() {
 
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', new Date().toLocaleString())
+  })
+
+  // pornește implicit MAXIMIZATĂ (header-ul are multe câmpuri); poziția salvată
+  // contează doar pentru alegerea display-ului. show:false + maximize + show
+  // evită flash-ul de fereastră mică.
+  win.once('ready-to-show', () => {
+    win?.maximize()
+    win?.show()
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -853,6 +883,38 @@ function copySeedDbIfNeeded() {
     copyFromSeed()
   }
 }
+
+// ── Curățenie GARANTATĂ la închidere ──────────────────────────────────────────
+// Pe macOS, Cmd+Q cu fereastra de proiecție în FULLSCREEN (Space separat) lăsa
+// un „AdventShow Helper" orfan care consuma CPU/memorie (renderer-ul proiecției,
+// cu ceasul ticăind). Ieșim din fullscreen + distrugem ferestrele explicit și
+// omorâm copiii ffmpeg/yt-dlp aflați în lucru.
+const trackedChildren = new Set<ReturnType<typeof spawn>>()
+function trackChild<T extends { on: (ev: string, cb: () => void) => unknown; kill: (sig?: NodeJS.Signals) => boolean }>(p: T): T {
+  trackedChildren.add(p as never)
+  p.on('exit', () => trackedChildren.delete(p as never))
+  return p
+}
+
+app.on('before-quit', () => {
+  try { stopPowerSaveBlocker() } catch { /* deja oprit */ }
+  for (const child of trackedChildren) {
+    try { child.kill('SIGKILL') } catch { /* deja mort */ }
+  }
+  for (const w of BrowserWindow.getAllWindows()) {
+    try {
+      w.removeAllListeners('close')
+      if (w.isFullScreen()) w.setFullScreen(false)
+      w.destroy()
+    } catch { /* fereastra poate fi deja distrusă */ }
+  }
+})
+
+app.on('will-quit', () => {
+  // plasă de siguranță: dacă ceva tot ține procesul în viață, ieșim forțat
+  const t = setTimeout(() => { try { app.exit(0) } catch { /* ignorat */ } }, 2500)
+  t.unref()
+})
 
 app.on('window-all-closed', () => {
   stopPowerSaveBlocker()
@@ -942,6 +1004,9 @@ app.whenReady().then(() => {
           const deps = contribDeps(sp)
           applyOtaCorrections(deps)
             .then(() => maybeSendContributions(deps))
+            // registrul instalărilor: idempotent (sare instant dacă datele au
+            // fost deja trimise); offline reîncearcă la următoarea pornire
+            .then(() => maybeSendRegistration(registryDeps()))
             .catch(err => debugLog('[startup] contrib/OTA error:', String(err)))
           break
         }
@@ -969,7 +1034,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle('presentation:parse', async (_e, filePath: string) => {
     try {
-      return { ok: true, data: await parsePresentationFile(filePath) }
+      // imaginile de fundal din PPTX se extrag într-un cache persistent
+      const cacheDir = path.join(app.getPath('userData'), 'pres-cache')
+      return { ok: true, data: await parsePresentationFile(filePath, cacheDir) }
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : 'Nu am putut citi prezentarea.' }
     }
@@ -987,6 +1054,7 @@ app.whenReady().then(() => {
   ipcMain.handle('templates:save', (_e, name: string, data: Presentation) =>
     saveTemplate(userTemplatesDir(), name, data))
   ipcMain.handle('templates:delete', (_e, file: string) => deleteTemplate(userTemplatesDir(), file))
+  ipcMain.handle('templates:reorder', (_e, files: string[]) => reorderTemplates(userTemplatesDir(), files))
 
   // parsare PPT ca IMN, fără inserare — pentru fluxul „importă → editează → salvează"
   ipcMain.handle('import:parse-hymn', async (_e, filePath: string) => {
@@ -995,6 +1063,26 @@ app.whenReady().then(() => {
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : 'Nu am putut citi fișierul.' }
     }
+  })
+
+  // ── Registrul instalărilor + recuperare parolă ─────────────────────────────
+  // trimis imediat după configurarea inițială / completarea datelor (idempotent)
+  ipcMain.handle('registry:submit', () => maybeSendRegistration(registryDeps()))
+  // parolă uitată: trimite cererea (cu codul de deblocare inclus, doar către
+  // autori) și întoarce codul de CERERE pe care utilizatorul îl comunică telefonic
+  ipcMain.handle('registry:unlock-request', (_e, phone: string) =>
+    sendUnlockRequest(registryDeps(), phone))
+  // verifică codul dictat; la succes parola veche se șterge — renderer-ul
+  // deschide imediat dialogul de setare a parolei noi
+  ipcMain.handle('registry:unlock-verify', (_e, code: string) => {
+    const ok = verifyUnlockCode(registryDeps(), code)
+    if (ok) {
+      const s = readSettings()
+      delete s.adminPasswordHash
+      writeSettings(s)
+      debugLog('[Registry] parola de administrare a fost resetată prin cod de deblocare')
+    }
+    return ok
   })
 
   // status contribuții pentru panoul Setări (câte modificări așteaptă / trimise)
@@ -1180,7 +1268,9 @@ app.whenReady().then(() => {
     debugLog('[Projection] Open request:', hymnTitle, hymnNumber, 'sections:', sections.length, 'type:', contentType)
     const idx = typeof startIndex === 'number' ? startIndex : 0
     projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
-    if (projectionWin) {
+    // isWinAlive — la deschide/închide/deschide rapid, instanța poate fi distrusă
+    // dar încă ne-null-ificată (race cu evenimentul 'closed')
+    if (isWinAlive(projectionWin)) {
       projectionWin.focus()
       // Already open & ready: send immediately
       sendSlideToProjection(idx)
@@ -1193,7 +1283,11 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('projection:navigate', (_e, _sections: any[], index: number, _hymnTitle: string, _hymnNumber: string, contentType?: string, bibleRef?: string) => {
-    if (!projState) return
+    // proiecția a murit între timp → UI-ul credea că navighează în gol; îl anunțăm
+    if (!projState || !isWinAlive(projectionWin)) {
+      if (isWinAlive(win)) win.webContents.send('projection:closed')
+      return
+    }
     if (contentType) projState.contentType = contentType as any
     if (bibleRef) projState.bibleRef = bibleRef
     const minIndex = projState.contentType === 'bible' ? 0 : -1
@@ -1203,7 +1297,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle('projection:update-hymn', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
     const idx = typeof startIndex === 'number' ? startIndex : 0
-    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
+    // bibleRef se păstrează DOAR pentru conținut biblic — altfel referința veche
+    // putea pâlpâi pe primul slide al imnului următor
+    projState = {
+      sections, currentIndex: idx, hymnTitle, hymnNumber,
+      contentType: contentType as any,
+      bibleRef: contentType === 'bible' ? bibleRef : undefined,
+    }
     sendSlideToProjection(idx)
   })
 

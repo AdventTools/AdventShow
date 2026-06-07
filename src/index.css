@@ -21,3 +21,7 @@ body.projection-mode #root {
 .pres-shape-view ul, .pres-shape-view ol { padding-left: 1.2em; margin: 0.1em 0; }
 .pres-shape-view li { margin: 0.15em 0; }
 .pres-shape-view p { margin: 0.1em 0; }
+
+/* buleturile/numerele pe PROIECȚIE (preflight-ul Tailwind le resetează) */
+.pres-shape-view ul { list-style: disc outside; }
+.pres-shape-view ol { list-style: decimal outside; }

@@ -39,10 +39,32 @@ function TimerDisplay({ data, color, fontScale }: {
 }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    // Tick every 250ms for smooth seconds without busy-looping.
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, []);
+    setNow(Date.now());
+    // Pauză (valoare înghețată): afișajul e static — nu bifăm deloc.
+    if (data.mode !== 'clock' && data.running === false) return;
+
+    // Granularitate aliniată la ce se VEDE (eficiență pe procesoare slabe):
+    //   • ceas cu secunde / numărătoare / cronometru → 1 tick pe secundă
+    //   • ceas fără secunde → 1 tick pe minut (~240× mai rar decât vechiul 250ms)
+    // Faza: ceasul pe granițele de timp reale; numărătoarea/cronometrul pe faza
+    // ancorei lor, ca cifra secundelor să se schimbe exact când trebuie.
+    const isClock = data.mode === 'clock';
+    const showSec = isClock && data.clockShowSeconds === true;
+    const tickMs = isClock && !showSec ? 60000 : 1000;
+    const anchor = isClock ? 0 : (data.targetEpochMs ?? data.startEpochMs ?? 0);
+    const phase = anchor % tickMs;
+    const delay = ((phase - Date.now()) % tickMs + tickMs) % tickMs + 15;
+
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const timeout = setTimeout(() => {
+      setNow(Date.now());
+      interval = setInterval(() => setNow(Date.now()), tickMs);
+    }, delay);
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
+  }, [data.mode, data.clockShowSeconds, data.running, data.targetEpochMs, data.startEpochMs]);
 
   let display: string;
   let atZero = false;
@@ -54,7 +76,7 @@ function TimerDisplay({ data, color, fontScale }: {
     const suffix = h24 ? '' : (h >= 12 ? ' PM' : ' AM');
     if (!h24) { h = h % 12; if (h === 0) h = 12; }
     const pad = (n: number) => String(n).padStart(2, '0');
-    const secondsPart = data.clockShowSeconds !== false ? `:${pad(d.getSeconds())}` : '';
+    const secondsPart = data.clockShowSeconds === true ? `:${pad(d.getSeconds())}` : '';
     display = `${h24 ? pad(h) : h}:${pad(d.getMinutes())}${secondsPart}${suffix}`;
   } else if (data.mode === 'stopwatch') {
     const elapsed = !data.running && data.frozenValueMs != null
@@ -85,7 +107,7 @@ function TimerDisplay({ data, color, fontScale }: {
         </div>
       )}
       {analogClock ? (
-        <AnalogClock now={now} color={color} showSeconds={data.clockShowSeconds !== false} fontScale={fontScale} />
+        <AnalogClock now={now} color={color} showSeconds={data.clockShowSeconds === true} fontScale={fontScale} />
       ) : (
         <div style={{
           color, fontWeight: 800, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
@@ -107,7 +129,8 @@ function AnalogClock({ now, color, showSeconds, fontScale }: {
   now: number; color: string; showSeconds: boolean; fontScale: number;
 }) {
   const d = new Date(now);
-  const sec = d.getSeconds() + d.getMilliseconds() / 1000;
+  // valori DISCRETE (pas pe secundă/minut) — fără recalcul continuu din milisecunde
+  const sec = d.getSeconds();
   const min = d.getMinutes() + sec / 60;
   const hr = (d.getHours() % 12) + min / 60;
 
@@ -134,10 +157,10 @@ function AnalogClock({ now, color, showSeconds, fontScale }: {
       style={{
         width: `calc(min(68vmin, 68vh) * ${fontScale})`,
         height: `calc(min(68vmin, 68vh) * ${fontScale})`,
-        filter: 'drop-shadow(0 4px 28px rgba(0,0,0,0.6))',
+        // fără drop-shadow: filtrul se re-rasteriza la fiecare mișcare a limbilor
       }}
     >
-      <circle cx={100} cy={100} r={96} fill="rgba(0,0,0,0.25)" stroke={color} strokeWidth={4} />
+      <circle cx={100} cy={100} r={96} fill="rgba(0,0,0,0.38)" stroke={color} strokeWidth={4} />
       {marks}
       {/* orar */}
       <line
@@ -177,11 +200,29 @@ export function ProjectionPage() {
   // ── Video state ──
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const bgVideoRef = useRef<HTMLVideoElement>(null);
   const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // intervalul de status video nu trebuie să supraviețuiască componentei
+  // (altfel continuă să ruleze într-un renderer pe moarte la închiderea proiecției)
+  useEffect(() => () => {
+    if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
+  }, []);
 
   // ── Special modes: timer/clock + free text / prezentare ──
   const [timer, setTimer] = useState<ProjectionTimerData | null>(null);
   const [freeText, setFreeText] = useState<ProjectionTextData | null>(null);
+
+  // Video-ul de fundal e complet acoperit când rulează un video proiectat sau
+  // când Ceasul/Realtime au fundal propriu → îl punem pe pauză (decodarea
+  // video pe ascuns ardea CPU degeaba); revine singur când redevine vizibil.
+  const bgVideoCovered = !!videoUrl || !!timer?.background || !!freeText?.background;
+  useEffect(() => {
+    const v = bgVideoRef.current;
+    if (!v) return;
+    if (bgVideoCovered) v.pause();
+    else if (v.paused) v.play().catch(() => { /* autoplay refuzat — rămâne static */ });
+  }, [bgVideoCovered]);
 
   // Load background settings once on mount
   useEffect(() => {
@@ -345,6 +386,19 @@ export function ProjectionPage() {
     setShrinkFactor(1);
   }, [data?.currentIndex, data?.hymnNumber, zoomLevel]);
 
+  // la redimensionarea containerului (schimbare display/zoom) re-pornim potrivirea
+  const [resizeTick, setResizeTick] = useState(0);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+      setShrinkFactor(1);
+      setResizeTick(t => t + 1);
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, []);
+
   // After render, check if content overflows and shrink until it fits
   useEffect(() => {
     const container = containerRef.current;
@@ -356,13 +410,16 @@ export function ProjectionPage() {
       const containerH = container.clientHeight;
       const contentH = content.scrollHeight;
       if (contentH > containerH && containerH > 0) {
-        // Shrink proportionally, with a small extra margin
+        // Shrink proportionally, with a small extra margin.
+        // Plafonul minim e jos intenționat: cerința e ca textul să NU depășească
+        // NICIODATĂ vertical ecranul, oricât de lungă ar fi strofa.
         const newFactor = shrinkFactor * (containerH / contentH) * 0.95;
-        setShrinkFactor(Math.max(0.3, newFactor));
+        setShrinkFactor(Math.max(0.15, newFactor));
       }
     });
     return () => cancelAnimationFrame(raf);
   });
+  void resizeTick;
 
   // ── Uniform font size for the entire hymn ──
   // Analyze ALL sections once when the hymn changes, pick the tightest fit,
@@ -445,6 +502,7 @@ export function ProjectionPage() {
       {bgType === 'video' && bg.bgVideoPath && (
         <>
           <video
+            ref={bgVideoRef}
             src={toFileUrl(bg.bgVideoPath)}
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: bg.bgOpacity ?? 1 }}
@@ -471,13 +529,15 @@ export function ProjectionPage() {
         />
       )}
 
-      {/* Timer / clock (fullscreen, self-ticking) */}
+      {/* Timer / clock (fullscreen, self-ticking), cu fundal opțional per-proiecție */}
       {timer && (
-        <TimerDisplay
-          data={timer}
-          color={bg.contentTextColor ?? '#ffffff'}
-          fontScale={(bg.projectionFontSize ?? 1.2) * zoomLevel}
-        />
+        <div className="absolute inset-0 z-20" style={{ background: textBackgroundCss(timer.background) }}>
+          <TimerDisplay
+            data={timer}
+            color={bg.contentTextColor ?? '#ffffff'}
+            fontScale={(bg.projectionFontSize ?? 1.2) * zoomLevel}
+          />
+        </div>
       )}
 
       {/* Realtime: text simplu (auto-fit) sau slide de prezentare (forme), cu
@@ -503,6 +563,12 @@ export function ProjectionPage() {
                     left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, minHeight: `${sh.h}%`,
                     textShadow: '0 2px 16px rgba(0,0,0,0.55)',
                     lineHeight: 1.3,
+                    ...(sh.fontScale ? { fontSize: `${sh.fontScale}em` } : {}),
+                    ...(sh.columns && sh.columns > 1 ? { columnCount: sh.columns, columnGap: '1.2em' } : {}),
+                    ...(sh.anchor ? {
+                      height: `${sh.h}%`, display: 'flex', flexDirection: 'column',
+                      justifyContent: sh.anchor === 'middle' ? 'center' : 'flex-end',
+                    } : {}),
                   }}
                   dangerouslySetInnerHTML={{ __html: sh.html }}
                 />

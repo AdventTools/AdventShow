@@ -98,17 +98,23 @@ export interface ProjectionTimerData {
   title?: string;           // optional heading, e.g. "Serviciul începe în"
   zeroMessage?: string;     // countdown: shown when it reaches 0, e.g. "Bine ați venit!"
   clock24h?: boolean;       // clock: 24h (default) vs 12h
-  clockShowSeconds?: boolean; // clock: afișează secundele (default true)
+  clockShowSeconds?: boolean; // clock: afișează secundele (implicit DEZACTIVATE — economie de CPU)
   clockAnalog?: boolean;    // clock: cadran analogic în loc de digital
+  background?: { type: 'color' | 'gradient' | 'image'; value: string } | null; // fundal per-proiecție (ca la Realtime)
 }
 
 export interface PresShape {
   x: number; y: number; w: number; h: number;  // procente din slide (0–100)
-  html: string;                                 // subset restrâns (p/ul/ol/li/b/i/u/br)
+  html: string;                                 // subset restrâns (p/ul/ol/li/b/i/u/br/span)
+  anchor?: 'middle' | 'bottom';                 // ancorarea verticală a textului
+  columns?: number;   // împărțirea textului pe coloane (1–3)
+  fontScale?: number; // multiplicator de mărime per casetă (1 = normal)
 }
 
 export interface PresSlide {
   bgColor?: string;
+  bgGradient?: string;
+  bgImage?: string;
   shapes: PresShape[];
 }
 
@@ -168,6 +174,12 @@ export interface AppSettings {
   contribSentHashes?: Record<string, string>; // cheie imn -> hash ultima trimitere (dedup)
   correctionsLastSeq?: number; // ultimul seq aplicat din feed-ul OTA
   correctionsLastCheckAt?: string; // ISO — ultima verificare a feed-ului (max 1/zi)
+  // ── Registrul instalărilor + recuperare parolă ──
+  churchName?: string;        // numele bisericii (obligatoriu la configurare)
+  churchCity?: string;        // localitatea
+  registrySentKey?: string;   // datele deja trimise (dedup; retrimite la schimbare)
+  unlockCodeHash?: string;    // sha256 al codului de deblocare activ (parolă uitată)
+  unlockCodeExpiry?: string;  // ISO — expirarea codului (7 zile)
 }
 
 export interface YouTubeEntry {
@@ -233,6 +245,11 @@ export interface IElectronAPI {
     get: () => Promise<AppSettings>;
     set: (patch: Partial<AppSettings>) => Promise<void>;
   };
+  registry: {
+    submit: () => Promise<boolean>;
+    unlockRequest: (phone: string) => Promise<{ ok: boolean; requestCode?: string; error?: string }>;
+    unlockVerify: (code: string) => Promise<boolean>;
+  };
   contrib: {
     status: () => Promise<{ pending: number; sent: number }>;
   };
@@ -246,6 +263,7 @@ export interface IElectronAPI {
     load: (file: string) => Promise<Presentation>;
     save: (name: string, data: Presentation) => Promise<TemplateInfo>;
     delete: (file: string) => Promise<void>;
+    reorder: (files: string[]) => Promise<void>;
   };
   screen: {
     getDisplays: () => Promise<DisplayInfo[]>;
