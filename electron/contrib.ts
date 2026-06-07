@@ -15,9 +15,8 @@ const Database = require('better-sqlite3');
 //
 // • Contribuții: modificările utilizatorului față de baza oficială (seed), aflate
 //   în „carantină" de cel puțin 7 zile de la ultima editare, se trimit AUTOMAT
-//   (dacă utilizatorul nu a oprit opțiunea) către un formular Google — ajung
-//   într-un Sheet PRIVAT al autorilor. DOAR autorii decid manual ce se acceptă;
-//   nimic nu se aplică programatic din contribuții.
+//   către un formular Google — ajung într-un Sheet PRIVAT al autorilor. DOAR
+//   autorii decid manual ce se acceptă; nimic nu se aplică programatic.
 // • Corecturi OTA: aplicația citește feed-ul public `content/corrections.json`
 //   din repo și aplică intrările noi (seq crescător). `force: true` suprascrie
 //   necondiționat; altfel modificările proprii ale utilizatorului au prioritate.
@@ -41,7 +40,6 @@ const MAX_HYMNS_PER_SUBMISSION = 20; // restul pleacă la verificarea următoare
 const FETCH_TIMEOUT_MS = 4000;
 
 interface ContribSettings {
-  contribEnabled?: boolean;
   contribName?: string;
   contribInstallId?: string;
   contribLastCheckAt?: string;
@@ -312,7 +310,6 @@ function buildRezumat(candidates: Candidate[], name: string): string {
 
 export async function maybeSendContributions(deps: ContribDeps): Promise<void> {
   const settings = deps.getSettings();
-  if (settings.contribEnabled === false) return;
   if (!onceADay(settings.contribLastCheckAt)) return;
 
   const sentHashes = settings.contribSentHashes ?? {};

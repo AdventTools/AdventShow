@@ -17,7 +17,7 @@
 ## v1.3.4 (06 Iunie 2026)
 
 ### Modificări
-- contribuții: corecturile și imnurile adăugate de utilizatori ajung automat la autori pentru verificare (anonim, după 7 zile de stabilitate, cu opțiune de oprire în Setări), iar autorii pot publica corecturi care ajung la toată lumea la pornirea aplicației, fără instalare de versiune nouă
+- contribuții: corecturile și imnurile adăugate de utilizatori ajung automat la autori pentru verificare (după 7 zile de stabilitate — pleacă doar forma finală), iar autorii pot publica corecturi care ajung la toată lumea la pornirea aplicației, fără instalare de versiune nouă
 
 ---
 

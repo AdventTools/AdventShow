@@ -167,7 +167,6 @@ export interface AppSettings {
     video?: { sidebarWidth: number; previewWidth: number };
   };
   // ── Contribuții + corecturi OTA ──
-  contribEnabled?: boolean;   // trimite automat corecturile către AdventShow (default true)
   contribName?: string;       // nume/biserică, opțional, atașat contribuțiilor
   contribInstallId?: string;  // ID anonim al instalării (generat la prima trimitere)
   contribLastCheckAt?: string; // ISO — ultima verificare de trimitere (max 1/zi)

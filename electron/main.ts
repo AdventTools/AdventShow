@@ -106,7 +106,6 @@ interface AppSettings {
     video?: { sidebarWidth: number; previewWidth: number }
   }
   // ── Contribuții + corecturi OTA ──
-  contribEnabled?: boolean
   contribName?: string
   contribInstallId?: string
   contribLastCheckAt?: string
