@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.7 (08 Iunie 2026)
+
+### Modificări
+- remediat consumul mare de procesor pe ecranul de proiecție și procesul «AdventShow Helper» care rămânea pornit și după închiderea aplicației pe macOS; în plus, închiderea ferestrei principale închide acum complet aplicația (inclusiv proiecția de pe al doilea ecran)
+
+---
+
 ## v1.3.6 (07 Iunie 2026)
 
 ### Modificări
