@@ -414,12 +414,15 @@ export function ProjectionPage() {
         // Plafonul minim e jos intenționat: cerința e ca textul să NU depășească
         // NICIODATĂ vertical ecranul, oricât de lungă ar fi strofa.
         const newFactor = shrinkFactor * (containerH / contentH) * 0.95;
-        setShrinkFactor(Math.max(0.15, newFactor));
+        const clamped = Math.max(0.15, newFactor);
+        // gardă anti-buclă: nu reprograma dacă diferența e neglijabilă (sub 0.5%)
+        if (Math.abs(clamped - shrinkFactor) > shrinkFactor * 0.005) setShrinkFactor(clamped);
       }
     });
     return () => cancelAnimationFrame(raf);
-  });
-  void resizeTick;
+    // rulează la schimbarea conținutului/zoom-ului, la redimensionare reală
+    // (resizeTick) și după fiecare pas de micșorare (shrinkFactor), până încape
+  }, [shrinkFactor, resizeTick, data?.currentIndex, data?.hymnNumber, isBible, section?.text, fontSizeMultiplier]);
 
   // ── Uniform font size for the entire hymn ──
   // Analyze ALL sections once when the hymn changes, pick the tightest fit,
@@ -639,8 +642,11 @@ export function ProjectionPage() {
             opacity: visible ? 1 : 0,
             transform: visible ? 'translateY(0)' : 'translateY(12px)',
             transition: 'opacity 0.35s ease, transform 0.35s ease',
-            // Leave room for header (~3vh) and footer dots (~4vh)
-            maxHeight: '90vh',
+            // Înălțime FIXĂ (nu maxHeight): cutia observată de ResizeObserver trebuie
+            // să depindă DOAR de viewport, nu de conținut. Altfel ajustarea fontului
+            // schimba înălțimea containerului → ResizeObserver → reset shrink → buclă
+            // infinită = renderer la 100% CPU (helper-ul macOS care nu se mai oprea).
+            height: '90vh',
             paddingTop: data && !isBible && data.currentIndex >= 0 ? '3.5vh' : '0',
             paddingBottom: data && data.sections.length > 1 && data.currentIndex >= 0 ? '4vh' : '0',
             display: 'flex',
