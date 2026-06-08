@@ -60,6 +60,9 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 let win: BrowserWindow | null
 let projectionWin: BrowserWindow | null = null
+// true cât rulează auto-update-ul: ferestrele se distrug intenționat, deci
+// închiderea ferestrei principale NU trebuie să declanșeze app.quit() concurent
+let isInstalling = false
 
 // Promise that resolves when the projection renderer signals it's ready
 let projectionReadyResolve: (() => void) | null = null
@@ -847,6 +850,18 @@ function createWindow() {
   win.on('moved', saveBounds)
   win.on('resized', saveBounds)
 
+  // Închiderea ferestrei principale = închiderea aplicației. Fără ea, pe macOS
+  // app-ul rămânea pornit (window-all-closed nu face nimic pe darwin), iar
+  // fereastra de proiecție fullscreen de pe al doilea ecran continua să ruleze
+  // cu helper-ul ei. Sărim peste asta în timpul auto-update-ului (quitAndInstall
+  // gestionează singur ieșirea).
+  win.on('closed', () => {
+    win = null
+    if (isInstalling) return
+    if (isWinAlive(projectionWin)) { try { projectionWin.destroy() } catch { /* deja distrusă */ } }
+    app.quit()
+  })
+
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', new Date().toLocaleString())
   })
@@ -903,8 +918,15 @@ app.on('before-quit', () => {
   for (const w of BrowserWindow.getAllWindows()) {
     try {
       w.removeAllListeners('close')
+      // capturăm PID-ul procesului renderer ÎNAINTE de destroy: dacă renderer-ul
+      // e blocat (ex. fullscreen pe Space-ul lui), destroy poate să nu-l termine
+      // la timp și se reparenta la launchd → „AdventShow Helper" orfan la 100% CPU.
+      let rpid = 0
+      try { rpid = w.webContents?.getOSProcessId?.() ?? 0 } catch { /* fără webContents */ }
       if (w.isFullScreen()) w.setFullScreen(false)
       w.destroy()
+      // plasă de siguranță: SIGKILL direct pe procesul renderer (ESRCH dacă a murit deja)
+      if (rpid > 0) { try { process.kill(rpid, 'SIGKILL') } catch { /* deja mort */ } }
     } catch { /* fereastra poate fi deja distrusă */ }
   }
 })
@@ -1409,6 +1431,7 @@ app.whenReady().then(() => {
       // (ex. proiecția) sau vreun listener amână quit-ul, installerul NSIS pornește
       // peste un proces încă viu și moare la jumătate (v1.2.7→v1.3.0: aplicație
       // dezinstalată, iconiță ștearsă, fără relansare). Rețeta canonică:
+      isInstalling = true // ca win.on('closed') să nu cheme app.quit() în paralel
       app.removeAllListeners('window-all-closed')
       for (const w of BrowserWindow.getAllWindows()) {
         try {
