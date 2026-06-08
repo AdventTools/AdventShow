@@ -4664,7 +4664,7 @@ function YtDlpSettings() {
             )}
             {installed === true && (
                 <div className="flex flex-col items-center gap-2">
-                    <p className="text-white/40 text-xs">Versiune: {version || '...'}</p>
+                    <p className="text-white/40 text-xs">Versiune: {version || 'se verifică…'}</p>
                     <button
                         className="btn-sm"
                         onClick={update}

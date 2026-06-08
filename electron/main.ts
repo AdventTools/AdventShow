@@ -462,12 +462,18 @@ async function downloadYtDlp(): Promise<{ success: boolean; error?: string }> {
   }
 }
 
+// Binarul yt-dlp_macos e împachetat PyInstaller și se dezarhivează la FIECARE
+// rulare (~15-20s pe macOS) → un timeout de 10s expira mereu și versiunea apărea
+// „Necunoscut". Timeout generos + cache: prima citire reușită se reține pe sesiune.
+let cachedYtDlpVersion: string | null = null
 function getYtDlpVersion(): Promise<string> {
   return new Promise((resolve) => {
     if (!isYtDlpInstalled()) { resolve('Nu este instalat'); return }
-    execFile(getYtDlpPath(), ['--version'], { timeout: 10000 }, (err, stdout) => {
+    if (cachedYtDlpVersion) { resolve(cachedYtDlpVersion); return }
+    execFile(getYtDlpPath(), ['--version'], { timeout: 60000 }, (err, stdout) => {
       if (err) { resolve('Necunoscut'); return }
-      resolve(stdout.trim())
+      cachedYtDlpVersion = stdout.trim()
+      resolve(cachedYtDlpVersion)
     })
   })
 }
@@ -487,6 +493,7 @@ async function updateYtDlp(): Promise<{ success: boolean; version?: string; erro
           return
         }
       }
+      cachedYtDlpVersion = null // forțează re-citirea versiunii noi
       const ver = await getYtDlpVersion()
       resolve({ success: true, version: ver })
     })
