@@ -2184,6 +2184,13 @@
     margin-bottom: 8px;
 }
 
+.editor-section-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+
 .editor-select {
     background: rgba(255 255 255 / 0.05);
     border: 1px solid var(--border);
