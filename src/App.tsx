@@ -1,8 +1,10 @@
 import {
     AlertCircle,
     Book,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    ChevronUp,
     Download,
     Edit3,
     Film,
@@ -2665,6 +2667,10 @@ function HymnEditorModal({
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
     const [importing, setImporting] = useState(false);
+    // Închidem pe click pe fundal DOAR dacă apăsarea a început tot pe fundal.
+    // Altfel, o selecție de text cu mouse-ul (mousedown în textarea, mouseup pe
+    // fundal) genera un „click" pe overlay și închidea editorul, pierzând tot.
+    const overlayMouseDownOnSelf = useRef(false);
 
     const addSection = (type: 'strofa' | 'refren') => {
         setSections([...sections, { type, text: '' }]);
@@ -2680,6 +2686,14 @@ function HymnEditorModal({
     const removeSection = (idx: number) => {
         if (sections.length <= 1) return;
         setSections(sections.filter((_, i) => i !== idx));
+    };
+
+    const moveSection = (idx: number, dir: -1 | 1) => {
+        const target = idx + dir;
+        if (target < 0 || target >= sections.length) return;
+        const updated = [...sections];
+        [updated[idx], updated[target]] = [updated[target], updated[idx]];
+        setSections(updated);
     };
 
     const handleSave = async () => {
@@ -2714,7 +2728,14 @@ function HymnEditorModal({
     };
 
     return (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+        <div
+            className="modal-overlay"
+            onMouseDown={e => { overlayMouseDownOnSelf.current = e.target === e.currentTarget; }}
+            onClick={e => {
+                if (e.target === e.currentTarget && overlayMouseDownOnSelf.current) onClose();
+                overlayMouseDownOnSelf.current = false;
+            }}
+        >
             <div className="modal-dialog modal-wide">
                 <div className="modal-header">
                     <h3>{editor.mode === 'add' ? 'Adaugă Imn' : 'Editează Imn'}</h3>
@@ -2787,13 +2808,35 @@ function HymnEditorModal({
                                         <option value="strofa">Strofa</option>
                                         <option value="refren">Refren</option>
                                     </select>
-                                    <button
-                                        className="btn-sm danger"
-                                        onClick={() => removeSection(i)}
-                                        disabled={sections.length <= 1}
-                                    >
-                                        <X className="icon-xs" />
-                                    </button>
+                                    <div className="editor-section-actions">
+                                        <button
+                                            className="btn-sm"
+                                            onClick={() => moveSection(i, -1)}
+                                            disabled={i === 0}
+                                            title="Mută mai sus"
+                                            aria-label="Mută mai sus"
+                                        >
+                                            <ChevronUp className="icon-xs" />
+                                        </button>
+                                        <button
+                                            className="btn-sm"
+                                            onClick={() => moveSection(i, 1)}
+                                            disabled={i === sections.length - 1}
+                                            title="Mută mai jos"
+                                            aria-label="Mută mai jos"
+                                        >
+                                            <ChevronDown className="icon-xs" />
+                                        </button>
+                                        <button
+                                            className="btn-sm danger"
+                                            onClick={() => removeSection(i)}
+                                            disabled={sections.length <= 1}
+                                            title="Șterge secțiunea"
+                                            aria-label="Șterge secțiunea"
+                                        >
+                                            <X className="icon-xs" />
+                                        </button>
+                                    </div>
                                 </div>
                                 <textarea
                                     className="editor-textarea"
