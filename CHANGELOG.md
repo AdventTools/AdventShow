@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.8 (12 Iunie 2026)
+
+### Modificări
+- editorul de imnuri permite acum mutarea oricărei strofe sau refren mai sus/mai jos; remediat: editorul se mai închidea și pierdea textul când o selecție cu mouse-ul se termina pe fundalul ferestrei
+
+---
+
 ## v1.3.7 (08 Iunie 2026)
 
 ### Modificări
