@@ -2548,7 +2548,7 @@
 .pres-sources { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pres-sources .editor-select { max-width: 220px; }
 
-.pres-toolbar { display: flex; gap: 4px; }
+.pres-toolbar { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
 .pres-toolbar button {
     padding: 4px 10px;
     font-size: 12px;
@@ -2559,6 +2559,26 @@
     cursor: pointer;
 }
 .pres-toolbar button:hover { border-color: var(--accent); }
+
+/* toolbar Office-like: butoane-iconuri compacte, grupate cu separatori */
+.pres-tb-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+    min-width: 30px; height: 30px; padding: 0 6px !important;
+}
+.pres-tb-btn:disabled { opacity: 0.35; cursor: default; }
+.pres-tb-btn:disabled:hover { border-color: var(--border); }
+.pres-tb-select {
+    height: 30px; font-size: 12px; padding: 0 6px;
+    background: var(--bg-elevated); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer;
+}
+/* swatch de culoare: iconul vizibil, input-ul color acoperă butonul (clic = picker) */
+.pres-tb-color { position: relative; overflow: hidden; }
+.pres-tb-color input[type="color"] {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer; border: none; padding: 0;
+}
+.pres-dirty { color: #f0a020; font-size: 12px; font-weight: 600; }
 
 .pres-canvas {
     position: relative;
@@ -2684,6 +2704,58 @@
     margin: 0 4px;
 }
 .pres-shape-focused { outline: 2px solid var(--accent) !important; }
+.pres-shape-img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; user-select: none; }
+
+/* setări fundal + culoare în footer-ul editorului */
+.pres-settings { display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+.pres-bg-toggle { display: flex; align-items: center; gap: 6px; }
+.seg-btn {
+    padding: 3px 10px; font-size: 12px; cursor: pointer;
+    background: var(--bg-elevated); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.seg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* culoare text (text simplu + prezentare) */
+.color-row { display: flex; align-items: center; gap: 8px; }
+.color-input { width: 40px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: none; cursor: pointer; }
+.color-hex { font-size: 12px; color: var(--text-secondary); font-variant: small-caps; }
+
+/* previzualizare pentru text simplu (16:9, exact ce iese pe ecran) */
+.text-preview {
+    width: 100%; aspect-ratio: 16 / 9; max-height: 200px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; margin-bottom: 8px;
+}
+.text-preview-inner {
+    font-weight: 700; text-align: center; white-space: pre-wrap; line-height: 1.25;
+    padding: 4% 6%; font-size: clamp(0.9rem, 3.2vw, 1.6rem);
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+/* eticheta «implicit» pe șabloanele livrate */
+.tpl-badge {
+    margin-left: 8px; font-size: 10px; padding: 1px 6px; border-radius: 999px;
+    background: rgba(255 255 255 / 0.08); color: var(--text-secondary); vertical-align: middle;
+}
+
+/* rezumatul importului PPT */
+.import-toast {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-primary);
+    background: rgba(64 160 96 / 0.14); border: 1px solid rgba(64 160 96 / 0.4);
+    border-radius: var(--radius-sm); padding: 6px 10px; margin: 6px 0;
+}
+.import-toast-x { margin-left: auto; background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 13px; }
+
+/* recuperare parolă: buton + text scurt, prezent în toate prompturile */
+.forgot-hint { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; }
+.forgot-hint-text { font-size: 11px; color: var(--text-secondary); }
+.btn-link-forgot {
+    align-self: flex-start; background: none; border: none; padding: 0;
+    color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline;
+}
 
 /* mânere de mutare/redimensionare pe casete (vizibile la hover/focus) */
 .pres-shape { overflow: visible; }

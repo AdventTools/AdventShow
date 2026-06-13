@@ -24,6 +24,28 @@ import {
     Volume2,
     X,
     Youtube,
+    Bold,
+    Italic,
+    Underline,
+    Strikethrough,
+    AlignLeft,
+    AlignCenter,
+    AlignRight,
+    AlignJustify,
+    List,
+    ListOrdered,
+    IndentIncrease,
+    IndentDecrease,
+    Undo2,
+    Redo2,
+    Baseline,
+    Eraser,
+    Columns3,
+    AlignVerticalJustifyStart,
+    AlignVerticalJustifyCenter,
+    AlignVerticalJustifyEnd,
+    Copy,
+    RotateCcw,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
@@ -1561,6 +1583,7 @@ function App() {
                 <SetPasswordModal
                     oldHash={setPwOpen === 'change' ? (adminPasswordHash ?? null) : null}
                     onCancel={setPwOpen === 'change' ? () => setSetPwOpen(null) : undefined}
+                    onForgot={() => { setSetPwOpen(null); setForgotPwOpen(true); }}
                     onSave={async (newHash) => {
                         setAdminPasswordHash(newHash);
                         await window.electron.settings.set({ adminPasswordHash: newHash });
@@ -2876,6 +2899,22 @@ function HymnEditorModal({
 // Password Modal
 // ═════════════════════════════════════════════════════════════════════════════
 
+// Buton + text scurt de recuperare a parolei, afișat în TOATE prompturile care
+// cer parola existentă (gate de acțiune + schimbare). Recuperarea cere oricum un
+// cod telefonic de la autori, deci e benign să fie mereu vizibil.
+function ForgotPasswordHint({ onForgot }: { onForgot: () => void }) {
+    return (
+        <div className="forgot-hint">
+            <button type="button" className="btn-link-forgot" onClick={onForgot}>
+                Am uitat parola
+            </button>
+            <span className="forgot-hint-text">
+                O poți reseta acum, cu un cod primit telefonic de la autori.
+            </span>
+        </div>
+    );
+}
+
 function PasswordModal({
     title, hash, onSuccess, onCancel, onForgot,
 }: {
@@ -2887,7 +2926,6 @@ function PasswordModal({
 }) {
     const [pw, setPw] = useState('');
     const [error, setError] = useState('');
-    const [fails, setFails] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { inputRef.current?.focus(); }, []);
@@ -2897,7 +2935,6 @@ function PasswordModal({
             onSuccess();
         } else {
             setError('Parolă incorectă');
-            setFails(f => f + 1);
             setPw('');
         }
     };
@@ -2923,11 +2960,7 @@ function PasswordModal({
                         />
                     </div>
                     {error && <div className="editor-error">{error}</div>}
-                    {fails >= 5 && (
-                        <button className="btn-link-forgot" onClick={onForgot}>
-                            Am uitat parola...
-                        </button>
-                    )}
+                    <ForgotPasswordHint onForgot={onForgot} />
                     <div className="editor-actions" style={{ marginTop: 12 }}>
                         <button className="btn-project" onClick={handleSubmit}>Confirmă</button>
                         <button className="btn-clear" onClick={onCancel}>Anulează</button>
@@ -2992,7 +3025,8 @@ function PasswordSetupModal({ onSave }: {
                         <b>mutarea unui imn în altă categorie</b>, <b>importurile în baza de date</b>
                         (PPT în masă sau backup JSON) și <b>ștergerea ori suprascrierea șabloanelor</b>.
                         Proiecția și folosirea de zi cu zi nu cer niciodată parola.
-                        Dacă o uiți, o poți recupera din Setări — Administrare, telefonic, de la autori.
+                        Dacă o uiți, o poți recupera oricând — butonul <b>„Am uitat parola"</b> apare
+                        la fiecare cerere de parolă; primești un cod telefonic de la autori.
                     </p>
                     <div className="field">
                         <label>Parolă admin</label>
@@ -3153,7 +3187,11 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
     useEffect(() => { inputRef.current?.focus(); }, [requestCode]);
 
     const sendRequest = async () => {
-        if (!phone.trim()) { setError('Introduceți numărul de telefon la care puteți fi sunat.'); return; }
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length < 7) {
+            setError('Număr de telefon invalid — introduceți un număr real la care puteți fi sunat (codul se dictează telefonic).');
+            return;
+        }
         setBusy(true);
         setError('');
         const res = await window.electron.registry.unlockRequest(phone.trim());
@@ -3255,10 +3293,11 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
 // Setare parolă nouă — după deblocare (fără parola veche) sau din Setări (cu ea)
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SetPasswordModal({ oldHash, onSave, onCancel }: {
+function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
     oldHash: string | null;        // null = resetare (nu se cere parola veche)
     onSave: (newHash: string) => void;
     onCancel?: () => void;         // absent = nu se poate închide (după deblocare)
+    onForgot?: () => void;         // recuperare parolă (doar în modul „schimbă")
 }) {
     const [oldPw, setOldPw] = useState('');
     const [pw, setPw] = useState('');
@@ -3329,6 +3368,7 @@ function SetPasswordModal({ oldHash, onSave, onCancel }: {
                         />
                     </div>
                     {error && <div className="editor-error">{error}</div>}
+                    {oldHash && onForgot && <ForgotPasswordHint onForgot={onForgot} />}
                     <div className="editor-actions" style={{ marginTop: 12 }}>
                         <button className="btn-project" onClick={handleSave}>Salvează</button>
                         {onCancel && <button className="btn-clear" onClick={onCancel}>Anulează</button>}
@@ -3964,8 +4004,13 @@ const BG_PRESETS: { name: string; css: string }[] = [
 ];
 
 // igienizare strictă a HTML-ului din editorul contenteditable: doar structura de
-// text (p/div/ul/ol/li/b/i/u/br/span) și doar text-align / margin-left din style
-const SANITIZE_ALLOWED = new Set(['P', 'DIV', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'BR', 'SPAN']);
+// text (p/div/ul/ol/li/b/i/u/s/br/span) și doar stilurile de formatare validate
+// (aliniere, indentare, mărime, culoare, tăiere). E POARTA COMUNĂ pentru toolbar
+// ȘI pentru importul din PPT — orice stil neacceptat aici dispare la editare.
+const SANITIZE_ALLOWED = new Set(['P', 'DIV', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'BR', 'SPAN']);
+const RE_FONT_SIZE = /^([\d.]+(em|px|rem|%)|xx-small|x-small|small|medium|large|x-large|xx-large|smaller|larger)$/;
+const RE_COLOR = /^(#[0-9a-fA-F]{3,8}|rgba?\([\d.,\s%]+\))$/;
+const RE_TEXT_DECO = /^(none|underline|line-through|overline|underline line-through)$/;
 function sanitizePresHtml(html: string): string {
     const tpl = document.createElement('template');
     tpl.innerHTML = html;
@@ -3983,12 +4028,14 @@ function sanitizePresHtml(html: string): string {
             const marginLeft = el.style?.marginLeft;
             const fontSize = el.style?.fontSize;
             const color = el.style?.color;
+            const deco = el.style?.textDecorationLine || el.style?.textDecoration;
             for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
             let style = '';
             if (align) style += `text-align:${align};`;
-            if (marginLeft) style += `margin-left:${marginLeft};`;
-            if (fontSize && /^[\d.]+em$/.test(fontSize)) style += `font-size:${fontSize};`;
-            if (color && /^(#[0-9a-fA-F]{3,8}|rgb\([\d, ]+\))$/.test(color)) style += `color:${color};`;
+            if (marginLeft && /^[\d.]+(em|px|rem|%)$/.test(marginLeft)) style += `margin-left:${marginLeft};`;
+            if (fontSize && RE_FONT_SIZE.test(fontSize)) style += `font-size:${fontSize};`;
+            if (color && RE_COLOR.test(color)) style += `color:${color};`;
+            if (deco && RE_TEXT_DECO.test(deco)) style += `text-decoration:${deco};`;
             if (style) el.setAttribute('style', style);
         }
     };
@@ -4048,20 +4095,35 @@ function MessagePanel() {
     const [live, setLive] = useState(true);
     const [projected, setProjected] = useState(false);
     const [bgChoice, setBgChoice] = useState<BgChoice>({ kind: 'preset', css: '' });
+    // culoarea textului (text simplu ȘI prezentare) — peste contentTextColor global
+    const [textColor, setTextColor] = useState('#ffffff');
+    // în prezentare: fundalul vine din PPT/șablon (true) sau e ales manual (false)
+    const [useFileBg, setUseFileBg] = useState(true);
+    // fundalul global configurat al proiecției — ca previzualizarea să arate exact
+    // ce iese pe ecran (nu o altă culoare)
+    const [projBg, setProjBg] = useState<{ bgType?: string; bgColor?: string; bgImagePath?: string }>({});
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // preluăm fundalul global + culoarea implicită a textului din setări (o singură dată)
+    useEffect(() => {
+        window.electron.settings.get().then(s => {
+            setProjBg({ bgType: s.bgType, bgColor: s.bgColor, bgImagePath: s.bgImagePath });
+            if (s.contentTextColor) setTextColor(s.contentTextColor);
+        }).catch(() => { /* implicit */ });
+    }, []);
 
     // Prima proiectare: deschide fereastra (cu dansul de focus, O SINGURĂ dată).
     const project = useCallback((value: string) => {
-        window.electron.projection.showText({ text: value, background: bgToPayload(bgChoice) });
+        window.electron.projection.showText({ text: value, background: bgToPayload(bgChoice), textColor });
         setProjected(true);
-    }, [bgChoice]);
+    }, [bgChoice, textColor]);
 
     // Actualizările ulterioare: canal PUR de date — fără creare de fereastră, fără
     // focus. showText la fiecare propagare fura focusul de pe textarea și înghițea
     // tastele: scriai „pe sărite".
     const update = useCallback((value: string) => {
-        window.electron.projection.updateText({ text: value, background: bgToPayload(bgChoice) });
-    }, [bgChoice]);
+        window.electron.projection.updateText({ text: value, background: bgToPayload(bgChoice), textColor });
+    }, [bgChoice, textColor]);
 
     useEffect(() => {
         if (mode !== 'text' || !live || !projected) return;
@@ -4074,7 +4136,7 @@ function MessagePanel() {
     useEffect(() => {
         if (mode === 'text' && projected) update(text);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [bgChoice]);
+    }, [bgChoice, textColor]);
 
     const stop = useCallback(() => {
         setProjected(false);
@@ -4091,19 +4153,31 @@ function MessagePanel() {
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [saveName, setSaveName] = useState('');
     const [presStatus, setPresStatus] = useState('');
+    const [importToast, setImportToast] = useState<string | null>(null);
+    const [dirty, setDirty] = useState(false);          // modificări nesalvate în editor
+    const [loadedFile, setLoadedFile] = useState<string | null>(null); // șablonul încărcat (null = PPT nou)
     const [overlayOpen, setOverlayOpen] = useState(false);
     const [canvasFont, setCanvasFont] = useState(16);
     const [focusedShape, setFocusedShape] = useState<number | null>(null);
     const [, setShapeTick] = useState(0); // forțează re-randarea după mutații pe model
     const canvasRef = useRef<HTMLDivElement>(null);
     const presDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // ultima selecție din interiorul unei casete — păstrată ca să putem aplica
+    // culoare/mărime după ce pickerul nativ (input color / select) fură focusul
+    const savedRangeRef = useRef<Range | null>(null);
+
+    // închiderea editorului: dacă există modificări nesalvate, cere confirmare
+    const attemptCloseOverlay = useCallback(() => {
+        if (dirty && !window.confirm('Ai modificări nesalvate în acest șablon. Închizi fără să salvezi? (poți edita și proiecta și fără să salvezi)')) return;
+        setOverlayOpen(false);
+    }, [dirty]);
 
     // Esc global: primul închide editorul mare, al doilea oprește proiecția
     useEffect(() => {
         realtimeCtl.overlayOpen = overlayOpen;
-        realtimeCtl.closeOverlay = () => setOverlayOpen(false);
+        realtimeCtl.closeOverlay = attemptCloseOverlay;
         return () => { realtimeCtl.overlayOpen = false; };
-    }, [overlayOpen]);
+    }, [overlayOpen, attemptCloseOverlay]);
     useEffect(() => {
         realtimeCtl.projected = projected || presProjected;
         realtimeCtl.stop = () => {
@@ -4134,19 +4208,66 @@ function MessagePanel() {
         return () => ro.disconnect();
     }, [overlayOpen, presName, slideCount]);
 
-    const setPresentation = (p: Presentation | null) => {
+    // memorăm ultima selecție din interiorul unei casete editabile
+    useEffect(() => {
+        if (!overlayOpen) return;
+        const onSel = () => {
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return;
+            const node = sel.anchorNode;
+            const host = (node instanceof Element ? node : node?.parentElement)?.closest('.pres-shape-inner');
+            if (host) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+        };
+        document.addEventListener('selectionchange', onSel);
+        return () => document.removeEventListener('selectionchange', onSel);
+    }, [overlayOpen]);
+
+    // reaplică selecția salvată (după ce pickerul a furat focusul), apoi rulează fn
+    const withSavedSelection = (fn: () => void) => {
+        const r = savedRangeRef.current;
+        if (r) {
+            const host = (r.startContainer instanceof Element ? r.startContainer : r.startContainer.parentElement)?.closest('.pres-shape-inner') as HTMLElement | null;
+            host?.focus();
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(r);
+        }
+        fn();
+    };
+
+    // scurtături Office în editor (focus în overlay) — nu fură navigarea pe slide-uri
+    // fiindcă handlerul global ignoră săgețile când focusul e într-un contenteditable
+    const onOverlayKeyDown = (e: React.KeyboardEvent) => {
+        if (!(e.ctrlKey || e.metaKey)) return;
+        const k = e.key.toLowerCase();
+        const align: Record<string, string> = { l: 'justifyLeft', e: 'justifyCenter', r: 'justifyRight', j: 'justifyFull' };
+        if (k === 'z') { e.preventDefault(); exec(e.shiftKey ? 'redo' : 'undo'); }
+        else if (k === 'y') { e.preventDefault(); exec('redo'); }
+        else if (k === 'b') { e.preventDefault(); exec('bold'); }
+        else if (k === 'i') { e.preventDefault(); exec('italic'); }
+        else if (k === 'u') { e.preventDefault(); exec('underline'); }
+        else if (align[k]) { e.preventDefault(); exec(align[k]); }
+    };
+
+    const setPresentation = (p: Presentation | null, file: string | null = null) => {
         presRef.current = p;
         setPresName(p?.name ?? null);
         setSlideCount(p?.slides.length ?? 0);
         setCurSlide(0);
         setPresProjected(false);
+        setLoadedFile(file);
+        setDirty(false);
+        // fundalul vine implicit DIN fișier; resetăm orice alegere manuală anterioară
+        // ca să NU mascheze fundalul importat (cauza «litere albe pe alb»)
+        setUseFileBg(true);
+        setBgChoice({ kind: 'preset', css: '' });
     };
 
     const slidePayload = useCallback((idx: number): ProjectionTextData => {
         const p = presRef.current!;
         const slide = p.slides[idx];
-        return { shapes: slide.shapes, background: bgToPayload(bgChoice, slide) };
-    }, [bgChoice]);
+        return { shapes: slide.shapes, background: bgToPayload(bgChoice, slide), textColor };
+    }, [bgChoice, textColor]);
 
     const projectSlide = useCallback((idx: number, first: boolean) => {
         const payload = slidePayload(idx);
@@ -4175,12 +4296,23 @@ function MessagePanel() {
         const p = presRef.current;
         if (!p) return;
         p.slides[curSlide].shapes[shapeIdx].html = sanitizePresHtml(el.innerHTML);
+        setDirty(true);
         schedulePresUpdate();
     };
 
+    // comenzi de formatare pe SELECȚIE. styleWithCSS:false → produce tag-uri
+    // (b/i/u/liste); true → produce stiluri inline (culoare, mărime, tăiere,
+    // indentare cu margin) compatibile cu sanitizer-ul. Butoanele folosesc
+    // onMouseDown+preventDefault ca selecția să rămână în casetă.
     const exec = (cmd: string) => {
-        // butoanele folosesc onMouseDown+preventDefault ca selecția să rămână în casetă
+        document.execCommand('styleWithCSS', false, 'false');
         document.execCommand(cmd, false);
+        setDirty(true);
+    };
+    const execCss = (cmd: string, val?: string) => {
+        document.execCommand('styleWithCSS', false, 'true');
+        document.execCommand(cmd, false, val);
+        setDirty(true);
     };
 
     // acțiuni la nivel de CASETĂ (pe cea focalizată)
@@ -4191,6 +4323,7 @@ function MessagePanel() {
         if (!sh) return;
         fn(sh);
         setShapeTick(t => t + 1);
+        setDirty(true);
         schedulePresUpdate();
     };
     const cycleColumns = () => mutateShape(sh => {
@@ -4207,6 +4340,18 @@ function MessagePanel() {
         p.slides[curSlide].shapes.push({ x: 10, y: 40, w: 80, h: 22, html: '<p>Text nou</p>' });
         setShapeTick(t => t + 1);
         setFocusedShape(p.slides[curSlide].shapes.length - 1);
+        setDirty(true);
+        schedulePresUpdate();
+    };
+    const duplicateShape = () => {
+        const p = presRef.current;
+        if (!p || focusedShape == null) return;
+        const src = p.slides[curSlide].shapes[focusedShape];
+        if (!src) return;
+        p.slides[curSlide].shapes.push({ ...src, x: Math.min(92, src.x + 3), y: Math.min(92, src.y + 3) });
+        setFocusedShape(p.slides[curSlide].shapes.length - 1);
+        setShapeTick(t => t + 1);
+        setDirty(true);
         schedulePresUpdate();
     };
     const deleteShape = () => {
@@ -4216,7 +4361,68 @@ function MessagePanel() {
         p.slides[curSlide].shapes.splice(focusedShape, 1);
         setFocusedShape(null);
         setShapeTick(t => t + 1);
+        setDirty(true);
         schedulePresUpdate();
+    };
+    // ancorarea verticală a textului în casetă (sus = implicit / mijloc / jos)
+    const setAnchor = (a: 'top' | 'middle' | 'bottom') => mutateShape(sh => {
+        if (a === 'top') delete sh.anchor; else sh.anchor = a;
+    });
+    // culoare / mărime font pe SELECȚIE (stiluri inline compatibile cu sanitizer-ul)
+    const applyColor = (hex: string) => execCss('foreColor', hex);
+    const applyFontSize = (level: string) => { if (level) execCss('fontSize', level); };
+
+    // ── Salvarea șabloanelor: explicită (fără autosave); parolă la suprascriere ──
+    const writeTemplate = async (name: string, file?: string) => {
+        const info = await window.electron.templates.save(name, { ...presRef.current!, name: name.trim() }, file);
+        setLoadedFile(info.file);
+        setDirty(false);
+        setSaveName('');
+        refreshTemplates();
+        setPresStatus(`Șablon salvat: ${info.name}`);
+    };
+    // „Salvează" = suprascrie șablonul ÎNCĂRCAT (există deja → cere parola)
+    const onSaveOver = () => {
+        if (!presRef.current || !loadedFile) return;
+        const cur = templates.find(t => t.file === loadedFile);
+        const name = cur?.name ?? presName ?? 'Șablon';
+        adminGate.require(
+            () => writeTemplate(name, loadedFile).catch(() => setPresStatus('Salvarea a eșuat.')),
+            'Salvare șablon',
+        );
+    };
+    // „Salvează ca…" = nume nou; dacă există deja un fișier cu acel nume → parolă
+    const onSaveAs = () => {
+        const name = saveName.trim();
+        if (!name || !presRef.current) return;
+        const safe = name.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60) || 'Șablon';
+        const collide = templates.some(t => t.file === `${safe}.json`);
+        const go = () => writeTemplate(name).catch(() => setPresStatus('Salvarea a eșuat.'));
+        if (collide) adminGate.require(go, 'Suprascriere șablon'); else go();
+    };
+    // duplicare cu nume nou liber (« (copie) », « (copie 2) »…) — fără parolă
+    const duplicateTemplate = async (t: TemplateInfo) => {
+        try {
+            const p = await window.electron.templates.load(t.file);
+            const exists = (nm: string) => templates.some(x => x.name.toLowerCase() === nm.toLowerCase());
+            const base = `${t.name} (copie)`;
+            let name = base, n = 2;
+            while (exists(name)) name = `${base} ${n++}`;
+            const info = await window.electron.templates.save(name, { ...p, name });
+            refreshTemplates();
+            setPresStatus(`Copie creată: ${info.name}`);
+        } catch { setPresStatus('Duplicarea a eșuat.'); }
+    };
+    // readucerea unui șablon IMPLICIT la varianta livrată (pierde editările → parolă)
+    const resetBuiltinTpl = (t: TemplateInfo) => {
+        adminGate.require(async () => {
+            try {
+                const p = await window.electron.templates.resetBuiltin(t.file);
+                refreshTemplates();
+                if (loadedFile === t.file || presName === t.name) setPresentation(p, t.file);
+                setPresStatus(`„${t.name}" a fost readus la varianta implicită.`);
+            } catch { setPresStatus('Resetarea a eșuat.'); }
+        }, 'Resetare șablon implicit');
     };
 
     // mutarea / redimensionarea casetelor cu mouse-ul (mânerele de pe casetă)
@@ -4261,6 +4467,7 @@ function MessagePanel() {
             document.removeEventListener('mouseup', onUp);
             if (dragRef.current) {
                 dragRef.current = null;
+                setDirty(true);
                 schedulePresUpdate();
             }
         };
@@ -4269,12 +4476,19 @@ function MessagePanel() {
     };
 
     const slide = presRef.current?.slides[curSlide];
-    const canvasBgCss = (() => {
-        if (!slide) return undefined;
-        const b = bgToPayload(bgChoice, slide);
+    const bgPayloadToCss = (b: ProjectionTextData['background']): string | undefined => {
         if (!b) return undefined;
         return b.type === 'image' ? `url('localfile://${encodeURI(b.value)}') center / cover no-repeat` : b.value;
+    };
+    // fundalul global al proiecției — folosit ca fallback ca editorul/preview-ul să
+    // arate EXACT ce iese pe ecran când nu există fundal per-slide/manual
+    const projFallbackCss = (() => {
+        if (projBg.bgType === 'image' && projBg.bgImagePath) return `url('localfile://${encodeURI(projBg.bgImagePath)}') center / cover no-repeat`;
+        return projBg.bgColor || '#000000';
     })();
+    const canvasBgCss = slide ? bgPayloadToCss(bgToPayload(bgChoice, slide)) : undefined;
+    // previzualizarea pentru „text simplu": exact fundalul + culoarea ce vor apărea
+    const textPreviewBgCss = bgPayloadToCss(bgToPayload(bgChoice)) ?? projFallbackCss;
 
     return (
         <div className="content-inner message-panel">
@@ -4300,7 +4514,25 @@ function MessagePanel() {
                     <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
                     Actualizare în timp real (pe măsură ce scrii)
                 </label>
+                <div className="field">
+                    <label className="timer-label">Culoare text</label>
+                    <div className="color-row">
+                        <input
+                            type="color"
+                            className="color-input"
+                            value={/^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : '#ffffff'}
+                            onChange={e => setTextColor(e.target.value)}
+                        />
+                        <span className="color-hex">{textColor}</span>
+                    </div>
+                </div>
                 <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
+                <label className="timer-label">Previzualizare (cum apare pe ecran)</label>
+                <div className="text-preview" style={{ background: textPreviewBgCss }}>
+                    <div className="text-preview-inner" style={{ color: textColor }}>
+                        {text.trim() || 'Scrie un mesaj…'}
+                    </div>
+                </div>
                 <div className="timer-actions">
                     {!projected ? (
                         <button className="btn-project timer-start" onClick={() => project(text)}>Proiectează</button>
@@ -4324,7 +4556,15 @@ function MessagePanel() {
                         if (!file) return;
                         setPresStatus('Se convertește prezentarea...');
                         const res = await window.electron.presentation.parse(file);
-                        if (res.ok) { setPresentation(res.data); setPresStatus(''); setOverlayOpen(true); }
+                        if (res.ok) {
+                            setPresentation(res.data, null);
+                            setPresStatus('');
+                            setOverlayOpen(true);
+                            const s = res.summary;
+                            setImportToast(s
+                                ? `Am adus din PPT: fundal ${s.background ? '✓' : '✗'} · culori text ${s.colors ? '✓' : '✗'} · ${s.images} ${s.images === 1 ? 'imagine' : 'imagini'} · ${s.textBoxes} casete text · ${s.slides} slide-uri`
+                                : null);
+                        }
                         else setPresStatus(res.error);
                     }}>Deschide PPT...</button>
                 </div>
@@ -4341,12 +4581,16 @@ function MessagePanel() {
                                 onClick={async () => {
                                     try {
                                         const p = await window.electron.templates.load(t.file);
-                                        setPresentation(p);
+                                        setPresentation(p, t.file);
                                         setPresStatus('');
                                         setOverlayOpen(true);
                                     } catch { setPresStatus('Nu am putut încărca șablonul.'); }
                                 }}
-                            >{t.name}</button>
+                            >{t.name}{t.builtin && <span className="tpl-badge">implicit</span>}</button>
+                            <button className="tpl-btn" title="Duplică (copie cu alt nume)" onClick={() => duplicateTemplate(t)}><Copy className="icon-xs" /></button>
+                            {t.builtin && (
+                                <button className="tpl-btn" title="Resetează la varianta implicită" onClick={() => resetBuiltinTpl(t)}><RotateCcw className="icon-xs" /></button>
+                            )}
                             <button className="tpl-btn" disabled={i === 0} title="Mută mai sus" onClick={async () => {
                                 const files = templates.map(x => x.file);
                                 [files[i - 1], files[i]] = [files[i], files[i - 1]];
@@ -4384,6 +4628,12 @@ function MessagePanel() {
                 )}
 
                 {presStatus && <p className="timer-hint">{presStatus}</p>}
+                {importToast && (
+                    <p className="import-toast">
+                        {importToast}
+                        <button className="import-toast-x" onClick={() => setImportToast(null)} title="Închide">✕</button>
+                    </p>
+                )}
                 {presName === null && !presStatus && (
                     <p className="timer-hint">
                         Încarcă un șablon sau deschide un PowerPoint de pe disc — se convertește în
@@ -4394,25 +4644,62 @@ function MessagePanel() {
             </>)}
 
             {overlayOpen && presRef.current && (
-                <div className="pres-overlay">
+                <div className="pres-overlay" onKeyDown={onOverlayKeyDown}>
                     <div className="pres-overlay-header">
-                        <span className="pres-overlay-title">{presName}</span>
+                        <span className="pres-overlay-title">
+                            {presName}{dirty && <span className="pres-dirty"> • nesalvat</span>}
+                        </span>
                         <div className="pres-toolbar">
-                            <button onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Listă cu buline">•&nbsp;Listă</button>
-                            <button onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Listă numerotată">1.&nbsp;Listă</button>
-                            <button onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Îngroșat"><b>B</b></button>
-                            <button onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Înclinat"><i>I</i></button>
-                            <button onMouseDown={e => { e.preventDefault(); exec('underline'); }} title="Subliniat"><u>U</u></button>
-                            <button onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }} title="Aliniere stânga">⟸</button>
-                            <button onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }} title="Centrat">≡</button>
-                            <button onMouseDown={e => { e.preventDefault(); exec('justifyRight'); }} title="Aliniere dreapta">⟹</button>
+                            {/* istoric */}
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('undo'); }} title="Anulează (Ctrl+Z)"><Undo2 className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('redo'); }} title="Refă (Ctrl+Y)"><Redo2 className="icon-xs" /></button>
                             <span className="pres-toolbar-sep" />
-                            <button onMouseDown={e => { e.preventDefault(); cycleColumns(); }} disabled={focusedShape == null} title="Împarte caseta pe coloane (1 → 2 → 3)">⫼&nbsp;Coloane{focusedShape != null && (slide?.shapes[focusedShape]?.columns ?? 1) > 1 ? `: ${slide?.shapes[focusedShape]?.columns}` : ''}</button>
-                            <button onMouseDown={e => { e.preventDefault(); bumpFont(0.15); }} disabled={focusedShape == null} title="Text mai mare în casetă">A+</button>
-                            <button onMouseDown={e => { e.preventDefault(); bumpFont(-0.15); }} disabled={focusedShape == null} title="Text mai mic în casetă">A−</button>
+                            {/* mărime + culoare text (pe selecție) */}
+                            <select className="pres-tb-select" title="Mărime text (selecție)" value="" onMouseDown={() => { /* selecția e deja memorată */ }}
+                                onChange={e => { const v = e.target.value; if (v) withSavedSelection(() => applyFontSize(v)); }}>
+                                <option value="" disabled>Mărime</option>
+                                <option value="1">Foarte mic</option>
+                                <option value="2">Mic</option>
+                                <option value="3">Normal</option>
+                                <option value="4">Mediu</option>
+                                <option value="5">Mare</option>
+                                <option value="6">Foarte mare</option>
+                                <option value="7">Uriaș</option>
+                            </select>
+                            <label className="pres-tb-btn pres-tb-color" title="Culoare text (selecție)">
+                                <Baseline className="icon-xs" />
+                                <input type="color" onChange={e => withSavedSelection(() => applyColor(e.target.value))} />
+                            </label>
                             <span className="pres-toolbar-sep" />
-                            <button onMouseDown={e => { e.preventDefault(); addShape(); }} title="Casetă de text nouă">+&nbsp;Casetă</button>
-                            <button onMouseDown={e => { e.preventDefault(); deleteShape(); }} disabled={focusedShape == null || (slide?.shapes.length ?? 0) <= 1} title="Șterge caseta focalizată">✕&nbsp;Casetă</button>
+                            {/* stil text */}
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Îngroșat (Ctrl+B)"><Bold className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Înclinat (Ctrl+I)"><Italic className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('underline'); }} title="Subliniat (Ctrl+U)"><Underline className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('strikeThrough'); }} title="Tăiat"><Strikethrough className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }} title="Șterge formatarea"><Eraser className="icon-xs" /></button>
+                            <span className="pres-toolbar-sep" />
+                            {/* paragraf */}
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }} title="Aliniere stânga (Ctrl+L)"><AlignLeft className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }} title="Centrat (Ctrl+E)"><AlignCenter className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyRight'); }} title="Aliniere dreapta (Ctrl+R)"><AlignRight className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyFull'); }} title="Aliniere stânga-dreapta"><AlignJustify className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Listă cu buline"><List className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Listă numerotată"><ListOrdered className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('outdent'); }} title="Micșorează indentarea"><IndentDecrease className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('indent'); }} title="Mărește indentarea"><IndentIncrease className="icon-xs" /></button>
+                            <span className="pres-toolbar-sep" />
+                            {/* casetă (pe cea selectată) */}
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('top'); }} disabled={focusedShape == null} title="Text sus în casetă"><AlignVerticalJustifyStart className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('middle'); }} disabled={focusedShape == null} title="Text la mijloc"><AlignVerticalJustifyCenter className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('bottom'); }} disabled={focusedShape == null} title="Text jos în casetă"><AlignVerticalJustifyEnd className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); cycleColumns(); }} disabled={focusedShape == null} title="Coloane (1 → 2 → 3)"><Columns3 className="icon-xs" />{focusedShape != null && (slide?.shapes[focusedShape]?.columns ?? 1) > 1 ? slide?.shapes[focusedShape]?.columns : ''}</button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); bumpFont(0.15); }} disabled={focusedShape == null} title="Casetă: text mai mare">A+</button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); bumpFont(-0.15); }} disabled={focusedShape == null} title="Casetă: text mai mic">A−</button>
+                            <span className="pres-toolbar-sep" />
+                            {/* casete */}
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); addShape(); }} title="Casetă de text nouă"><Plus className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); duplicateShape(); }} disabled={focusedShape == null} title="Duplică caseta"><Copy className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); deleteShape(); }} disabled={focusedShape == null || (slide?.shapes.length ?? 0) <= 1} title="Șterge caseta"><Trash2 className="icon-xs" /></button>
                         </div>
                         <div className="pres-overlay-actions">
                             {!presProjected ? (
@@ -4423,7 +4710,7 @@ function MessagePanel() {
                                     <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>Oprește</button>
                                 </>
                             )}
-                            <button className="btn-sm" onClick={() => setOverlayOpen(false)} title="Închide editorul (Esc)">
+                            <button className="btn-sm" onClick={attemptCloseOverlay} title="Închide editorul (Esc)">
                                 Închide
                             </button>
                         </div>
@@ -4445,7 +4732,8 @@ function MessagePanel() {
                         <div
                             className="pres-canvas pres-canvas-big"
                             ref={canvasRef}
-                            style={{ fontSize: canvasFont, background: canvasBgCss ?? '#0a0a14' }}
+                            style={{ fontSize: canvasFont, background: canvasBgCss ?? projFallbackCss, color: textColor }}
+                            onMouseDown={e => { if (e.target === e.currentTarget) setFocusedShape(null); }}
                         >
                             {slide?.shapes.map((sh, i) => (
                                 <div
@@ -4453,6 +4741,7 @@ function MessagePanel() {
                                     className={`pres-shape ${focusedShape === i ? 'pres-shape-focused' : ''}`}
                                     style={{ left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, minHeight: `${sh.h}%` }}
                                     onFocus={() => setFocusedShape(i)}
+                                    onMouseDown={() => setFocusedShape(i)}
                                 >
                                     {/* mânerele NU sunt în interiorul zonei editabile */}
                                     <div
@@ -4465,18 +4754,27 @@ function MessagePanel() {
                                         title="Trage pentru a redimensiona"
                                         onMouseDown={e => onGripDown(i, 'resize', e)}
                                     />
-                                    <div
-                                        className="pres-shape-inner"
-                                        contentEditable
-                                        suppressContentEditableWarning
-                                        style={{
-                                            ...(sh.fontScale ? { fontSize: `${sh.fontScale}em` } : {}),
-                                            ...(sh.columns && sh.columns > 1 ? { columnCount: sh.columns, columnGap: '1.2em' } : {}),
-                                            ...(sh.anchor ? { display: 'flex', flexDirection: 'column', justifyContent: sh.anchor === 'middle' ? 'center' : 'flex-end', height: '100%' } : {}),
-                                        }}
-                                        onInput={e => onShapeInput(i, e.currentTarget)}
-                                        dangerouslySetInnerHTML={{ __html: sh.html }}
-                                    />
+                                    {sh.imageSrc ? (
+                                        <img
+                                            className="pres-shape-img"
+                                            src={`localfile://${encodeURI(sh.imageSrc)}`}
+                                            alt=""
+                                            draggable={false}
+                                        />
+                                    ) : (
+                                        <div
+                                            className="pres-shape-inner"
+                                            contentEditable
+                                            suppressContentEditableWarning
+                                            style={{
+                                                ...(sh.fontScale ? { fontSize: `${sh.fontScale}em` } : {}),
+                                                ...(sh.columns && sh.columns > 1 ? { columnCount: sh.columns, columnGap: '1.2em' } : {}),
+                                                ...(sh.anchor ? { display: 'flex', flexDirection: 'column', justifyContent: sh.anchor === 'middle' ? 'center' : 'flex-end', height: '100%' } : {}),
+                                            }}
+                                            onInput={e => onShapeInput(i, e.currentTarget)}
+                                            dangerouslySetInnerHTML={{ __html: sh.html }}
+                                        />
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -4491,43 +4789,70 @@ function MessagePanel() {
                                 const p = presRef.current!;
                                 p.slides.splice(curSlide + 1, 0, { shapes: [{ x: 8, y: 12, w: 84, h: 76, html: '<p style="text-align:center">Text nou</p>' }] });
                                 setSlideCount(p.slides.length);
+                                setDirty(true);
                                 goSlide(curSlide + 1);
                             }}>+ Slide</button>
                             <button className="btn-sm" disabled={slideCount <= 1} onClick={() => {
                                 const p = presRef.current!;
                                 p.slides.splice(curSlide, 1);
                                 setSlideCount(p.slides.length);
+                                setDirty(true);
                                 const next = Math.min(curSlide, p.slides.length - 1);
                                 goSlide(next);
                                 if (presProjected) projectSlide(next, false);
                             }}>Șterge slide</button>
                         </div>
-                        <BackgroundPicker bg={bgChoice} onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }} />
+
+                        {/* setări fundal + culoare text (afectează ce iese pe ecran) */}
+                        <div className="pres-settings">
+                            <div className="pres-bg-toggle">
+                                <span className="timer-label">Fundal:</span>
+                                <button
+                                    className={`seg-btn ${useFileBg ? 'active' : ''}`}
+                                    onClick={() => { setUseFileBg(true); setBgChoice({ kind: 'preset', css: '' }); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }}
+                                    title="Folosește fundalul din PPT / șablon"
+                                >Din fișier</button>
+                                <button
+                                    className={`seg-btn ${!useFileBg ? 'active' : ''}`}
+                                    onClick={() => setUseFileBg(false)}
+                                    title="Alege manual un fundal (peste cel din fișier)"
+                                >Manual</button>
+                            </div>
+                            {!useFileBg && (
+                                <BackgroundPicker bg={bgChoice} onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }} />
+                            )}
+                            <div className="field">
+                                <label className="timer-label">Culoare text</label>
+                                <div className="color-row">
+                                    <input
+                                        type="color"
+                                        className="color-input"
+                                        value={/^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : '#ffffff'}
+                                        onChange={e => { setTextColor(e.target.value); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }}
+                                    />
+                                    <span className="color-hex">{textColor}</span>
+                                </div>
+                                <span className="timer-hint">Se aplică textului fără culoare proprie (cele colorate din PPT rămân).</span>
+                            </div>
+                        </div>
+
                         <div className="pres-save">
+                            {loadedFile && (
+                                <button className="btn-project" disabled={!dirty} title="Salvează peste șablonul curent (cere parola)" onClick={onSaveOver}>
+                                    Salvează
+                                </button>
+                            )}
                             <input
                                 className="timer-text-input"
                                 type="text"
-                                placeholder="Nume șablon (ex: Anunțuri duminică)"
+                                placeholder="Nume nou pentru «Salvează ca…»"
                                 value={saveName}
                                 onChange={e => setSaveName(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') onSaveAs(); }}
                             />
-                            <button className="btn-sm" disabled={!saveName.trim()} onClick={() => {
-                                const doSave = async () => {
-                                    try {
-                                        const info = await window.electron.templates.save(saveName, { ...presRef.current!, name: saveName.trim() });
-                                        setSaveName('');
-                                        refreshTemplates();
-                                        setPresStatus(`Șablon salvat: ${info.name}`);
-                                    } catch { setPresStatus('Salvarea șablonului a eșuat.'); }
-                                };
-                                // suprascrierea unui șablon EXISTENT cere parola; nume nou = liber
-                                const safe = saveName.trim().replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60) || 'Șablon';
-                                if (templates.some(t => t.file === `${safe}.json`)) {
-                                    adminGate.require(doSave, 'Suprascriere șablon');
-                                } else {
-                                    doSave();
-                                }
-                            }}>Salvează ca șablon</button>
+                            <button className="btn-sm" disabled={!saveName.trim()} onClick={onSaveAs} title="Salvează o copie cu numele de mai sus">
+                                Salvează ca…
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -99,9 +99,10 @@ contextBridge.exposeInMainWorld('electron', {
   templates: {
     list: () => ipcRenderer.invoke('templates:list'),
     load: (file: string) => ipcRenderer.invoke('templates:load', file),
-    save: (name: string, data: unknown) => ipcRenderer.invoke('templates:save', name, data),
+    save: (name: string, data: unknown, file?: string) => ipcRenderer.invoke('templates:save', name, data, file),
     delete: (file: string) => ipcRenderer.invoke('templates:delete', file),
     reorder: (files: string[]) => ipcRenderer.invoke('templates:reorder', files),
+    resetBuiltin: (file: string) => ipcRenderer.invoke('templates:reset-builtin', file),
   },
 
   screen: {

@@ -105,10 +105,20 @@ export interface ProjectionTimerData {
 
 export interface PresShape {
   x: number; y: number; w: number; h: number;  // procente din slide (0–100)
-  html: string;                                 // subset restrâns (p/ul/ol/li/b/i/u/br/span)
+  html: string;                                 // subset restrâns (p/ul/ol/li/b/i/u/s/br/span)
   anchor?: 'middle' | 'bottom';                 // ancorarea verticală a textului
   columns?: number;   // împărțirea textului pe coloane (1–3)
   fontScale?: number; // multiplicator de mărime per casetă (1 = normal)
+  imageSrc?: string;  // dacă e setat, caseta e o IMAGINE (cale absolută în cache), nu text
+}
+
+// ce a reușit importul de PPT să aducă — pentru un toast informativ
+export interface ImportSummary {
+  slides: number;
+  textBoxes: number;
+  images: number;
+  background: boolean;
+  colors: boolean;
 }
 
 export interface PresSlide {
@@ -123,12 +133,13 @@ export interface Presentation {
   slides: PresSlide[];
 }
 
-export interface TemplateInfo { file: string; name: string }
+export interface TemplateInfo { file: string; name: string; builtin?: boolean }
 
 export interface ProjectionTextData {
   text?: string;            // free-text message, rendered centered + auto-fit
   shapes?: PresShape[];     // slide de prezentare (forme poziționate procentual)
   background?: { type: 'color' | 'gradient' | 'image'; value: string } | null;
+  textColor?: string;       // culoarea textului (override peste contentTextColor global)
 }
 
 export interface DisplayInfo {
@@ -158,6 +169,7 @@ export interface AppSettings {
   audioOutputDeviceId?: string; // audio output device id for video playback
   debugLog?: boolean; // enable detailed debug logging to file
   windowBounds?: { x: number; y: number; width: number; height: number };
+  windowMaximized?: boolean; // true = fereastra era maximizată la ultima închidere
   downloadFolder?: string; // custom download folder for YouTube videos
   sidebarWidth?: number; // pixels, default 200 (deprecated — use layoutWidths)
   previewWidth?: number; // pixels, default 640 (deprecated — use layoutWidths)
@@ -254,15 +266,16 @@ export interface IElectronAPI {
   };
   presentation: {
     pickFile: () => Promise<string | undefined>;
-    parse: (filePath: string) => Promise<{ ok: true; data: Presentation } | { ok: false; error: string }>;
+    parse: (filePath: string) => Promise<{ ok: true; data: Presentation; summary?: ImportSummary } | { ok: false; error: string }>;
     parseHymn: (filePath: string) => Promise<{ ok: true; data: { number: string; title: string; sections: { type: 'strofa' | 'refren'; text: string }[] } } | { ok: false; error: string }>;
   };
   templates: {
     list: () => Promise<TemplateInfo[]>;
     load: (file: string) => Promise<Presentation>;
-    save: (name: string, data: Presentation) => Promise<TemplateInfo>;
+    save: (name: string, data: Presentation, file?: string) => Promise<TemplateInfo>;
     delete: (file: string) => Promise<void>;
     reorder: (files: string[]) => Promise<void>;
+    resetBuiltin: (file: string) => Promise<Presentation>;
   };
   screen: {
     getDisplays: () => Promise<DisplayInfo[]>;

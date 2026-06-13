@@ -458,17 +458,26 @@ export function ProjectionPage() {
     // Hymn: consistent font across all slides
     dynamicFontSize = hymnFontSize;
   } else if (section) {
-    // Bible or fallback: per-section sizing
-    const lines = section.text.split('\n');
-    const lineCount = Math.max(1, lines.length);
-    const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
-
-    const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
-    const maxVh = Math.min(14, 82 / (lineCount * 1.45)).toFixed(2);
-
-    const minSize = isBible ? '2.5rem' : '2rem';
-    const maxSize = isBible ? '9rem' : '8rem';
-    dynamicFontSize = `calc(clamp(${minSize}, min(${maxVw}vw, ${maxVh}vh), ${maxSize}) * ${fontSizeMultiplier} * ${shrinkFactor})`;
+    if (isBible) {
+      // Dimensionare pe ARIE, nu pe „cea mai lungă linie". Versetele biblice sunt
+      // proză continuă care se ÎNCADREAZĂ prin wrapping — vechea formulă (150/caractere)
+      // presupunea o singură linie ne-întreruptă și dădea font minuscul la versete
+      // lungi (ex. 120 car. pe o linie → ~1.25vw ≈ 24px). Aici: font ∝ 1/√(nr. caractere),
+      // care umple coerent aria; plafonat SUS ca textele scurte să NU acopere tot
+      // ecranul și JOS ca textele lungi să rămână lizibile. Bucla de shrink de mai sus
+      // corectează apoi orice depășire reală măsurată.
+      const charCount = Math.max(1, section.text.trim().length);
+      const sizeVh = Math.max(4.5, Math.min(11, 105 / Math.sqrt(charCount)));
+      dynamicFontSize = `calc(clamp(2.5rem, ${sizeVh.toFixed(2)}vh, 11rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
+    } else {
+      // fallback (conținut fără uniformizare): dimensionare per-secțiune ca înainte
+      const lines = section.text.split('\n');
+      const lineCount = Math.max(1, lines.length);
+      const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
+      const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
+      const maxVh = Math.min(14, 82 / (lineCount * 1.45)).toFixed(2);
+      dynamicFontSize = `calc(clamp(2rem, min(${maxVw}vw, ${maxVh}vh), 8rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
+    }
   }
 
   // Resolve background styles
@@ -554,10 +563,18 @@ export function ProjectionPage() {
               className="absolute inset-0"
               style={{
                 fontSize: `calc(3.2vw * ${(bg.projectionFontSize ?? 1.2) * zoomLevel / 1.2})`,
-                color: bg.contentTextColor ?? '#ffffff',
+                color: freeText.textColor ?? bg.contentTextColor ?? '#ffffff',
               }}
             >
-              {freeText.shapes.map((sh, i) => (
+              {freeText.shapes.map((sh, i) => sh.imageSrc ? (
+                <div
+                  key={i}
+                  className="pres-shape-view"
+                  style={{ position: 'absolute', left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, height: `${sh.h}%` }}
+                >
+                  <img src={`localfile://${encodeURI(sh.imageSrc)}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+              ) : (
                 <div
                   key={i}
                   className="pres-shape-view"
@@ -581,7 +598,7 @@ export function ProjectionPage() {
             <div className="absolute inset-0 flex items-center justify-center" style={{ padding: '6vh 6vw' }}>
               <div
                 style={{
-                  color: bg.contentTextColor ?? '#ffffff',
+                  color: freeText.textColor ?? bg.contentTextColor ?? '#ffffff',
                   fontWeight: 700,
                   textAlign: 'center',
                   whiteSpace: 'pre-wrap',
