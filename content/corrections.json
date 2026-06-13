@@ -1,4 +1,51 @@
 {
-  "_descriere": "Feed de corecturi OTA — aplicația îl citește la pornire (max 1/zi) și aplică intrările cu seq mai mare decât ultimul aplicat local. Publicare DOAR prin scripts/publish_correction.py, rulat manual de autori. force=true suprascrie inclusiv modificările proprii ale utilizatorului; altfel ele au prioritate.",
-  "entries": []
+ "_descriere": "Feed de corecturi OTA — aplicația îl citește la pornire (max 1/zi) și aplică intrările cu seq mai mare decât ultimul aplicat local. Publicare DOAR prin scripts/publish_correction.py, rulat manual de autori. force=true suprascrie inclusiv modificările proprii ale utilizatorului; altfel ele au prioritate.",
+ "entries": [
+  {
+   "seq": 1,
+   "category": "Imnuri Creștine",
+   "number": "644",
+   "title": "Şalom, şalom!",
+   "sections": [
+    {
+     "type": "refren",
+     "text": "Şalom, şalom, Isus, pacea Sa,\nŞalom, şalom, fie pavăza ta!"
+    },
+    {
+     "type": "strofa",
+     "text": "Să meargă înaintea ta,\nPe calea-ngustă să poţi sta,\nŞi când vrăjmaşul va lovi\nIsus te va păzi!"
+    },
+    {
+     "type": "refren",
+     "text": "Şalom, şalom, Isus, pacea Sa,\nŞalom, şalom, fie pavăza ta!"
+    },
+    {
+     "type": "strofa",
+     "text": "La dreapta ta să-L ai mereu\nCa braţ ocrotitor la greu\nŞi-n stânga cu nuiaua Sa\nMereu te va-ndruma!"
+    },
+    {
+     "type": "refren",
+     "text": "Şalom, şalom, Isus, pacea Sa,\nŞalom, şalom, fie pavăza ta!"
+    },
+    {
+     "type": "strofa",
+     "text": "Cu binecuvântarea Sa\nSă fie şi deasupra ta\nŞi Stâncă sub piciorul tău\nSă fie El mereu!"
+    },
+    {
+     "type": "refren",
+     "text": "Şalom, şalom, Isus, pacea Sa,\nŞalom, şalom, fie pavăza ta!"
+    },
+    {
+     "type": "strofa",
+     "text": "Să fie în lăuntrul tău \nCu dragostea şi harul Său,\nSă te-nconjoare peste tot\nEl, Domnul Savaot!"
+    },
+    {
+     "type": "refren",
+     "text": "Şalom, şalom, Isus, pacea Sa,\nŞalom, şalom, fie pavăza ta!"
+    }
+   ],
+   "force": true,
+   "ts": "2026-06-13T05:33:28.000Z"
+  }
+ ]
 }
