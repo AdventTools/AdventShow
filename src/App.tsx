@@ -46,6 +46,9 @@ import {
     AlignVerticalJustifyEnd,
     Copy,
     RotateCcw,
+    Image as ImageIcon,
+    MoreHorizontal,
+    FileText,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
@@ -3859,8 +3862,37 @@ function TimerPanel() {
 
     const presets = [1, 3, 5, 10, 15, 20];
 
+    // ── Previzualizare live (coloana din dreapta) ────────────────────────────
+    const [projBg, setProjBg] = useState<{ bgType?: string; bgColor?: string; bgImagePath?: string }>({});
+    const [, setNowTick] = useState(0);
+    useEffect(() => {
+        window.electron.settings.get().then(s => setProjBg({ bgType: s.bgType, bgColor: s.bgColor, bgImagePath: s.bgImagePath })).catch(() => { });
+    }, []);
+    useEffect(() => {
+        if (mode !== 'clock') return;
+        const id = setInterval(() => setNowTick(t => t + 1), 1000);
+        return () => clearInterval(id);
+    }, [mode]);
+    const previewBg = (() => {
+        const b = bgToPayload(bgChoice);
+        if (b) return b.type === 'image' ? `url('localfile://${encodeURI(b.value)}') center / cover no-repeat` : b.value;
+        if (projBg.bgType === 'image' && projBg.bgImagePath) return `url('localfile://${encodeURI(projBg.bgImagePath)}') center / cover no-repeat`;
+        return projBg.bgColor || '#000000';
+    })();
+    const fmtMs = (ms: number) => { const t = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+    const previewTime = (() => {
+        if (mode === 'countdown') return fmtMs(durationMs);
+        if (mode === 'stopwatch') return '0:00';
+        const d = new Date(); let h = d.getHours();
+        const mm = String(d.getMinutes()).padStart(2, '0'); const ss = String(d.getSeconds()).padStart(2, '0');
+        let ap = ''; if (!clock24h) { ap = h >= 12 ? ' PM' : ' AM'; h = h % 12 || 12; }
+        return `${h}:${mm}${clockShowSeconds ? ':' + ss : ''}${ap}`;
+    })();
+
     return (
-        <div className="content-inner timer-panel">
+        <div className="content-inner timer-panel rt-host">
+          <div className="rt-layout">
+            <div className="rt-left">
             <div className="timer-mode-switch">
                 {(['countdown', 'stopwatch', 'clock'] as const).map(m => (
                     <button
@@ -3960,6 +3992,20 @@ function TimerPanel() {
                     : mode === 'stopwatch' ? 'Cronometrul pornește de la zero și urcă.'
                         : 'Se afișează ora curentă pe ecranul de proiecție.'}
             </p>
+            </div>
+
+            <div className="rt-right">
+                <label className="timer-label">Previzualizare (cum apare pe ecran)</label>
+                <div className="rt-preview" style={{ background: previewBg }}>
+                    <div className="rt-preview-center">
+                        {title && <div className="rt-preview-title">{title}</div>}
+                        <div className="rt-preview-time">{previewTime}</div>
+                        {mode === 'clock' && clockAnalog && <div className="rt-preview-note">(pe proiecție: ceas analogic)</div>}
+                    </div>
+                </div>
+                {projected && <span className="live-indicator">● LIVE pe proiecție</span>}
+            </div>
+          </div>
         </div>
     );
 }
@@ -4055,33 +4101,45 @@ function bgToPayload(bg: BgChoice, slide?: { bgColor?: string; bgGradient?: stri
     return null; // fundalul global al aplicației
 }
 
-function BackgroundPicker({ bg, onChange }: { bg: BgChoice; onChange: (b: BgChoice) => void }) {
+function BackgroundPicker({ bg, onChange, existingLabel = 'Implicit' }: {
+    bg: BgChoice; onChange: (b: BgChoice) => void; existingLabel?: string;
+}) {
+    const pickImage = async () => {
+        const p = await window.electron.dialog.pickMedia('image');
+        if (p) onChange({ kind: 'image', path: p });
+    };
     return (
         <div className="field">
             <label className="timer-label">Fundal</label>
             <div className="bg-presets">
-                {BG_PRESETS.map(p => (
+                {/* fundal existent (din PPT/șablon) sau implicit al proiecției */}
+                <button
+                    type="button"
+                    className={`bg-pick-text ${bg.kind === 'preset' && bg.css === '' ? 'active' : ''}`}
+                    onClick={() => onChange({ kind: 'preset', css: '' })}
+                >{existingLabel}</button>
+                {/* culori / gradient predefinite */}
+                {BG_PRESETS.filter(p => p.css).map(p => (
                     <button
                         key={p.name}
                         type="button"
                         title={p.name}
                         className={`bg-swatch ${bg.kind === 'preset' && bg.css === p.css ? 'active' : ''}`}
-                        style={{ background: p.css || 'repeating-conic-gradient(#444 0 25%, #222 0 50%) 0 0/12px 12px' }}
+                        style={{ background: p.css }}
                         onClick={() => onChange({ kind: 'preset', css: p.css })}
                     />
                 ))}
+                {/* imagine de pe disc — buton mare, cu text (nu doar iconiță) */}
                 <button
                     type="button"
-                    className={`bg-swatch bg-swatch-img ${bg.kind === 'image' ? 'active' : ''}`}
-                    title="Imagine de pe disc..."
-                    onClick={async () => {
-                        const p = await window.electron.dialog.pickMedia('image');
-                        if (p) onChange({ kind: 'image', path: p });
-                    }}
-                >🖼</button>
+                    className={`bg-pick-text bg-pick-image ${bg.kind === 'image' ? 'active' : ''}`}
+                    onClick={pickImage}
+                >
+                    <ImageIcon className="icon-xs" /> Imagine de pe disc…
+                </button>
             </div>
             {bg.kind === 'image' && (
-                <span className="text-white/40 text-xs">{bg.path.split('/').pop()}</span>
+                <span className="bg-image-name">📎 {bg.path.split('/').pop()}</span>
             )}
         </div>
     );
@@ -4097,8 +4155,6 @@ function MessagePanel() {
     const [bgChoice, setBgChoice] = useState<BgChoice>({ kind: 'preset', css: '' });
     // culoarea textului (text simplu ȘI prezentare) — peste contentTextColor global
     const [textColor, setTextColor] = useState('#ffffff');
-    // în prezentare: fundalul vine din PPT/șablon (true) sau e ales manual (false)
-    const [useFileBg, setUseFileBg] = useState(true);
     // fundalul global configurat al proiecției — ca previzualizarea să arate exact
     // ce iese pe ecran (nu o altă culoare)
     const [projBg, setProjBg] = useState<{ bgType?: string; bgColor?: string; bgImagePath?: string }>({});
@@ -4156,6 +4212,8 @@ function MessagePanel() {
     const [importToast, setImportToast] = useState<string | null>(null);
     const [dirty, setDirty] = useState(false);          // modificări nesalvate în editor
     const [loadedFile, setLoadedFile] = useState<string | null>(null); // șablonul încărcat (null = PPT nou)
+    const [rowMenu, setRowMenu] = useState<string | null>(null); // meniul „⋯" deschis pe un rând de șablon
+    const [saveAsOpen, setSaveAsOpen] = useState(false); // dialogul „Salvează ca șablon nou"
     const [overlayOpen, setOverlayOpen] = useState(false);
     const [canvasFont, setCanvasFont] = useState(16);
     const [focusedShape, setFocusedShape] = useState<number | null>(null);
@@ -4259,7 +4317,6 @@ function MessagePanel() {
         setDirty(false);
         // fundalul vine implicit DIN fișier; resetăm orice alegere manuală anterioară
         // ca să NU mascheze fundalul importat (cauza «litere albe pe alb»)
-        setUseFileBg(true);
         setBgChoice({ kind: 'preset', css: '' });
     };
 
@@ -4397,7 +4454,7 @@ function MessagePanel() {
         if (!name || !presRef.current) return;
         const safe = name.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60) || 'Șablon';
         const collide = templates.some(t => t.file === `${safe}.json`);
-        const go = () => writeTemplate(name).catch(() => setPresStatus('Salvarea a eșuat.'));
+        const go = () => writeTemplate(name).then(() => setSaveAsOpen(false)).catch(() => setPresStatus('Salvarea a eșuat.'));
         if (collide) adminGate.require(go, 'Suprascriere șablon'); else go();
     };
     // duplicare cu nume nou liber (« (copie) », « (copie 2) »…) — fără parolă
@@ -4491,7 +4548,7 @@ function MessagePanel() {
     const textPreviewBgCss = bgPayloadToCss(bgToPayload(bgChoice)) ?? projFallbackCss;
 
     return (
-        <div className="content-inner message-panel">
+        <div className="content-inner message-panel rt-host">
             <div className="timer-mode-switch">
                 <button className={`timer-mode-btn ${mode === 'text' ? 'active' : ''}`} onClick={() => setMode('text')}>
                     Text simplu
@@ -4501,147 +4558,189 @@ function MessagePanel() {
                 </button>
             </div>
 
-            {mode === 'text' && (<>
-                <label className="timer-label">Text de proiectat</label>
-                <textarea
-                    className="message-textarea"
-                    placeholder="Scrie un mesaj... apare pe proiecție în timp real."
-                    value={text}
-                    onChange={e => setText(e.target.value)}
-                    rows={6}
-                />
-                <label className="timer-checkbox">
-                    <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
-                    Actualizare în timp real (pe măsură ce scrii)
-                </label>
-                <div className="field">
-                    <label className="timer-label">Culoare text</label>
-                    <div className="color-row">
-                        <input
-                            type="color"
-                            className="color-input"
-                            value={/^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : '#ffffff'}
-                            onChange={e => setTextColor(e.target.value)}
+            {mode === 'text' && (
+                <div className="rt-layout">
+                    <div className="rt-left">
+                        <label className="timer-label">Text de proiectat</label>
+                        <textarea
+                            className="message-textarea"
+                            placeholder="Scrie un mesaj... apare pe proiecție în timp real."
+                            value={text}
+                            onChange={e => setText(e.target.value)}
+                            rows={6}
                         />
-                        <span className="color-hex">{textColor}</span>
-                    </div>
-                </div>
-                <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
-                <label className="timer-label">Previzualizare (cum apare pe ecran)</label>
-                <div className="text-preview" style={{ background: textPreviewBgCss }}>
-                    <div className="text-preview-inner" style={{ color: textColor }}>
-                        {text.trim() || 'Scrie un mesaj…'}
-                    </div>
-                </div>
-                <div className="timer-actions">
-                    {!projected ? (
-                        <button className="btn-project timer-start" onClick={() => project(text)}>Proiectează</button>
-                    ) : (
-                        <>
-                            {live && <span className="live-indicator">● LIVE</span>}
-                            {!live && (
-                                <button className="btn-project timer-start" onClick={() => update(text)}>Trimite</button>
-                            )}
-                            <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
-                        </>
-                    )}
-                </div>
-                <p className="timer-hint">Bun pentru anunțuri, urări, un verset tastat manual sau „Pauză 10 min".</p>
-            </>)}
-
-            {mode === 'pres' && (<>
-                <div className="pres-sources">
-                    <button className="btn-sm" onClick={async () => {
-                        const file = await window.electron.presentation.pickFile();
-                        if (!file) return;
-                        setPresStatus('Se convertește prezentarea...');
-                        const res = await window.electron.presentation.parse(file);
-                        if (res.ok) {
-                            setPresentation(res.data, null);
-                            setPresStatus('');
-                            setOverlayOpen(true);
-                            const s = res.summary;
-                            setImportToast(s
-                                ? `Am adus din PPT: fundal ${s.background ? '✓' : '✗'} · culori text ${s.colors ? '✓' : '✗'} · ${s.images} ${s.images === 1 ? 'imagine' : 'imagini'} · ${s.textBoxes} casete text · ${s.slides} slide-uri`
-                                : null);
-                        }
-                        else setPresStatus(res.error);
-                    }}>Deschide PPT...</button>
-                </div>
-
-                {/* Manager de șabloane: încarcă / reordonează / șterge */}
-                <div className="tpl-manager">
-                    <label className="timer-label">Șabloane</label>
-                    {templates.length === 0 && <p className="timer-hint">Niciun șablon încă — salvează o prezentare ca șablon din editor.</p>}
-                    {templates.map((t, i) => (
-                        <div key={t.file} className="tpl-row">
-                            <button
-                                className="tpl-name"
-                                title="Încarcă în editor"
-                                onClick={async () => {
-                                    try {
-                                        const p = await window.electron.templates.load(t.file);
-                                        setPresentation(p, t.file);
-                                        setPresStatus('');
-                                        setOverlayOpen(true);
-                                    } catch { setPresStatus('Nu am putut încărca șablonul.'); }
-                                }}
-                            >{t.name}{t.builtin && <span className="tpl-badge">implicit</span>}</button>
-                            <button className="tpl-btn" title="Duplică (copie cu alt nume)" onClick={() => duplicateTemplate(t)}><Copy className="icon-xs" /></button>
-                            {t.builtin && (
-                                <button className="tpl-btn" title="Resetează la varianta implicită" onClick={() => resetBuiltinTpl(t)}><RotateCcw className="icon-xs" /></button>
-                            )}
-                            <button className="tpl-btn" disabled={i === 0} title="Mută mai sus" onClick={async () => {
-                                const files = templates.map(x => x.file);
-                                [files[i - 1], files[i]] = [files[i], files[i - 1]];
-                                await window.electron.templates.reorder(files);
-                                refreshTemplates();
-                            }}>↑</button>
-                            <button className="tpl-btn" disabled={i === templates.length - 1} title="Mută mai jos" onClick={async () => {
-                                const files = templates.map(x => x.file);
-                                [files[i + 1], files[i]] = [files[i], files[i + 1]];
-                                await window.electron.templates.reorder(files);
-                                refreshTemplates();
-                            }}>↓</button>
-                            {confirmDelete === t.file ? (
-                                <button className="tpl-btn tpl-btn-danger" title="Confirmă ștergerea" onClick={() => {
-                                    setConfirmDelete(null);
-                                    adminGate.require(async () => {
-                                        await window.electron.templates.delete(t.file);
-                                        refreshTemplates();
-                                    }, 'Ștergere șablon');
-                                }}>Sigur?</button>
+                        <label className="timer-checkbox">
+                            <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
+                            Actualizare în timp real (pe măsură ce scrii)
+                        </label>
+                        <div className="field">
+                            <label className="timer-label">Culoare text</label>
+                            <div className="color-row">
+                                <input
+                                    type="color"
+                                    className="color-input"
+                                    value={/^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : '#ffffff'}
+                                    onChange={e => setTextColor(e.target.value)}
+                                />
+                                <span className="color-hex">{textColor}</span>
+                            </div>
+                        </div>
+                        <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
+                        <div className="timer-actions">
+                            {!projected ? (
+                                <button className="btn-project timer-start" onClick={() => project(text)}>Proiectează</button>
                             ) : (
-                                <button className="tpl-btn" title="Șterge șablonul" onClick={() => setConfirmDelete(t.file)}>✕</button>
+                                <>
+                                    {live && <span className="live-indicator">● LIVE</span>}
+                                    {!live && (
+                                        <button className="btn-project timer-start" onClick={() => update(text)}>Trimite</button>
+                                    )}
+                                    <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
+                                </>
                             )}
                         </div>
-                    ))}
-                </div>
-
-                {presName !== null && presRef.current && (
-                    <div className="timer-actions">
-                        <button className="btn-project timer-start" onClick={() => setOverlayOpen(true)}>
-                            Deschide editorul — {presName}
-                        </button>
-                        {presProjected && <span className="live-indicator">● LIVE</span>}
+                        <p className="timer-hint">Bun pentru anunțuri, urări, un verset tastat manual sau „Pauză 10 min".</p>
                     </div>
-                )}
+                    <div className="rt-right">
+                        <label className="timer-label">Previzualizare (cum apare pe ecran)</label>
+                        <div className="rt-preview" style={{ background: textPreviewBgCss }}>
+                            <div className="rt-preview-center rt-preview-text" style={{ color: textColor }}>
+                                {text.trim() || 'Scrie un mesaj…'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-                {presStatus && <p className="timer-hint">{presStatus}</p>}
-                {importToast && (
-                    <p className="import-toast">
-                        {importToast}
-                        <button className="import-toast-x" onClick={() => setImportToast(null)} title="Închide">✕</button>
-                    </p>
-                )}
-                {presName === null && !presStatus && (
-                    <p className="timer-hint">
-                        Încarcă un șablon sau deschide un PowerPoint de pe disc — se convertește în
-                        slide-uri editabile pe tot ecranul, cu propagare live pe proiecție.
-                        Buleturile, numerotarea, mărimile și fundalul se păstrează.
-                    </p>
-                )}
-            </>)}
+            {mode === 'pres' && (
+                <div className="rt-layout">
+                    <div className="rt-left">
+                        <button className="btn-sm rt-import-btn" onClick={async () => {
+                            const file = await window.electron.presentation.pickFile();
+                            if (!file) return;
+                            setPresStatus('Se convertește prezentarea...');
+                            const res = await window.electron.presentation.parse(file);
+                            if (res.ok) {
+                                setPresentation(res.data, null);
+                                setPresStatus('');
+                                setOverlayOpen(true);
+                                const s = res.summary;
+                                setImportToast(s
+                                    ? `Am adus din PPT: fundal ${s.background ? '✓' : '✗'} · culori text ${s.colors ? '✓' : '✗'} · ${s.images} ${s.images === 1 ? 'imagine' : 'imagini'} · ${s.textBoxes} casete text · ${s.slides} slide-uri`
+                                    : null);
+                            }
+                            else setPresStatus(res.error);
+                        }}><Upload className="icon-xs" /> Importă din PowerPoint</button>
+
+                        <div className="tpl-manager">
+                            <label className="timer-label">Șabloane</label>
+                            {/* PPT importat, încă nesalvat — rând temporar sus, ca să-l poți redeschide */}
+                            {presName !== null && loadedFile === null && (
+                                <div className="tpl-row tpl-row-transient">
+                                    <button className="tpl-name" title="Continuă editarea" onClick={() => setOverlayOpen(true)}>
+                                        <FileText className="icon-xs" /> {presName}
+                                        <span className="tpl-badge tpl-badge-warn">nesalvat</span>
+                                    </button>
+                                </div>
+                            )}
+                            {templates.length === 0 && <p className="timer-hint">Niciun șablon încă — importă un PowerPoint sau salvează unul din editor.</p>}
+                            {templates.map((t, i) => (
+                                <div key={t.file}>
+                                    <div className="tpl-row">
+                                        <button
+                                            className="tpl-name"
+                                            title="Deschide în editor"
+                                            onClick={async () => {
+                                                try {
+                                                    const p = await window.electron.templates.load(t.file);
+                                                    setPresentation(p, t.file);
+                                                    setPresStatus('');
+                                                    setOverlayOpen(true);
+                                                } catch { setPresStatus('Nu am putut încărca șablonul.'); }
+                                            }}
+                                        >{t.name}{t.builtin && <span className="tpl-badge">implicit</span>}</button>
+                                        <button className={`tpl-btn ${rowMenu === t.file ? 'active' : ''}`} title="Mai multe" onClick={() => setRowMenu(rowMenu === t.file ? null : t.file)}>
+                                            <MoreHorizontal className="icon-xs" />
+                                        </button>
+                                    </div>
+                                    {rowMenu === t.file && (
+                                        <div className="tpl-actions">
+                                            <button onClick={() => { setRowMenu(null); duplicateTemplate(t); }}><Copy className="icon-xs" /> Duplică</button>
+                                            {t.builtin && <button onClick={() => { setRowMenu(null); resetBuiltinTpl(t); }}><RotateCcw className="icon-xs" /> Resetează la implicit</button>}
+                                            <button disabled={i === 0} onClick={async () => {
+                                                const files = templates.map(x => x.file);
+                                                [files[i - 1], files[i]] = [files[i], files[i - 1]];
+                                                await window.electron.templates.reorder(files); refreshTemplates();
+                                            }}>↑ Mută sus</button>
+                                            <button disabled={i === templates.length - 1} onClick={async () => {
+                                                const files = templates.map(x => x.file);
+                                                [files[i + 1], files[i]] = [files[i], files[i + 1]];
+                                                await window.electron.templates.reorder(files); refreshTemplates();
+                                            }}>↓ Mută jos</button>
+                                            {confirmDelete === t.file ? (
+                                                <button className="tpl-act-danger" onClick={() => {
+                                                    setConfirmDelete(null); setRowMenu(null);
+                                                    adminGate.require(async () => { await window.electron.templates.delete(t.file); refreshTemplates(); }, 'Ștergere șablon');
+                                                }}>Sigur ștergi?</button>
+                                            ) : (
+                                                <button className="tpl-act-danger" onClick={() => setConfirmDelete(t.file)}><Trash2 className="icon-xs" /> Șterge</button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {presStatus && <p className="timer-hint">{presStatus}</p>}
+                        {importToast && (
+                            <p className="import-toast">
+                                {importToast}
+                                <button className="import-toast-x" onClick={() => setImportToast(null)} title="Închide">✕</button>
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="rt-right">
+                        <label className="timer-label">Previzualizare</label>
+                        {presRef.current && slide ? (<>
+                            <div className="rt-preview" style={{ background: canvasBgCss ?? projFallbackCss, color: textColor }}>
+                                {slide.shapes.map((sh, i) => sh.imageSrc ? (
+                                    <div key={i} className="rt-pv-shape" style={{ left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, height: `${sh.h}%` }}>
+                                        <img src={`localfile://${encodeURI(sh.imageSrc)}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                    </div>
+                                ) : (
+                                    <div key={i} className="rt-pv-shape" style={{
+                                        left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, minHeight: `${sh.h}%`,
+                                        ...(sh.fontScale ? { fontSize: `${sh.fontScale}em` } : {}),
+                                        ...(sh.columns && sh.columns > 1 ? { columnCount: sh.columns, columnGap: '1.2em' } : {}),
+                                        ...(sh.anchor ? { height: `${sh.h}%`, display: 'flex', flexDirection: 'column', justifyContent: sh.anchor === 'middle' ? 'center' : 'flex-end' } : {}),
+                                    }} dangerouslySetInnerHTML={{ __html: sh.html }} />
+                                ))}
+                            </div>
+                            <div className="rt-preview-nav">
+                                <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
+                                <span className="text-white/60 text-xs">slide {curSlide + 1} / {slideCount}</span>
+                                <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
+                            </div>
+                            <div className="timer-actions">
+                                <button className="btn-project timer-start" onClick={() => setOverlayOpen(true)}><Edit3 className="icon-xs" /> Editează</button>
+                                {!presProjected ? (
+                                    <button className="btn-project" onClick={() => projectSlide(curSlide, true)}>Proiectează</button>
+                                ) : (<>
+                                    <span className="live-indicator">● LIVE</span>
+                                    <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>Oprește</button>
+                                </>)}
+                            </div>
+                        </>) : (
+                            <div className="rt-preview rt-preview-empty">
+                                <div className="rt-preview-center rt-preview-hint">
+                                    Alege un șablon din stânga sau importă un PowerPoint ca să vezi previzualizarea aici.
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {overlayOpen && presRef.current && (
                 <div className="pres-overlay" onKeyDown={onOverlayKeyDown}>
@@ -4803,24 +4902,13 @@ function MessagePanel() {
                             }}>Șterge slide</button>
                         </div>
 
-                        {/* setări fundal + culoare text (afectează ce iese pe ecran) */}
+                        {/* fundal + culoare text (afectează ce iese pe ecran) */}
                         <div className="pres-settings">
-                            <div className="pres-bg-toggle">
-                                <span className="timer-label">Fundal:</span>
-                                <button
-                                    className={`seg-btn ${useFileBg ? 'active' : ''}`}
-                                    onClick={() => { setUseFileBg(true); setBgChoice({ kind: 'preset', css: '' }); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }}
-                                    title="Folosește fundalul din PPT / șablon"
-                                >Din fișier</button>
-                                <button
-                                    className={`seg-btn ${!useFileBg ? 'active' : ''}`}
-                                    onClick={() => setUseFileBg(false)}
-                                    title="Alege manual un fundal (peste cel din fișier)"
-                                >Manual</button>
-                            </div>
-                            {!useFileBg && (
-                                <BackgroundPicker bg={bgChoice} onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }} />
-                            )}
+                            <BackgroundPicker
+                                bg={bgChoice}
+                                existingLabel="Existent"
+                                onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }}
+                            />
                             <div className="field">
                                 <label className="timer-label">Culoare text</label>
                                 <div className="color-row">
@@ -4842,19 +4930,32 @@ function MessagePanel() {
                                     Salvează
                                 </button>
                             )}
-                            <input
-                                className="timer-text-input"
-                                type="text"
-                                placeholder="Nume nou pentru «Salvează ca…»"
-                                value={saveName}
-                                onChange={e => setSaveName(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') onSaveAs(); }}
-                            />
-                            <button className="btn-sm" disabled={!saveName.trim()} onClick={onSaveAs} title="Salvează o copie cu numele de mai sus">
-                                Salvează ca…
+                            <button className="btn-sm" title="Salvează o copie cu un nume nou" onClick={() => { setSaveName(loadedFile ? '' : (presName ?? '')); setSaveAsOpen(true); }}>
+                                Salvează ca șablon nou…
                             </button>
                         </div>
                     </div>
+
+                    {saveAsOpen && (
+                        <div className="pres-saveas" onMouseDown={e => { if (e.target === e.currentTarget) setSaveAsOpen(false); }}>
+                            <div className="pres-saveas-box">
+                                <label className="timer-label">Nume pentru noul șablon</label>
+                                <input
+                                    className="timer-text-input"
+                                    autoFocus
+                                    type="text"
+                                    placeholder="ex: Anunțuri duminică"
+                                    value={saveName}
+                                    onChange={e => setSaveName(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') onSaveAs(); if (e.key === 'Escape') setSaveAsOpen(false); }}
+                                />
+                                <div className="editor-actions" style={{ marginTop: 10 }}>
+                                    <button className="btn-project" disabled={!saveName.trim()} onClick={onSaveAs}>Salvează</button>
+                                    <button className="btn-clear" onClick={() => setSaveAsOpen(false)}>Anulează</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
