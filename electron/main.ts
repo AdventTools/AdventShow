@@ -41,7 +41,7 @@ import { applyOtaCorrections, maybeSendContributions, getContributionStatus, Con
 import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
 import {
   parsePresentationFile, seedTemplatesIfNeeded, listTemplates, loadTemplate,
-  saveTemplate, deleteTemplate, reorderTemplates, Presentation,
+  saveTemplate, deleteTemplate, reorderTemplates, resetBuiltinTemplate, Presentation,
 } from './presentation'
 import { parsePresentationToHymn } from './import'
 import { importPresentationDirectory, importPresentationFiles } from './import'
@@ -101,6 +101,7 @@ interface AppSettings {
   debugLog?: boolean
   downloadFolder?: string  // custom folder for YouTube downloads
   windowBounds?: { x: number; y: number; width: number; height: number }
+  windowMaximized?: boolean // true = fereastra era maximizată la ultima închidere
   sidebarWidth?: number // deprecated — use layoutWidths
   previewWidth?: number // deprecated — use layoutWidths
   layoutWidths?: {
@@ -848,9 +849,13 @@ function createWindow() {
     if (boundsTimer) clearTimeout(boundsTimer)
     boundsTimer = setTimeout(() => {
       if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return
-      const b = win.getBounds()
+      const maximized = win.isMaximized()
+      // salvăm MEREU dimensiunea „normală" (nu cea maximizată) + un flag separat,
+      // ca la pornire să distingem maximizat-moștenit de o dimensiune aleasă manual
+      const b = maximized && win.getNormalBounds ? win.getNormalBounds() : win.getBounds()
       const s = readSettings()
       s.windowBounds = { x: b.x, y: b.y, width: b.width, height: b.height }
+      s.windowMaximized = maximized
       writeSettings(s)
     }, 500)
   }
@@ -873,11 +878,32 @@ function createWindow() {
     win?.webContents.send('main-process-message', new Date().toLocaleString())
   })
 
-  // pornește implicit MAXIMIZATĂ (header-ul are multe câmpuri); poziția salvată
-  // contează doar pentru alegerea display-ului. show:false + maximize + show
-  // evită flash-ul de fereastră mică.
+  // Dimensiunea la pornire:
+  //  • dacă utilizatorul a ales MANUAL o dimensiune (windowed) → o respectăm;
+  //  • altfel, sub Full HD pornește MAXIMIZAT (header-ul are multe câmpuri),
+  //    iar la Full HD și peste pornește în FEREASTRĂ, centrată, vizibil mai mică
+  //    decât ecranul (cu margini) — ca să NU pară fullscreen.
+  // Fereastra de proiecție (al 2-lea ecran) e separată și rămâne fullscreen.
+  const FHD_W = 1920, FHD_H = 1080
   win.once('ready-to-show', () => {
-    win?.maximize()
+    const s = readSettings()
+    const hasManualSize = !!s.windowBounds && s.windowMaximized === false
+    if (!hasManualSize) {
+      const disp = s.windowBounds
+        ? screen.getDisplayMatching(s.windowBounds as Electron.Rectangle)
+        : screen.getPrimaryDisplay()
+      const res = disp.size // rezoluție LOGICĂ (DIP) — exact „ce vede" utilizatorul
+      const belowFHD = res.width < FHD_W || res.height < FHD_H
+      if (belowFHD) {
+        win?.maximize()
+      } else {
+        const wa = disp.workAreaSize
+        const w = Math.min(1600, Math.round(wa.width * 0.8))
+        const h = Math.min(1000, Math.round(wa.height * 0.85))
+        win?.setSize(w, h)
+        win?.center()
+      }
+    }
     win?.show()
   })
 
@@ -1059,12 +1085,17 @@ app.whenReady().then(() => {
 
   // ── Prezentări (Realtime) + șabloane ───────────────────────────────────────
   const userTemplatesDir = () => path.join(app.getPath('userData'), 'templates')
+  const resourceTemplatesDir = () => [
+    path.join(process.resourcesPath ?? '', 'templates'),
+    path.join(process.env.APP_ROOT!, 'templates'),
+  ].find(p => fs.existsSync(p)) ?? ''
 
   ipcMain.handle('presentation:parse', async (_e, filePath: string) => {
     try {
-      // imaginile de fundal din PPTX se extrag într-un cache persistent
+      // imaginile (fundal + poze) din PPTX se extrag într-un cache persistent
       const cacheDir = path.join(app.getPath('userData'), 'pres-cache')
-      return { ok: true, data: await parsePresentationFile(filePath, cacheDir) }
+      const { presentation, summary } = await parsePresentationFile(filePath, cacheDir)
+      return { ok: true, data: presentation, summary }
     } catch (err: unknown) {
       return { ok: false, error: err instanceof Error ? err.message : 'Nu am putut citi prezentarea.' }
     }
@@ -1079,10 +1110,12 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('templates:list', () => listTemplates(userTemplatesDir()))
   ipcMain.handle('templates:load', (_e, file: string) => loadTemplate(userTemplatesDir(), file))
-  ipcMain.handle('templates:save', (_e, name: string, data: Presentation) =>
-    saveTemplate(userTemplatesDir(), name, data))
+  ipcMain.handle('templates:save', (_e, name: string, data: Presentation, file?: string) =>
+    saveTemplate(userTemplatesDir(), name, data, file))
   ipcMain.handle('templates:delete', (_e, file: string) => deleteTemplate(userTemplatesDir(), file))
   ipcMain.handle('templates:reorder', (_e, files: string[]) => reorderTemplates(userTemplatesDir(), files))
+  ipcMain.handle('templates:reset-builtin', (_e, file: string) =>
+    resetBuiltinTemplate(resourceTemplatesDir(), userTemplatesDir(), file))
 
   // parsare PPT ca IMN, fără inserare — pentru fluxul „importă → editează → salvează"
   ipcMain.handle('import:parse-hymn', async (_e, filePath: string) => {
