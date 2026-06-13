@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.10 (13 Iunie 2026)
+
+### Modificări
+- Realtime și Ceas rearanjate pe doua coloane, cu previzualizare mare in dreapta (nu mai stau inghesuite pe o treime de ecran); selector de fundal unic si clar, cu buton mare Imagine de pe disc; lista de sabloane curata cu meniul trei puncte; editorul cu Salveaza si Salveaza ca sablon nou, fara comutatorul de fundal redundant si fara butonul persistent Deschide editorul
+
+---
+
 ## v1.3.9 (13 Iunie 2026)
 
 ### Modificări
