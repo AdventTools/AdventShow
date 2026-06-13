@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.9 (13 Iunie 2026)
+
+### Modificări
+- editor de prezentari Realtime refacut in stil Office (bara de formatare completa, culoare si marime font, ancorare verticala, scurtaturi), import PowerPoint mult mai fidel (aduce fundalul inclusiv pe negru, pozele si culorile), sabloane cu Salveaza/Salveaza ca/Duplica/Reseteaza la implicit si parola la salvare, text simplu cu culoare si previzualizare, fereastra principala nu mai porneste pe tot ecranul pe monitoare mari, butonul de recuperare parola apare peste tot, iar versetele biblice se dimensioneaza automat ca sa fie lizibile fara zoom
+
+---
+
 ## v1.3.8 (12 Iunie 2026)
 
 ### Modificări
