@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.11 (13 Iulie 2026)
+
+### Modificări
+- Diacritice modernizate în toate imnurile, titlurile și Biblia — sedila veche (ş/ţ) devine virgulă dedesubt (ș/ț), conform normelor Academiei Române, iar corectura ajunge automat și la instalările existente. În plus, câteva imnuri corectate: «Binecuvântă pe Domnul» și «Azi avem Mântuitor» încep acum corect cu refrenul, iar «Aleluia! Amin!» primește versurile complete.
+
+---
+
 ## v1.3.10 (13 Iunie 2026)
 
 ### Modificări
