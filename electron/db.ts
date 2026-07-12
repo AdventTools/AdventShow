@@ -186,6 +186,48 @@ export function initDB() {
       AND TRIM(number) <> ''
       AND TRIM(number) NOT GLOB '*[^0-9]*'
   `).run();
+
+  migrateCedillaToCommaBelow(db);
+}
+
+// Normalizează diacriticele vechi cu sedilă (ş/Ş/ţ/Ţ, moștenite din fonturile
+// de dinainte de Unicode) la formele moderne cu virgulă dedesubt (ș/Ș/ț/Ț), cerute
+// de Academia Română — în imnuri, secțiuni, categorii ȘI toată Biblia. Rulează o
+// singură dată per bază (guard pe PRAGMA user_version), inclusiv pe DB-urile
+// existente ale utilizatorilor la prima pornire după update. Rescrie DOAR textul,
+// niciodată updated_at — așa search_text (oricum fără diacritice) rămâne valid, iar
+// logica pe timestamp din syncSeedContent nu e afectată. char(N) evită scrierea de
+// caractere non-ASCII în sursă: ş=351 Ş=350 ţ=355 Ţ=354 → ș=537 Ș=536 ț=539 Ț=538.
+const CEDILLA_MIGRATION_VERSION = 1;
+function migrateCedillaToCommaBelow(db: any) {
+  const current = Number(db.pragma('user_version', { simple: true })) || 0;
+  if (current >= CEDILLA_MIGRATION_VERSION) return;
+
+  const toCommaBelow = (col: string) =>
+    `replace(replace(replace(replace(${col}, char(351), char(537)), ` +
+    `char(350), char(536)), char(355), char(539)), char(354), char(538))`;
+
+  const tables: [string, string][] = [
+    ['hymn_sections', 'text'],
+    ['hymns', 'title'],
+    ['categories', 'name'],
+    ['bible_verses', 'text'],
+    ['bible_books', 'name'],
+    ['bible_books', 'abbreviation'],
+  ];
+
+  const tx = db.transaction(() => {
+    for (const [table, col] of tables) {
+      // Tabelele Bibliei pot lipsi pe DB-uri foarte vechi — sărim tăcut.
+      const exists = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+        .get(table);
+      if (!exists) continue;
+      db.prepare(`UPDATE ${table} SET ${col} = ${toCommaBelow(col)} WHERE ${col} IS NOT NULL`).run();
+    }
+    db.pragma(`user_version = ${CEDILLA_MIGRATION_VERSION}`);
+  });
+  tx();
 }
 
 // ── Category queries ──────────────────────────────────────────────────────────
