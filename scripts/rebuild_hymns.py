@@ -297,7 +297,8 @@ def parse_ppt(fnum, data):
         return None
 
     title_text = title[1] if title else stanzas[0][1].split("\n")[0][:60]
-    secs = build_sections([s[1] for s in stanzas], refrain)
+    rf = bool(refrain) and (fnum in KNOWN_REFRAIN_FIRST or refrain_comes_first(slides))
+    secs = build_sections([s[1] for s in stanzas], refrain, refrain_first=rf)
     return {"number": fnum, "title": csp(title_text), "sections": secs}
 
 
@@ -385,13 +386,44 @@ def parse_pptx(fnum, data):
         print(f"  WARN: {fnum} (pptx) no stanzas")
         return None
 
-    secs = build_sections(stanzas, refrain)
+    rf = bool(refrain) and (fnum in KNOWN_REFRAIN_FIRST or refrain_comes_first(slides))
+    secs = build_sections(stanzas, refrain, refrain_first=rf)
     return {"number": fnum, "title": csp(title_text), "sections": secs}
 
 
 # ── Build sections ────────────────────────────────────────────────────
-def build_sections(stanzas, refrain):
+# Unele piese încep (și se termină) cu refren, nu cu strofă — ex. #014, #099, #644.
+# Detecția automată din ordinea blocurilor e fiabilă la .pptx și la .ppt cu un singur
+# slide, dar NU la .ppt vechi multi-slide (extragerea poate amesteca ordinea), de aceea
+# se combină cu o listă confirmată manual (surse + owner, iul 2026).
+KNOWN_REFRAIN_FIRST = {"014", "099"}
+
+_REFRAIN_MARK = re.compile(r"^\s*(refren\b|ref\.|r\s*[.:]\s)", re.I)
+_STANZA1_MARK = re.compile(r"^\s*1\s*[.\t)]")
+_ORDER_NOISE = re.compile(r"Click to edit|Master text styles|Master title|IMNURI CRE")
+
+
+def refrain_comes_first(slides):
+    """True dacă un marcaj de refren apare înaintea strofei 1 în blocurile sursă."""
+    ri = si = None
+    idx = 0
+    for sl in slides:
+        for b in sl:
+            s = str(b)
+            if _ORDER_NOISE.search(s) or s.strip() in ("*", ""):
+                continue
+            if ri is None and _REFRAIN_MARK.match(s):
+                ri = idx
+            if si is None and _STANZA1_MARK.match(s):
+                si = idx
+            idx += 1
+    return ri is not None and si is not None and ri < si
+
+
+def build_sections(stanzas, refrain, refrain_first=False):
     secs = []
+    if refrain_first and refrain:
+        secs.append({"type": "refren", "text": refrain})
     for text in stanzas:
         secs.append({"type": "strofa", "text": text})
         if refrain:
