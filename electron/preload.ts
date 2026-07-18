@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld('electron', {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch: Record<string, unknown>) => ipcRenderer.invoke('settings:set', patch),
+    setUiZoom: (factor: number) => ipcRenderer.invoke('settings:set-ui-zoom', factor),
   },
 
   contrib: {
@@ -131,7 +132,7 @@ contextBridge.exposeInMainWorld('electron', {
     updateHymn: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
       ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
     close: () => ipcRenderer.invoke('projection:close'),
-    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') =>
+    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') =>
       ipcRenderer.invoke('projection:key-request', action),
     onSlide: (cb: (data: any) => void) =>
       ipcRenderer.on('projection:slide', (_e, data) => cb(data)),
@@ -142,9 +143,13 @@ contextBridge.exposeInMainWorld('electron', {
     onClosed: (cb: () => void) =>
       ipcRenderer.on('projection:closed', () => cb()),
     offClosed: () => ipcRenderer.removeAllListeners('projection:closed'),
-    onZoom: (cb: (action: 'zoom-in' | 'zoom-out') => void) =>
+    onZoom: (cb: (action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void) =>
       ipcRenderer.on('projection:zoom', (_e, action) => cb(action)),
     offZoom: () => ipcRenderer.removeAllListeners('projection:zoom'),
+    reportZoom: (level: number) => ipcRenderer.invoke('projection:zoom-report', level),
+    onZoomLevel: (cb: (level: number) => void) =>
+      ipcRenderer.on('projection:zoom-level', (_e, level) => cb(level)),
+    offZoomLevel: () => ipcRenderer.removeAllListeners('projection:zoom-level'),
     signalReady: () => ipcRenderer.send('projection:renderer-ready'),
     // Special full-screen modes (timer/clock/free text)
     showTimer: (data: any) => ipcRenderer.invoke('projection:show-timer', data),
@@ -210,6 +215,11 @@ contextBridge.exposeInMainWorld('electron', {
     // Send status back from projection
     sendStatus: (data: { currentTime: number; duration: number; paused: boolean }) =>
       ipcRenderer.send('video:status-from-projection', data),
+    // Playback error from projection → main window
+    sendError: (msg: string) => ipcRenderer.send('video:error-from-projection', msg),
+    onError: (cb: (msg: string) => void) =>
+      ipcRenderer.on('video:error', (_e, msg) => cb(msg)),
+    offError: () => ipcRenderer.removeAllListeners('video:error'),
   },
 
   ytdlp: {

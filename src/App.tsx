@@ -49,6 +49,9 @@ import {
     Image as ImageIcon,
     MoreHorizontal,
     FileText,
+    VolumeX,
+    Headphones,
+    HelpCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
@@ -282,6 +285,10 @@ function App() {
     const [verses, setVerses] = useState<BibleVerse[]>([]);
     const [selectedVerseIdx, setSelectedVerseIdx] = useState(0);
     const [bibleSearchResults, setBibleSearchResults] = useState<BibleVerse[] | null>(null);
+    // pasaj biblic activ (interval ex: gen 1:3-5) — contorul n/N și săgețile rămân în pasaj
+    const [biblePassage, setBiblePassage] = useState<{ bookId: number; chapter: number; endVerse: number } | null>(null);
+    // eroare referință nerezolvată sub câmpul de căutare (dispare la tastare)
+    const [bibleRefError, setBibleRefError] = useState<string | null>(null);
 
     // ── Preview state ──
     const [previewType, setPreviewType] = useState<'hymn' | 'bible' | null>(null);
@@ -292,6 +299,11 @@ function App() {
     // ── Projection state ──
     const [projecting, setProjecting] = useState(false);
     const [projSlideIndex, setProjSlideIndex] = useState(0);
+    // true = previzualizarea reflectă EXACT ce e pe proiector; false (în proiecție) = imn PREGĂTIT, încă neproiectat
+    const [previewLive, setPreviewLive] = useState(false);
+    // eticheta a ceea ce e LIVE pe ecran (capturată la proiectare) — ca badge-ul global
+    // să arate imnul de pe proiector, nu previzualizarea „pregătită" a altui imn
+    const [liveLabel, setLiveLabel] = useState('');
 
     // ── Update state ──
     const [updateInfo, setUpdateInfo] = useState<{
@@ -313,6 +325,13 @@ function App() {
     const [videoLoading, setVideoLoading] = useState(false);
     const [videoConverting, setVideoConverting] = useState(false);
     const [videoVolume, setVideoVolume] = useState(1);
+    const [videoMuted, setVideoMuted] = useState(false);
+    // eroare de redare vizibilă (fișier mutat/corupt) — altfel operatorul apasă degeaba
+    const [videoError, setVideoError] = useState<string | null>(null);
+    // monitorul de retur plutitor (Ceas/Realtime) — ascuns manual până la următorul video
+    const [floatingMonitorHidden, setFloatingMonitorHidden] = useState(false);
+    // badge LIVE global: re-randează când ceasul/anunțul (registre de modul) pornesc/opresc
+    const [, setLiveTick] = useState(0);
     // YouTube playlist
     const [youtubePlaylist, setYoutubePlaylist] = useState<YouTubeEntry[]>([]);
     const [youtubeProgress, setYoutubeProgress] = useState<Record<string, number>>({});
@@ -372,7 +391,7 @@ function App() {
     useEffect(() => { projSlideIndexRef.current = projSlideIndex; }, [projSlideIndex]);
 
     // Mark search as "new" whenever refSearch changes
-    useEffect(() => { searchConsumedRef.current = false; }, [refSearch]);
+    useEffect(() => { searchConsumedRef.current = false; setBibleRefError(null); }, [refSearch]);
 
     // ── Load categories + books on mount ──
     const loadCategories = useCallback(async () => {
@@ -456,13 +475,21 @@ function App() {
         };
     }, []);
 
+    // Badge LIVE global: registrele de modul (Ceas/Anunțuri) cer re-randare prin liveBus
+    useEffect(() => {
+        liveBus.notify = () => setLiveTick(t => t + 1);
+        return () => { liveBus.notify = () => { /* App demontat */ }; };
+    }, []);
+
     // Video status listener
     useEffect(() => {
         window.electron.video.onStatus((data) => setVideoStatus(data));
         window.electron.video.onConverting((converting) => setVideoConverting(converting));
+        window.electron.video.onError((msg) => setVideoError(msg));
         return () => {
             window.electron.video.offStatus();
             window.electron.video.offConverting();
+            window.electron.video.offError();
         };
     }, []);
 
@@ -556,14 +583,10 @@ function App() {
         setPreviewNumber(String(data.number));
         setProjSlideIndex(-1);
         setSelectedHymnId(id);
-
-        // If projecting, fluid hymn switch — show title slide first
-        if (projecting) {
-            const secs = expanded.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
-            await window.electron.projection.updateHymn(secs, data.title, String(data.number), -1, 'hymn');
-            setProjSlideIndex(-1);
-        }
-    }, [projecting]);
+        // În timpul proiecției, selecția DOAR pregătește imnul în previzualizare
+        // („pregătit"); trecerea live se face explicit (Enter / dublu-clic / „Proiectează").
+        setPreviewLive(false);
+    }, []);
 
     // ── Preview bible search result ──
     // Loads the full chapter into preview and navigates to the clicked verse
@@ -601,6 +624,7 @@ function App() {
         setPreviewNumber('');
         setProjSlideIndex(0);
         setSelectedHymnId(null);
+        setPreviewLive(false);
     }, []);
 
     // ── Projection control ──
@@ -616,7 +640,25 @@ function App() {
         await window.electron.projection.open(secs, previewTitle, previewNumber, idx, ct, br);
         setProjecting(true);
         setProjSlideIndex(idx);
+        setPreviewLive(true);
+        setLiveLabel(ct === 'bible' ? `${previewNumber} ${previewTitle}`.trim() : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
     }, [previewSections, previewTitle, previewNumber, previewType]);
+
+    // ── Trece live imnul PREGĂTIT din previzualizare (comutare fluidă, fără blackout) ──
+    // Apelată doar în timpul proiecției, când previzualizarea nu e deja live.
+    const goLivePreview = useCallback(async () => {
+        if (!projecting || !previewSections.length) return;
+        const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
+        const ct = previewType ?? 'hymn';
+        const idx = ct === 'bible' ? Math.max(0, projSlideIndexRef.current) : -1;
+        const br = ct === 'bible' && previewSections[idx]
+            ? `${previewTitle}:${previewSections[idx].label?.replace('v. ', '') ?? ''}`
+            : undefined;
+        await window.electron.projection.updateHymn(secs, previewTitle, previewNumber, idx, ct, br);
+        setProjSlideIndex(idx);
+        setPreviewLive(true);
+        setLiveLabel(ct === 'bible' ? `${previewNumber} ${previewTitle}`.trim() : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
+    }, [projecting, previewSections, previewType, previewTitle, previewNumber]);
 
     const navigateSlide = useCallback(async (newIdx: number) => {
         if (!projecting) return;
@@ -636,6 +678,7 @@ function App() {
         await window.electron.projection.close();
         setProjecting(false);
         setProjSlideIndex(0);
+        setPreviewLive(false);
     }, []);
 
     // Listen for projection closed
@@ -643,6 +686,7 @@ function App() {
         window.electron.projection.onClosed(() => {
             setProjecting(false);
             setProjSlideIndex(0);
+            setPreviewLive(false);
             realtimeCtl.notifyClosed();
         });
         window.electron.projection.onControllerSync(({ currentIndex }) => {
@@ -668,6 +712,8 @@ function App() {
         setRefSearch('');
         setContentSearch('');
         setBibleSearchResults(null);
+        setBiblePassage(null);
+        setBibleRefError(null);
         if (!projecting) clearPreview();
     }, [projecting, clearPreview, sidebarWidth, previewWidth]);
 
@@ -679,12 +725,14 @@ function App() {
         setVerses([]);
         setSelectedVerseIdx(0);
         setBibleSearchResults(null);
+        setBiblePassage(null);
         const chs = await window.electron.bible.getChapters(book.id);
         setChapters(chs);
     }, []);
 
     const selectChapter = useCallback(async (ch: number) => {
         if (!selectedBookId) return;
+        setBiblePassage(null);
         setSelectedChapter(ch);
         const vrs = await window.electron.bible.getVerses(selectedBookId, ch);
         setVerses(vrs);
@@ -718,10 +766,11 @@ function App() {
         const filePath = await window.electron.video.pickFile();
         if (!filePath) return;
         setVideoLoading(true);
+        setVideoError(null);
         try {
             const result = await window.electron.video.prepare(filePath);
             if (result.error) {
-                console.error('Video prepare error:', result.error);
+                setVideoError('Nu am putut pregăti videoclipul: ' + result.error);
                 setVideoLoading(false);
                 return;
             }
@@ -733,7 +782,7 @@ function App() {
                 setYoutubePlaylist(prev => [...prev, addResult.entry!]);
             }
         } catch (err) {
-            console.error('Video prepare failed:', err);
+            setVideoError('Nu am putut pregăti videoclipul: ' + ((err as Error)?.message ?? 'eroare necunoscută'));
         }
         setVideoLoading(false);
     }, []);
@@ -742,6 +791,8 @@ function App() {
         setVideoName(name);
         setVideoUrl(url);
         setVideoStatus({ currentTime: 0, duration: 0, paused: true });
+        setFloatingMonitorHidden(false);
+        liveBus.notify();
         await window.electron.video.startPlayback(url, name);
     }, []);
 
@@ -752,12 +803,21 @@ function App() {
         setVideoStatus(null);
         setVideoName('');
         setVideoUrl('');
+        setVideoError(null);
     }, []);
     const videoSeek = useCallback((time: number) => window.electron.video.seek(time), []);
     const videoSetVolume = useCallback((vol: number) => {
         setVideoVolume(vol);
+        setVideoMuted(false);
         window.electron.video.volume(vol);
     }, []);
+    const videoToggleMute = useCallback(() => {
+        setVideoMuted(m => {
+            const next = !m;
+            window.electron.video.volume(next ? 0 : videoVolume);
+            return next;
+        });
+    }, [videoVolume]);
 
     // YouTube playlist actions
     const youtubeAdd = useCallback(async (url: string) => {
@@ -782,9 +842,10 @@ function App() {
     }, []);
 
     const youtubePlay = useCallback(async (id: string) => {
+        setVideoError(null);
         const result = await window.electron.playlist.getFileUrl(id);
         if (result.error || !result.url) {
-            console.error('Playlist file error:', result.error);
+            setVideoError((result.error || 'Fișierul nu a putut fi redat') + '. Alege-l din nou din listă.');
             return;
         }
         videoStartPlayback(result.url, result.name ?? 'Video');
@@ -819,6 +880,7 @@ function App() {
         setSelectedBookId(book.id);
         setSelectedBookName(book.name);
         setBibleSearchResults(null);
+        setBiblePassage(null);
         const chs = await window.electron.bible.getChapters(book.id);
         setChapters(chs);
 
@@ -837,6 +899,24 @@ function App() {
         const vrs = await window.electron.bible.getVerses(book.id, ref.chapter);
         if (!vrs.length) return false;
         skipAutoPreviewRef.current = true; // prevent auto-preview from overriding our precise index
+
+        if (ref.verse && ref.endVerse) {
+            // Interval de versete (ex: gen 1:3-5) → afișează DOAR pasajul; contorul n/N și
+            // săgețile rămân în pasaj, iar ↓ dincolo de ultimul verset extinde la tot capitolul.
+            const passage = await window.electron.bible.getVerseRange(book.id, ref.chapter, ref.verse, ref.endVerse);
+            if (!passage.length) return false;
+            setVerses(passage);
+            const secs = passage.map((v: BibleVerse) => ({ text: v.text, type: 'verse', label: `v. ${v.verse}` }));
+            setPreviewType('bible');
+            setPreviewSections(secs);
+            setPreviewTitle(`${book.name} ${ref.chapter}`);
+            setPreviewNumber(book.abbreviation);
+            setProjSlideIndex(0);
+            setSelectedVerseIdx(0);
+            setBiblePassage({ bookId: book.id, chapter: ref.chapter, endVerse: ref.endVerse });
+            return true;
+        }
+
         setVerses(vrs);
 
         if (ref.verse) {
@@ -927,6 +1007,23 @@ function App() {
         }
     }, [selectedHymnId, clearPreview, loadHymns, loadCategories, requirePassword]);
 
+    // ── Adaugă imn (permanent pe tabul Imnuri; imnurile noi merg la „Imnuri Speciale") ──
+    const openAddHymn = useCallback(() => {
+        const special = categories.find(c => c.name === 'Imnuri Speciale');
+        const specialId = special?.id;
+        if (specialId !== undefined && activeCategoryId !== specialId) {
+            if (!confirm('Imnurile noi se adaugă la «Imnuri Speciale». Continui?')) return;
+            setActiveCategoryId(specialId);
+        }
+        setHymnEditor({
+            mode: 'add',
+            number: '',
+            title: '',
+            sections: [{ type: 'strofa', text: '' }],
+            categoryId: specialId ?? activeCategoryId,
+        });
+    }, [categories, activeCategoryId]);
+
     // ── Global keyboard ──
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
@@ -958,13 +1055,56 @@ function App() {
                 return;
             }
 
+            // ── Scurtături video (tab Video, video încărcat, în afara câmpurilor text) ──
+            if (tab === 'video' && videoUrl && !inInput) {
+                const k = e.key;
+                if (k === ' ') {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                    if (videoStatus?.paused ?? true) videoPlay(); else videoPause();
+                    return;
+                }
+                if (k === 'ArrowRight' || k === 'ArrowLeft') {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                    const delta = (e.shiftKey ? 30 : 5) * (k === 'ArrowRight' ? 1 : -1);
+                    const cur = videoStatus?.currentTime ?? 0;
+                    const dur = videoStatus?.duration ?? 0;
+                    const upper = dur > 0 ? dur : cur + Math.abs(delta);
+                    videoSeek(Math.max(0, Math.min(cur + delta, upper)));
+                    return;
+                }
+                if (k === 'ArrowUp' || k === 'ArrowDown') {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                    const base = videoMuted ? 0 : videoVolume;
+                    videoSetVolume(Math.max(0, Math.min(1, base + (k === 'ArrowUp' ? 0.05 : -0.05))));
+                    return;
+                }
+                if (k === 'm' || k === 'M') {
+                    e.preventDefault(); e.stopImmediatePropagation();
+                    videoToggleMute();
+                    return;
+                }
+            }
+
             if (e.key === 'Enter' && !inInput) {
                 e.preventDefault();
                 if (projecting) {
-                    // handled by ProjectorController
+                    // imn PREGĂTIT → Enter îl trece live; altfel navigarea o face ProjectorController
+                    if (!previewLive) goLivePreview();
                 } else if (previewSections.length > 0) {
                     startProjection(projSlideIndexRef.current);
                 }
+                return;
+            }
+
+            // Realtime: navighează slide-urile prezentării proiectate din fereastra
+            // principală — aceeași rută ca butoanele ‹ › (goSlide → projection.updateText).
+            // ←/→/PageUp/PageDown/Space; nu fură tastele când scrii în editor (!inInput).
+            if (realtimeCtl.presSlides > 1 && !inInput
+                && (e.key === 'ArrowRight' || e.key === 'ArrowLeft'
+                    || e.key === 'PageDown' || e.key === 'PageUp' || e.key === ' ')) {
+                e.preventDefault();
+                if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') realtimeCtl.nextSlide();
+                else realtimeCtl.prevSlide();
                 return;
             }
 
@@ -1005,7 +1145,10 @@ function App() {
     }, [projecting, previewSections, modalOpen, hymnEditor, passwordModal, needsPasswordSetup,
         needsChurchInfo, forgotPwOpen, setPwOpen,
         stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn,
-        videoStatus, videoStop, verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
+        previewLive, goLivePreview,
+        videoStatus, videoStop, videoUrl, videoVolume, videoMuted,
+        videoPlay, videoPause, videoSeek, videoSetVolume, videoToggleMute,
+        verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
 
     // ── Resizable column drag handlers ──
     const onResizeMouseDown = useCallback((which: 'sidebar' | 'preview') => {
@@ -1045,7 +1188,7 @@ function App() {
     }, []);
 
     // ── Search Enter/Esc/Arrow handler ──
-    const onSearchKeydown = useCallback(async (e: React.KeyboardEvent) => {
+    const onSearchKeydown = useCallback(async (e: React.KeyboardEvent, source: 'ref' | 'content' = 'ref') => {
         if (e.key === 'Enter') {
             e.preventDefault();
 
@@ -1054,35 +1197,43 @@ function App() {
 
             if (tab === 'imnuri') {
                 if (isNewSearch) {
-                    // New/changed search → always load first result from current list
-                    if (projecting) await stopProjection();
+                    // Search nou → DOAR pregătește primul rezultat în previzualizare.
+                    // În timpul proiecției NU mai oprim: imnul curent rămâne live până confirmi.
                     if (hymns.length > 0) {
                         searchConsumedRef.current = true;
                         await previewHymn(hymns[0].id);
                     }
-                } else if (previewSections.length > 0 && !projecting) {
-                    // Preview exists, search consumed → project
-                    startProjection(projSlideIndex);
-                } else if (!previewSections.length && hymns.length > 0) {
-                    // No preview yet (e.g. after clearing) → load first result
+                } else if (previewSections.length > 0) {
+                    // Search consumat + Enter = trece live (fluid dacă proiectăm, altfel pornește)
+                    if (!projecting) startProjection(projSlideIndex);
+                    else if (!previewLive) await goLivePreview();
+                } else if (hymns.length > 0) {
+                    // Fără previzualizare (ex. după curățare) → încarcă primul rezultat
                     searchConsumedRef.current = true;
                     await previewHymn(hymns[0].id);
                 }
-                // If projecting and no new search → do nothing (ProjectorController handles)
                 return;
             }
 
             if (tab === 'biblia') {
+                if (source === 'content') {
+                    // Căutare în text: pornește DOAR la ≥3 litere; sub atât nu proiecta nimic
+                    if (contentSearch.trim().length >= 3) {
+                        await doBibleContentSearch();
+                    }
+                    return;
+                }
+                // source === 'ref' → referință biblică / proiecție
                 if (isNewSearch) {
-                    // Try to load bible reference from search
                     if (projecting) await stopProjection();
                     const loaded = await loadBibleReference();
-                    if (loaded) searchConsumedRef.current = true;
-                } else if (contentSearch.trim().length >= 3) {
-                    // Content search in Bible — triggered on Enter
-                    await doBibleContentSearch();
+                    if (loaded) {
+                        searchConsumedRef.current = true;
+                        setBibleRefError(null);
+                    } else {
+                        setBibleRefError(`Nu am găsit «${refSearch.trim()}». Scrie de exemplu: ioan 3 16, ps 23, gen 1:3`);
+                    }
                 } else if (previewSections.length > 0 && !projecting) {
-                    // No new search, preview exists → project
                     startProjection(projSlideIndex);
                 }
                 return;
@@ -1092,7 +1243,7 @@ function App() {
 
         // When projecting, arrow keys control projection (same as ProjectorController):
         // Right/Left = navigate slides, Up/Down = zoom
-        if (projecting && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        if (projecting && previewLive && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
             e.preventDefault();
             if (e.key === 'ArrowRight') navigateSlide(projSlideIndex + 1);
             else navigateSlide(projSlideIndex - 1);
@@ -1112,6 +1263,22 @@ function App() {
                 const nextIdx = currentIdx < hymns.length - 1 ? currentIdx + 1 : 0;
                 if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
             } else if (tab === 'biblia' && verses.length > 0) {
+                // Continuă dincolo de pasaj: ↓ pe ultimul verset al intervalului
+                // încarcă restul capitolului și trece la versetul următor.
+                if (biblePassage && selectedVerseIdx >= verses.length - 1) {
+                    const full = await window.electron.bible.getVerses(biblePassage.bookId, biblePassage.chapter);
+                    const curVerse = verses[selectedVerseIdx]?.verse;
+                    const contIdx = full.findIndex((v: BibleVerse) => v.verse === curVerse);
+                    if (contIdx >= 0 && contIdx < full.length - 1) {
+                        skipAutoPreviewRef.current = true;
+                        setVerses(full);
+                        setPreviewSections(full.map((v: BibleVerse) => ({ text: v.text, type: 'verse', label: `v. ${v.verse}` })));
+                        setBiblePassage(null);
+                        setSelectedVerseIdx(contIdx + 1);
+                        setProjSlideIndex(contIdx + 1);
+                    }
+                    return;
+                }
                 const newIdx = Math.min(selectedVerseIdx + 1, verses.length - 1);
                 setSelectedVerseIdx(newIdx);
                 setProjSlideIndex(newIdx);
@@ -1134,7 +1301,8 @@ function App() {
         }
     }, [projecting, previewSections, projSlideIndex, startProjection, tab,
         selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
-        navigateSlide, contentSearch, doBibleContentSearch,
+        navigateSlide, contentSearch, doBibleContentSearch, refSearch, biblePassage,
+        previewLive, goLivePreview,
         verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
 
     // ── Close context menu on click elsewhere ──
@@ -1145,8 +1313,24 @@ function App() {
         return () => window.removeEventListener('click', handler);
     }, [contextMenu]);
 
-    // ── Is "Imnuri Speciale" active? ──
-    const isSpecialCategory = categories.find(c => c.id === activeCategoryId)?.name === 'Imnuri Speciale';
+    // ── Badge LIVE global: ce se proiectează ACUM (orice sursă) ──
+    const liveNow: string | null = (() => {
+        if (videoUrl) return `Video: ${videoName || 'videoclip'}`;
+        if (projecting) return liveLabel || 'Proiecție';
+        const tl = timerCtl.live;
+        if (tl) return tl.mode === 'clock' ? 'Ceas' : tl.mode === 'stopwatch' ? 'Cronometru' : 'Numărătoare';
+        if (realtimeCtl.projected) return 'Anunț';
+        return null;
+    })();
+    const stopAllProjection = () => {
+        if (videoUrl) { videoStop(); return; }
+        if (projecting) { stopProjection(); return; }
+        // Ceas / Anunț: închide proiecția și resetează registrele de modul
+        window.electron.projection.close();
+        timerCtl.live = null; timerCtl.anchor = {};
+        realtimeCtl.notifyClosed();
+        liveBus.notify();
+    };
 
     // ══════════════════════════════════════════════════════════════════════════
     // RENDER
@@ -1159,7 +1343,12 @@ function App() {
                 <div className="header-logo">
                     <Monitor className="icon-sm text-indigo-400" />
                     <span>Proiecție</span>
-                    {projecting && <span className="live-badge">● LIVE</span>}
+                    {liveNow && (
+                        <span className="live-badge" title="Se proiectează acum">
+                            <span className="live-badge-text">● LIVE — {liveNow}</span>
+                            <button className="live-badge-stop" onClick={stopAllProjection} title="Oprește proiecția">✕</button>
+                        </span>
+                    )}
                 </div>
 
                 {/* Tabs */}
@@ -1192,7 +1381,7 @@ function App() {
                         className={`tab-btn ${tab === 'mesaj' ? 'active' : ''}`}
                         onClick={() => switchTab('mesaj')}
                     >
-                        Realtime
+                        Anunțuri
                     </button>
                 </div>
 
@@ -1206,9 +1395,12 @@ function App() {
                                 type="text"
                                 value={refSearch}
                                 onChange={e => setRefSearch(e.target.value)}
-                                onKeyDown={onSearchKeydown}
+                                onKeyDown={e => onSearchKeydown(e, 'ref')}
                                 placeholder={tab === 'imnuri' ? 'Nr. / Titlu imn...' : 'ex: deu 12 12, ps 23, gen 1:3'}
                             />
+                            {tab === 'biblia' && bibleRefError && (
+                                <div className="search-msg search-msg-error">{bibleRefError}</div>
+                            )}
                         </div>
                         <div className="search-box search-box-wide">
                             <Search className="search-icon" />
@@ -1216,33 +1408,36 @@ function App() {
                                 type="text"
                                 value={contentSearch}
                                 onChange={e => setContentSearch(e.target.value)}
-                                onKeyDown={onSearchKeydown}
+                                onKeyDown={e => onSearchKeydown(e, 'content')}
                                 placeholder={tab === 'imnuri' ? 'Caută în text...' : 'Caută în Biblie...'}
                             />
+                            {tab === 'biblia' && (
+                                <div className="search-msg">Scrie cel puțin 3 litere și apasă Enter.</div>
+                            )}
                         </div>
                     </>)}
                 </div>
 
-                {/* Add hymn button (only for Imnuri Speciale) */}
-                {tab === 'imnuri' && isSpecialCategory && (
+                {/* Add hymn button — permanent pe tabul Imnuri (adaugă la „Imnuri Speciale") */}
+                {tab === 'imnuri' && (
                     <button
                         className="header-btn add-btn"
-                        onClick={() => setHymnEditor({
-                            mode: 'add',
-                            number: '',
-                            title: '',
-                            sections: [{ type: 'strofa', text: '' }],
-                            categoryId: activeCategoryId,
-                        })}
+                        onClick={openAddHymn}
                         title="Adaugă imn"
                     >
                         <Plus className="icon-sm" />
                     </button>
                 )}
 
+                {/* Ajutor */}
+                <button className="header-btn" onClick={() => setModalOpen('help')} title="Ajutor — scurtături">
+                    <HelpCircle className="icon-sm" />
+                </button>
+
                 {/* Settings */}
-                <button className="header-btn" onClick={() => setModalOpen('settings')} title="Setări">
+                <button className="header-btn header-btn-settings" onClick={() => setModalOpen('settings')} title="Setări">
                     <Settings className="icon-sm" />
+                    <span className="header-btn-label">Setări</span>
                 </button>
 
                 <div className="kbd-hints">
@@ -1284,6 +1479,7 @@ function App() {
                                 setVerses([]);
                                 setSelectedVerseIdx(0);
                                 setBibleSearchResults(null);
+                                setBiblePassage(null);
                             }}
                         />
                     ) : tab !== 'video' ? (
@@ -1390,17 +1586,21 @@ function App() {
                             videoName={videoName}
                             videoStatus={videoStatus}
                             videoVolume={videoVolume}
+                            videoMuted={videoMuted}
+                            videoError={videoError}
                             videoLoading={videoLoading}
                             videoConverting={videoConverting}
                             youtubePlaylist={youtubePlaylist}
                             youtubeProgress={youtubeProgress}
                             videoFilter={videoFilter}
                             onPickFile={loadVideoFile}
+                            onDismissError={() => setVideoError(null)}
                             onPlay={videoPlay}
                             onPause={videoPause}
                             onStop={videoStop}
                             onSeek={videoSeek}
                             onVolume={videoSetVolume}
+                            onToggleMute={videoToggleMute}
                             onYoutubeAdd={youtubeAdd}
                             onYoutubeRemove={youtubeRemove}
                             onYoutubeDelete={youtubeDelete}
@@ -1454,8 +1654,10 @@ function App() {
                         previewTitle={previewTitle}
                         previewNumber={previewNumber}
                         projecting={projecting}
+                        previewLive={previewLive}
                         projSlideIndex={projSlideIndex}
                         onStartProjection={startProjection}
+                        onGoLive={goLivePreview}
                         onStopProjection={stopProjection}
                         onClearPreview={clearPreview}
                         onNavigateSlide={navigateSlide}
@@ -1463,18 +1665,34 @@ function App() {
                         videoUrl={videoUrl}
                         videoStatus={videoStatus}
                         videoName={videoName}
+                        floatingActive={(tab === 'timer' || tab === 'mesaj') && !!videoUrl && !floatingMonitorHidden}
                     />
                 </div>
             </div>
 
+            {/* Monitor de retur plutitor: pe Ceas/Realtime coloana de previzualizare
+                e ascunsă, dar operatorul are nevoie să vadă/controleze video-ul live
+                cât pregătește numărătoarea sau anunțul */}
+            {videoUrl && (tab === 'timer' || tab === 'mesaj') && !floatingMonitorHidden && (
+                <VideoReturnMonitor
+                    key={videoUrl}
+                    floating
+                    videoUrl={videoUrl}
+                    videoStatus={videoStatus}
+                    videoName={videoName}
+                    onClose={() => setFloatingMonitorHidden(true)}
+                />
+            )}
+
             {/* ── Controller (bottom bar when projecting) ── */}
-            {projecting && previewSections.length > 0 && (
+            {projecting && previewLive && previewSections.length > 0 && (
                 <ProjectorController
                     sections={previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection))}
                     hymnTitle={previewTitle}
                     hymnNumber={previewNumber}
                     onClose={stopProjection}
                     onNavigate={navigateSlide}
+                    videoActive={!!videoStatus}
                 />
             )}
 
@@ -1500,8 +1718,9 @@ function App() {
             )}
 
             {/* ── Settings Modal ── */}
-            {modalOpen === 'settings' && (
+            {(modalOpen === 'settings' || modalOpen === 'help') && (
                 <SettingsModal
+                    initialTab={modalOpen === 'help' ? 'help' : 'projection'}
                     onClose={() => setModalOpen(null)}
                     onCategoriesChanged={loadCategories}
                     onHymnsChanged={loadHymns}
@@ -1594,6 +1813,9 @@ function App() {
                     }}
                 />
             )}
+
+            {/* ── Toast global (dreapta-jos) ── */}
+            <ToastHost />
         </div>
     );
 }
@@ -1800,6 +2022,14 @@ function HymnList({
                                     {collectionName && <span className="hymn-collection">{collectionName}</span>}
                                     {snippetLine && <span className="hymn-snippet">— {snippetLine}</span>}
                                 </div>
+                                <button
+                                    className="hymn-menu-btn"
+                                    title="Opțiuni imn"
+                                    aria-label="Opțiuni imn"
+                                    onClick={e => { e.stopPropagation(); onContextMenu(e, hymn); }}
+                                >
+                                    <MoreHorizontal className="icon-xs" />
+                                </button>
                             </div>
                         );
                     })}
@@ -1943,26 +2173,30 @@ function formatTime(seconds: number): string {
 }
 
 function VideoController({
-    videoName, videoStatus, videoVolume, videoLoading, videoConverting,
+    videoName, videoStatus, videoVolume, videoMuted, videoError, videoLoading, videoConverting,
     youtubePlaylist, youtubeProgress, videoFilter,
-    onPickFile, onPlay, onPause, onStop,
-    onSeek, onVolume,
+    onPickFile, onDismissError, onPlay, onPause, onStop,
+    onSeek, onVolume, onToggleMute,
     onYoutubeAdd, onYoutubeRemove, onYoutubeDelete, onYoutubePlay, onYoutubeRetry, onYoutubeUpdateTitle,
 }: {
     videoName: string;
     videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
     videoVolume: number;
+    videoMuted: boolean;
+    videoError: string | null;
     videoLoading: boolean;
     videoConverting: boolean;
     youtubePlaylist: YouTubeEntry[];
     youtubeProgress: Record<string, number>;
     videoFilter: VideoFilter;
     onPickFile: () => void;
+    onDismissError: () => void;
     onPlay: () => void;
     onPause: () => void;
     onStop: () => void;
     onSeek: (time: number) => void;
     onVolume: (vol: number) => void;
+    onToggleMute: () => void;
     onYoutubeAdd: (url: string) => Promise<string | null>;
     onYoutubeRemove: (id: string) => void;
     onYoutubeDelete: (id: string) => void;
@@ -1974,6 +2208,20 @@ function VideoController({
     const isPaused = videoStatus?.paused ?? true;
     const currentTime = videoStatus?.currentTime ?? 0;
     const duration = videoStatus?.duration ?? 0;
+
+    // Scrubbing local: cât tragi, afișăm timpul-țintă (nu currentTime de la 500ms);
+    // seek-ul se trimite abia la eliberare (onPointerUp), ca statusul să nu zbată cursorul.
+    const [scrub, setScrub] = useState<number | null>(null);
+    const scrubCommittedRef = useRef(false);
+    const isScrubbing = scrub !== null;
+    const displayTime = isScrubbing ? (scrub as number) : currentTime;
+    // După eliberare ține ținta până când statusul real o ajunge (evită saltul înapoi de ~500ms).
+    useEffect(() => {
+        if (scrubCommittedRef.current && scrub !== null && Math.abs(currentTime - scrub) < 0.75) {
+            scrubCommittedRef.current = false;
+            setScrub(null);
+        }
+    }, [currentTime, scrub]);
 
     // YouTube URL input
     const [ytUrl, setYtUrl] = useState('');
@@ -2076,45 +2324,67 @@ function VideoController({
                     <div className="video-player-name">
                         <Film className="icon-sm opacity-50" />
                         <span>{videoName}</span>
+                        <span className={`video-state-pill ${isPaused ? 'paused' : 'playing'}`}>
+                            {isPaused ? '❚❚ PAUZĂ' : '▶ REDARE'}
+                        </span>
                     </div>
                     <div className="video-seekbar-container">
-                        <span className="video-time">{formatTime(currentTime)}</span>
-                        <input
-                            type="range"
-                            className="video-seekbar"
-                            min={0}
-                            max={duration || 1}
-                            step={0.1}
-                            value={currentTime}
-                            onChange={(e) => onSeek(Number(e.target.value))}
-                        />
+                        <span className="video-time">{formatTime(displayTime)}</span>
+                        <div className="video-seekbar-wrap">
+                            <input
+                                type="range"
+                                className="video-seekbar"
+                                min={0}
+                                max={duration || 1}
+                                step={0.1}
+                                value={displayTime}
+                                onPointerDown={(e) => setScrub(Number((e.currentTarget as HTMLInputElement).value))}
+                                onChange={(e) => setScrub(Number(e.target.value))}
+                                onPointerUp={() => { if (scrub !== null) { onSeek(scrub); scrubCommittedRef.current = true; } }}
+                                onKeyUp={() => { if (scrub !== null) { onSeek(scrub); scrubCommittedRef.current = true; } }}
+                                onBlur={() => { if (scrub !== null) { onSeek(scrub); scrubCommittedRef.current = true; } }}
+                            />
+                            {isScrubbing && duration > 0 && (
+                                <div
+                                    className="video-seek-tooltip"
+                                    style={{ left: `${Math.min(100, Math.max(0, ((scrub as number) / (duration || 1)) * 100))}%` }}
+                                >
+                                    {formatTime(scrub as number)}
+                                </div>
+                            )}
+                        </div>
                         <span className="video-time">{formatTime(duration)}</span>
                     </div>
                     <div className="video-buttons">
                         <button
-                            className="video-btn video-btn-main"
+                            className="video-btn video-btn-main video-btn-labeled"
                             onClick={isPaused ? onPlay : onPause}
-                            title={isPaused ? 'Redă' : 'Pauză'}
                         >
-                            {isPaused
-                                ? <Play className="icon-sm" />
-                                : <Pause className="icon-sm" />
-                            }
+                            {isPaused ? <Play className="icon-sm" /> : <Pause className="icon-sm" />}
+                            <span>{isPaused ? 'Redă' : 'Pauză'}</span>
                         </button>
-                        <button className="video-btn" onClick={onStop} title="Oprește">
+                        <button className="video-btn video-btn-labeled" onClick={onStop}>
                             <Square className="icon-sm" />
+                            <span>Oprește</span>
                         </button>
                         <div className="video-volume-group">
-                            <Volume2 className="icon-sm opacity-50" />
+                            <button
+                                className={`video-btn video-mute-btn ${videoMuted ? 'muted' : ''}`}
+                                onClick={onToggleMute}
+                                title={videoMuted ? 'Repornește sunetul' : 'Fără sunet'}
+                            >
+                                {videoMuted ? <VolumeX className="icon-sm" /> : <Volume2 className="icon-sm" />}
+                            </button>
                             <input
                                 type="range"
                                 className="video-volume-slider"
                                 min={0}
                                 max={1}
                                 step={0.05}
-                                value={videoVolume}
+                                value={videoMuted ? 0 : videoVolume}
                                 onChange={(e) => onVolume(Number(e.target.value))}
                             />
+                            <span className="video-volume-pct">{Math.round((videoMuted ? 0 : videoVolume) * 100)}%</span>
                         </div>
                     </div>
                 </div>
@@ -2138,6 +2408,19 @@ function VideoController({
     // ── Idle / Prepared state ──
     return (
         <div className="content-inner video-controller">
+            {videoError && (
+                <div className="video-error-banner">
+                    <AlertCircle className="icon-sm" />
+                    <span className="video-error-text">{videoError}</span>
+                    <button className="video-error-action" onClick={onPickFile}>
+                        <FolderOpen className="icon-xs" /> Alege din nou fișierul…
+                    </button>
+                    <button className="video-error-dismiss" onClick={onDismissError} title="Închide">
+                        <X className="icon-xs" />
+                    </button>
+                </div>
+            )}
+
             {/* ── Add sources: two clear, separate zones ── */}
             <div className="video-section">
                 <div className="video-section-header">
@@ -2374,14 +2657,123 @@ function VideoController({
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Monitor de retur video — imaginea LIVE din sală, în interfață, cu confirmarea
+// sunetului. Folosit în panoul din dreapta ȘI ca fereastră plutitoare pe Ceas/
+// Realtime. Cheie `key={videoUrl}` la montare → element + graf audio proaspete.
+// ═════════════════════════════════════════════════════════════════════════════
+function VideoReturnMonitor({ videoUrl, videoStatus, videoName, floating = false, enableAudio = true, onClose }: {
+    videoUrl: string;
+    videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
+    videoName: string;
+    floating?: boolean;
+    enableAudio?: boolean;
+    onClose?: () => void;
+}) {
+    const vRef = useRef<HTMLVideoElement>(null);
+    const [vu, setVu] = useState(0);
+    const [listenLocal, setListenLocal] = useState(false);
+    const audioRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
+
+    // sursa
+    useEffect(() => {
+        const v = vRef.current; if (!v) return;
+        v.src = videoUrl; v.load();
+        return () => { v.pause(); v.src = ''; };
+    }, [videoUrl]);
+
+    // sincron cu statusul proiecției (același fișier, redat în paralel, mut)
+    useEffect(() => {
+        const v = vRef.current; if (!v || !videoStatus) return;
+        if (videoStatus.paused && !v.paused) v.pause();
+        else if (!videoStatus.paused && v.paused) v.play().catch(() => { });
+        if (Math.abs(v.currentTime - videoStatus.currentTime) > 1) v.currentTime = videoStatus.currentTime;
+    }, [videoStatus]);
+
+    // VU-meter SIGUR: tapează elementul de previzualizare, NU proiecția (a cărei
+    // rutare audio e sensibilă pe Windows). Graf: source → analyser (nivel) și
+    // source → gain(0) → destinație → tăcere garantată (nu iese sunet în sală).
+    // „Ascultă local" ridică gain-ul, doar pentru căști.
+    useEffect(() => {
+        if (!enableAudio) return;
+        const v = vRef.current; if (!v) return;
+        let raf = 0, cancelled = false;
+        try {
+            const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+            const ctx: AudioContext = new Ctx();
+            const src = ctx.createMediaElementSource(v);
+            const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+            const gain = ctx.createGain(); gain.gain.value = 0;
+            src.connect(analyser); src.connect(gain); gain.connect(ctx.destination);
+            v.muted = false; // de acum graful controlează ieșirea (gain 0 = mut)
+            audioRef.current = { ctx, gain };
+            ctx.resume().catch(() => { });
+            const buf = new Uint8Array(analyser.frequencyBinCount);
+            const tick = () => {
+                if (cancelled) return;
+                analyser.getByteTimeDomainData(buf);
+                let sum = 0; for (let i = 0; i < buf.length; i++) { const x = (buf[i] - 128) / 128; sum += x * x; }
+                setVu(Math.min(1, Math.sqrt(sum / buf.length) * 3.2));
+                raf = requestAnimationFrame(tick);
+            };
+            tick();
+        } catch { /* deja legat / nesuportat */ }
+        return () => {
+            cancelled = true; if (raf) cancelAnimationFrame(raf);
+            const a = audioRef.current;
+            if (a) { try { a.ctx.close(); } catch { /* deja închis */ } audioRef.current = null; }
+        };
+    }, [enableAudio]);
+
+    const toggleListen = () => {
+        const a = audioRef.current; if (!a) return;
+        const next = !listenLocal;
+        a.gain.gain.value = next ? 0.25 : 0;
+        a.ctx.resume().catch(() => { });
+        setListenLocal(next);
+    };
+
+    const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    const paused = videoStatus?.paused ?? true;
+
+    return (
+        <div className={`video-monitor ${floating ? 'video-monitor-floating' : ''}`}>
+            <div className="video-monitor-head">
+                <span className={`video-state-pill ${paused ? 'paused' : 'playing'}`}>{paused ? '❚❚ PAUZĂ' : '▶ REDARE'}</span>
+                <span className="video-monitor-name">{videoName}</span>
+                {floating && onClose && <button className="video-monitor-close" onClick={onClose} title="Ascunde monitorul"><X className="icon-xs" /></button>}
+            </div>
+            <video ref={vRef} muted playsInline className="video-monitor-video" />
+            <div className="video-monitor-foot">
+                <span className="video-monitor-time">
+                    {videoStatus ? `${fmt(videoStatus.currentTime)} / ${fmt(videoStatus.duration)}` : 'Se încarcă…'}
+                </span>
+                {enableAudio && (
+                    <div className="video-vu" title="Nivel sunet (din fișier)">
+                        <div className="video-vu-fill" style={{ width: `${Math.round(vu * 100)}%` }} />
+                    </div>
+                )}
+            </div>
+            <div className="video-monitor-note">
+                <span>Aici imaginea e <strong>fără sunet</strong> — sunetul se aude în sală.</span>
+                {enableAudio && (
+                    <button className={`video-listen-btn ${listenLocal ? 'on' : ''}`} onClick={toggleListen} title="Verificare rapidă cu căști">
+                        <Headphones className="icon-xs" /> {listenLocal ? 'Oprește' : 'Ascultă local'}
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Preview Panel
 // ═════════════════════════════════════════════════════════════════════════════
 
 function PreviewPanel({
     previewType, previewSections, previewTitle, previewNumber,
-    projecting, projSlideIndex,
-    onStartProjection, onStopProjection, onClearPreview, onNavigateSlide, onSelectSlide,
-    videoUrl, videoStatus, videoName,
+    projecting, projSlideIndex, previewLive,
+    onStartProjection, onGoLive, onStopProjection, onClearPreview, onNavigateSlide, onSelectSlide,
+    videoUrl, videoStatus, videoName, floatingActive = false,
 }: {
     previewType: 'hymn' | 'bible' | null;
     previewSections: { text: string; type: string; label: string }[];
@@ -2389,7 +2781,9 @@ function PreviewPanel({
     previewNumber: string;
     projecting: boolean;
     projSlideIndex: number;
+    previewLive: boolean;
     onStartProjection: (startIndex?: number) => void;
+    onGoLive: () => void;
     onStopProjection: () => void;
     onClearPreview: () => void;
     onNavigateSlide: (idx: number) => void;
@@ -2397,9 +2791,9 @@ function PreviewPanel({
     videoUrl: string;
     videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
     videoName: string;
+    floatingActive?: boolean;
 }) {
     const bodyRef = useRef<HTMLDivElement>(null);
-    const previewVideoRef = useRef<HTMLVideoElement>(null);
 
     // ── Auto-resize font for preview sections ──
     const [containerWidth, setContainerWidth] = useState(0);
@@ -2457,58 +2851,18 @@ function PreviewPanel({
         }
     }, [projSlideIndex, projecting]);
 
-    // Sync preview video with projection video status
-    useEffect(() => {
-        const v = previewVideoRef.current;
-        if (!v || !videoStatus) return;
-        // Sync play/pause state
-        if (videoStatus.paused && !v.paused) v.pause();
-        else if (!videoStatus.paused && v.paused) v.play().catch(() => { });
-        // Sync time if drift > 1s
-        if (Math.abs(v.currentTime - videoStatus.currentTime) > 1) {
-            v.currentTime = videoStatus.currentTime;
-        }
-    }, [videoStatus]);
-
-    // Load/unload preview video source
-    useEffect(() => {
-        const v = previewVideoRef.current;
-        if (!v) return;
-        if (videoUrl) {
-            v.src = videoUrl;
-            v.load();
-        } else {
-            v.pause();
-            v.src = '';
-        }
-    }, [videoUrl]);
-
-    // If video is active, show video preview
+    // If video is active, show the return monitor (imagine live + confirmare sunet).
+    // enableAudio=false când fereastra plutitoare e activă pe alt tab (ea preia VU-ul),
+    // ca să nu ruleze două grafuri audio pe același fișier.
     if (videoUrl) {
-        const fmt = (t: number) => {
-            const m = Math.floor(t / 60);
-            const s = Math.floor(t % 60);
-            return `${m}:${s.toString().padStart(2, '0')}`;
-        };
         return (
             <div className="preview-panel projecting">
-                <div className="preview-header">
-                    <span className="label">● VIDEO</span>
-                    <span className="title">{videoName}</span>
-                </div>
-                <div className="preview-body" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
-                    <video
-                        ref={previewVideoRef}
-                        muted
-                        playsInline
-                        style={{ width: '100%', flex: 1, minHeight: 0, objectFit: 'contain', background: '#000' }}
-                    />
-                    <div style={{ padding: '8px 12px', fontSize: '12px', color: 'var(--text-dim)', textAlign: 'center' }}>
-                        {videoStatus
-                            ? `${fmt(videoStatus.currentTime)} / ${fmt(videoStatus.duration)}${videoStatus.paused ? ' — Pauză' : ' — Redare'}`
-                            : 'Se încarcă…'}
-                    </div>
-                </div>
+                <VideoReturnMonitor
+                    videoUrl={videoUrl}
+                    videoStatus={videoStatus}
+                    videoName={videoName}
+                    enableAudio={!floatingActive}
+                />
             </div>
         );
     }
@@ -2537,9 +2891,9 @@ function PreviewPanel({
     }
 
     return (
-        <div className={`preview-panel ${projecting ? 'projecting' : ''}`}>
+        <div className={`preview-panel ${projecting ? (previewLive ? 'projecting' : 'staged') : ''}`}>
             <div className="preview-header">
-                <span className="label">{projecting ? '● LIVE' : 'Previzualizare'}</span>
+                <span className="label">{projecting ? (previewLive ? '● LIVE' : '◐ PREGĂTIT') : 'Previzualizare'}</span>
                 <span className="title">
                     {previewNumber ? `${previewNumber}. ` : ''}{previewTitle}
                 </span>
@@ -2557,16 +2911,18 @@ function PreviewPanel({
                             key={i}
                             className={cls}
                             onClick={() => {
-                                if (projecting) {
+                                if (projecting && previewLive) {
                                     onNavigateSlide(i);
                                 } else {
-                                    // Click to select verse/section in preview
+                                    // Neproiectat SAU pregătit: click doar selectează secțiunea
                                     onSelectSlide(i);
                                 }
                             }}
                             onDoubleClick={() => {
                                 if (!projecting) {
                                     onStartProjection(i);
+                                } else if (!previewLive) {
+                                    onGoLive();
                                 }
                             }}
                         >
@@ -2577,7 +2933,7 @@ function PreviewPanel({
                 })}
             </div>
             <div className="preview-actions">
-                {projecting ? (
+                {projecting && previewLive ? (
                     <>
                         <button className="btn-stop" onClick={onStopProjection}>
                             <Square className="icon-xs" /> Oprește
@@ -2590,6 +2946,16 @@ function PreviewPanel({
                                 <ChevronRight className="icon-xs" />
                             </button>
                         </div>
+                    </>
+                ) : projecting ? (
+                    <>
+                        <button className="btn-project" onClick={onGoLive}>
+                            <Play className="icon-xs" /> Proiectează
+                        </button>
+                        <span className="staged-hint">pregătit — Enter</span>
+                        <button className="btn-clear" onClick={onStopProjection}>
+                            <Square className="icon-xs" /> Oprește
+                        </button>
                     </>
                 ) : (
                     <>
@@ -2745,6 +3111,7 @@ function HymnEditorModal({
                     sections: validSections,
                 });
             }
+            showToast(`Imn salvat: ${number.trim()} — ${title.trim()}`);
             onSave();
         } catch (err: any) {
             setError(err?.message ?? 'Eroare la salvare');
@@ -3386,14 +3753,15 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
 // Settings Modal
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword }: {
+function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword, initialTab }: {
     onClose: () => void;
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
     onChangePassword: () => void;
     onForgotPassword: () => void;
+    initialTab?: 'projection' | 'import' | 'admin' | 'about' | 'help';
 }) {
-    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'admin' | 'about'>('projection');
+    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'admin' | 'about' | 'help'>(initialTab ?? 'projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
 
@@ -3425,19 +3793,38 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                 </div>
                 <div className="modal-body">
                     <div className="settings-tabs">
-                        {(['projection', 'import', 'admin', 'about'] as const).map(t => (
+                        {(['projection', 'import', 'admin', 'about', 'help'] as const).map(t => (
                             <button
                                 key={t}
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'admin' ? 'Administrare' : 'Despre'}
+                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'admin' ? 'Administrare' : t === 'about' ? 'Despre' : 'Ajutor'}
                             </button>
                         ))}
                     </div>
 
                     {activeTab === 'projection' && (
                         <div className="settings-content">
+                            <div className="field">
+                                <label>Mărime text interfață (fereastra principală)</label>
+                                <select
+                                    value={String(settings.uiZoom ?? 1)}
+                                    onChange={e => {
+                                        const f = parseFloat(e.target.value);
+                                        saveSettings({ uiZoom: f });
+                                        window.electron.settings.setUiZoom(f);
+                                    }}
+                                >
+                                    <option value="1">100%</option>
+                                    <option value="1.15">115%</option>
+                                    <option value="1.3">130%</option>
+                                    <option value="1.5">150%</option>
+                                </select>
+                                <p className="text-white/40 text-xs mt-1">
+                                    Mărește tot textul și butoanele din fereastra principală. Nu afectează ecranul de proiecție.
+                                </p>
+                            </div>
                             <div className="field">
                                 <label>Fundal Proiecție</label>
                                 <select
@@ -3637,7 +4024,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     placeholder="ex: Biserica Adventistă Speranța"
                                     value={settings.churchName ?? ''}
                                     onChange={e => saveSettings({ churchName: e.target.value })}
-                                    onBlur={() => { window.electron.registry.submit().catch(() => { }); }}
+                                    onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
                                 />
                             </div>
                             <div className="field">
@@ -3648,7 +4035,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     placeholder="ex: Cluj-Napoca"
                                     value={settings.churchCity ?? ''}
                                     onChange={e => saveSettings({ churchCity: e.target.value })}
-                                    onBlur={() => { window.electron.registry.submit().catch(() => { }); }}
+                                    onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
                                 />
                             </div>
                             <p className="text-white/40 text-xs mb-3">
@@ -3746,6 +4133,40 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                         </div>
                     )}
 
+                    {activeTab === 'help' && (
+                        <div className="settings-content">
+                            <p className="text-white/60 text-sm mb-3">
+                                Scurtături de tastatură pentru operare rapidă în timpul programului.
+                            </p>
+                            <div className="help-shortcuts">
+                                <div className="help-row">
+                                    <kbd>Enter</kbd>
+                                    <span>În listă: prima apăsare deschide previzualizarea, a doua trimite pe ecran (proiectează).</span>
+                                </div>
+                                <div className="help-row">
+                                    <kbd>Esc</kbd>
+                                    <span>Oprește proiecția / oprește videoul / golește previzualizarea. În Anunțuri primul Esc închide editorul mare, al doilea oprește proiecția.</span>
+                                </div>
+                                <div className="help-row">
+                                    <kbd>↑</kbd><kbd>↓</kbd>
+                                    <span>Navighează prin lista de imnuri sau prin versete (când NU proiectezi).</span>
+                                </div>
+                                <div className="help-row">
+                                    <kbd>←</kbd><kbd>→</kbd>
+                                    <span>În timpul proiecției: strofa anterioară / următoare (funcționează și PageUp / PageDown / Spațiu pentru înainte).</span>
+                                </div>
+                                <div className="help-row">
+                                    <kbd>↑</kbd><kbd>↓</kbd>
+                                    <span>În timpul proiecției: mărește / micșorează textul de pe ecran (zoom).</span>
+                                </div>
+                                <div className="help-row">
+                                    <kbd>/</kbd>
+                                    <span>Sare direct în câmpul de căutare.</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                 </div>
             </div>
         </div>
@@ -3755,18 +4176,64 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 // ═════════════════════════════════════════════════════════════════════════════
 // Timer panel — countdown (default) / stopwatch / clock, projected full-screen
 // ═════════════════════════════════════════════════════════════════════════════
+
+// Următoarea apariție a orei HH:MM: azi dacă mai e în viitor (sau trecută cu
+// sub un minut → acum), altfel mâine. Fără surprize la miezul nopții.
+function nextClockOccurrence(hh: number, mm: number): { epoch: number; tomorrow: boolean } {
+    const d = new Date();
+    d.setHours(hh, mm, 0, 0);
+    let epoch = d.getTime();
+    let tomorrow = false;
+    if (epoch < Date.now() - 60_000) { epoch += 24 * 60 * 60 * 1000; tomorrow = true; }
+    return { epoch, tomorrow };
+}
+
+// Format H:MM:SS (fără oră când e zero → M:SS) — identic cu cel de pe proiecție,
+// ca previzualizarea și ecranul să afișeze exact același text.
+function fmtTimerMs(ms: number): string {
+    const total = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
+// Starea ceasului trăiește la nivel de MODUL (nu doar în TimerPanel), pentru că
+// TimerPanel se demontează la schimbarea tabului. Astfel:
+//  • numărătoarea programată pornește chiar dacă operatorul e pe alt tab;
+//  • la revenirea pe tabul Ceas, panoul reflectă ce e live acum.
+const timerCtl: {
+    timeoutId: ReturnType<typeof setTimeout> | null;
+    armed: { fireAtEpochMs: number; label: string } | null;
+    live: import('./vite-env').ProjectionTimerData | null;
+    anchor: { targetEpochMs?: number; startEpochMs?: number };
+    sync: (() => void) | null;
+} = { timeoutId: null, armed: null, live: null, anchor: {}, sync: null };
+
 function TimerPanel() {
-    const [mode, setMode] = useState<'countdown' | 'stopwatch' | 'clock'>('countdown');
+    const [mode, setMode] = useState<'countdown' | 'stopwatch' | 'clock'>(timerCtl.live?.mode ?? 'countdown');
     const [minutes, setMinutes] = useState(5);
     const [seconds, setSeconds] = useState(0);
     const [title, setTitle] = useState('');
     const [zeroMessage, setZeroMessage] = useState('');
+    const [afterZero, setAfterZero] = useState<'stay' | 'black' | 'stop'>('stay');
+    const [afterZeroStopSec, setAfterZeroStopSec] = useState(30);
     const [clock24h, setClock24h] = useState(true);
     const [clockShowSeconds, setClockShowSeconds] = useState(false);
     const [clockAnalog, setClockAnalog] = useState(false);
-    const [running, setRunning] = useState(false);
-    const [projected, setProjected] = useState(false);
+    const [running, setRunning] = useState(timerCtl.live ? timerCtl.live.running !== false : false);
+    const [projected, setProjected] = useState(!!timerCtl.live);
     const [bgChoice, setBgChoice] = useState<BgChoice>({ kind: 'preset', css: '' });
+
+    // Pornire numărătoare: acum / numără până la ora X / automat la ora X
+    const [startMode, setStartMode] = useState<'now' | 'until' | 'at'>('now');
+    const [untilHH, setUntilHH] = useState(10);
+    const [untilMM, setUntilMM] = useState(0);
+    const [atHH, setAtHH] = useState(9);
+    const [atMM, setAtMM] = useState(50);
+    // numărătoare programată armată (supraviețuiește schimbării de tab prin timerCtl)
+    const [scheduled, setScheduled] = useState<{ fireAtEpochMs: number; label: string } | null>(timerCtl.armed);
 
     // Anchors for the currently projected timer (so Pause can freeze accurately)
     const anchorRef = useRef<{ targetEpochMs?: number; startEpochMs?: number }>({});
@@ -3781,8 +4248,10 @@ function TimerPanel() {
     const send = useCallback((data: import('./vite-env').ProjectionTimerData) => {
         const payload = { ...data, background: bgToPayload(bgRef.current) };
         lastSentRef.current = payload;
+        timerCtl.live = payload;   // persistă pentru remontarea panoului (schimbare de tab)
         window.electron.projection.showTimer(payload);
         setProjected(true);
+        liveBus.notify();
     }, []);
 
     // fundal schimbat în timp ce proiecția rulează → retrimite același payload
@@ -3791,19 +4260,24 @@ function TimerPanel() {
         if (!projected || !lastSentRef.current) return;
         const payload = { ...lastSentRef.current, background: bgToPayload(bgChoice) };
         lastSentRef.current = payload;
+        timerCtl.live = payload;
         window.electron.projection.showTimer(payload);
     }, [bgChoice, projected]);
 
-    const startCountdown = useCallback(() => {
-        const target = Date.now() + durationMs;
-        anchorRef.current = { targetEpochMs: target };
+    // proiectează o numărătoare cu ținta dată (folosit și de „până la ora X")
+    const projectCountdown = useCallback((targetEpochMs: number) => {
+        anchorRef.current = { targetEpochMs };
+        timerCtl.anchor = anchorRef.current;
         setRunning(true);
-        send({ mode: 'countdown', targetEpochMs: target, running: true, title: title || undefined, zeroMessage: zeroMessage || undefined });
-    }, [durationMs, title, zeroMessage, send]);
+        send({ mode: 'countdown', targetEpochMs, running: true, title: title || undefined, zeroMessage: zeroMessage || undefined, afterZero, afterZeroSeconds: afterZeroStopSec });
+    }, [title, zeroMessage, afterZero, afterZeroStopSec, send]);
+
+    const startCountdown = useCallback(() => projectCountdown(Date.now() + durationMs), [durationMs, projectCountdown]);
 
     const startStopwatch = useCallback(() => {
         const start = Date.now();
         anchorRef.current = { startEpochMs: start };
+        timerCtl.anchor = anchorRef.current;
         setRunning(true);
         send({ mode: 'stopwatch', startEpochMs: start, running: true, title: title || undefined });
     }, [title, send]);
@@ -3821,30 +4295,82 @@ function TimerPanel() {
         if (mode === 'countdown' && anchorRef.current.targetEpochMs != null) {
             const remaining = Math.max(0, anchorRef.current.targetEpochMs - now);
             setRunning(false);
-            send({ mode: 'countdown', running: false, frozenValueMs: remaining, title: title || undefined, zeroMessage: zeroMessage || undefined });
+            send({ mode: 'countdown', running: false, frozenValueMs: remaining, title: title || undefined, zeroMessage: zeroMessage || undefined, afterZero, afterZeroSeconds: afterZeroStopSec });
         } else if (mode === 'stopwatch' && anchorRef.current.startEpochMs != null) {
             const elapsed = now - anchorRef.current.startEpochMs;
             setRunning(false);
             send({ mode: 'stopwatch', running: false, frozenValueMs: elapsed, title: title || undefined });
         }
-    }, [mode, title, zeroMessage, send]);
+    }, [mode, title, zeroMessage, afterZero, afterZeroStopSec, send]);
 
+    // „Continuă" reia din valoarea ÎNGHEȚATĂ la pauză (nu de la capăt): ancorează
+    // o țintă/start nou care produce exact timpul rămas/scurs de la pauză.
     const resume = useCallback(() => {
-        if (mode === 'countdown') startCountdown();
-        else if (mode === 'stopwatch') startStopwatch();
-    }, [mode, startCountdown, startStopwatch]);
+        const frozen = lastSentRef.current?.frozenValueMs;
+        if (mode === 'countdown') {
+            projectCountdown(Date.now() + (frozen ?? durationMs));
+        } else if (mode === 'stopwatch') {
+            const start = Date.now() - (frozen ?? 0);
+            anchorRef.current = { startEpochMs: start };
+            timerCtl.anchor = anchorRef.current;
+            setRunning(true);
+            send({ mode: 'stopwatch', startEpochMs: start, running: true, title: title || undefined });
+        }
+    }, [mode, durationMs, title, projectCountdown, send]);
+
+    // programează pornirea automată a numărătorii la ora atHH:atMM. Timerul stă în
+    // timerCtl (nivel modul) ca să pornească și dacă operatorul e pe alt tab.
+    const scheduleAt = useCallback(() => {
+        const { epoch, tomorrow } = nextClockOccurrence(atHH, atMM);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const label = `${tomorrow ? 'mâine ' : ''}la ${pad(atHH)}:${pad(atMM)}`;
+        const durMs = durationMs, t = title, z = zeroMessage, az = afterZero, azs = afterZeroStopSec, bg = bgToPayload(bgRef.current);
+        if (timerCtl.timeoutId) clearTimeout(timerCtl.timeoutId);
+        timerCtl.armed = { fireAtEpochMs: epoch, label };
+        timerCtl.timeoutId = setTimeout(() => {
+            timerCtl.timeoutId = null;
+            timerCtl.armed = null;
+            const target = Date.now() + durMs;
+            timerCtl.anchor = { targetEpochMs: target };
+            const payload: import('./vite-env').ProjectionTimerData = {
+                mode: 'countdown', targetEpochMs: target, running: true,
+                title: t || undefined, zeroMessage: z || undefined,
+                afterZero: az, afterZeroSeconds: azs, background: bg,
+            };
+            timerCtl.live = payload;
+            window.electron.projection.showTimer(payload);
+            timerCtl.sync?.();   // dacă panoul e montat, își reîmprospătează starea
+            liveBus.notify();
+        }, Math.max(0, epoch - Date.now()));
+        setScheduled(timerCtl.armed);
+    }, [atHH, atMM, durationMs, title, zeroMessage, afterZero, afterZeroStopSec]);
+
+    const cancelSchedule = useCallback(() => {
+        if (timerCtl.timeoutId) { clearTimeout(timerCtl.timeoutId); timerCtl.timeoutId = null; }
+        timerCtl.armed = null;
+        setScheduled(null);
+    }, []);
 
     const start = useCallback(() => {
-        if (mode === 'countdown') startCountdown();
-        else if (mode === 'stopwatch') startStopwatch();
-        else showClock();
-    }, [mode, startCountdown, startStopwatch, showClock]);
+        if (mode === 'stopwatch') { startStopwatch(); return; }
+        if (mode === 'clock') { showClock(); return; }
+        // countdown
+        if (startMode === 'until') projectCountdown(nextClockOccurrence(untilHH, untilMM).epoch);
+        else if (startMode === 'at') scheduleAt();
+        else startCountdown();
+    }, [mode, startMode, untilHH, untilMM, startStopwatch, showClock, projectCountdown, scheduleAt, startCountdown]);
 
     const stop = useCallback(() => {
+        if (timerCtl.timeoutId) { clearTimeout(timerCtl.timeoutId); timerCtl.timeoutId = null; }
+        timerCtl.armed = null;
+        timerCtl.live = null;
+        timerCtl.anchor = {};
+        setScheduled(null);
         setRunning(false);
         setProjected(false);
         anchorRef.current = {};
         window.electron.projection.close();
+        liveBus.notify();
     }, []);
 
     // Esc oprește și ceasul/cronometrul; iar dacă proiecția se închide pe altă
@@ -3853,12 +4379,35 @@ function TimerPanel() {
         realtimeCtl.projected = projected;
         realtimeCtl.stop = stop;
         realtimeCtl.notifyClosed = () => {
+            timerCtl.live = null;
+            timerCtl.anchor = {};
             setProjected(false);
             setRunning(false);
             anchorRef.current = {};
+            liveBus.notify();
         };
         return () => { realtimeCtl.projected = false; };
     }, [projected, stop]);
+
+    // Resincronizare panou ↔ timerCtl: la montare (revenire pe tab) preia ce e
+    // live/armat acum; iar numărătoarea programată care pornește cât panoul e
+    // montat îl anunță prin timerCtl.sync().
+    useEffect(() => {
+        const pull = () => {
+            if (timerCtl.live) {
+                lastSentRef.current = timerCtl.live;
+                anchorRef.current = timerCtl.anchor;
+                setMode(timerCtl.live.mode);
+                setProjected(true);
+                setRunning(timerCtl.live.running !== false);
+                setScheduled(null);
+            }
+            setScheduled(timerCtl.armed);
+        };
+        pull();
+        timerCtl.sync = pull;
+        return () => { if (timerCtl.sync === pull) timerCtl.sync = null; };
+    }, []);
 
     const presets = [1, 3, 5, 10, 15, 20];
 
@@ -3868,26 +4417,52 @@ function TimerPanel() {
     useEffect(() => {
         window.electron.settings.get().then(s => setProjBg({ bgType: s.bgType, bgColor: s.bgColor, bgImagePath: s.bgImagePath })).catch(() => { });
     }, []);
+    // ticăie o dată pe secundă cât timp e ceva de arătat live: ceasul, o
+    // numărătoare/cronometru proiectate și pornite, sau o programare armată
     useEffect(() => {
-        if (mode !== 'clock') return;
+        const liveTick = mode === 'clock' || (projected && running) || !!scheduled;
+        if (!liveTick) return;
         const id = setInterval(() => setNowTick(t => t + 1), 1000);
         return () => clearInterval(id);
-    }, [mode]);
+    }, [mode, projected, running, scheduled]);
     const previewBg = (() => {
         const b = bgToPayload(bgChoice);
         if (b) return b.type === 'image' ? `url('localfile://${encodeURI(b.value)}') center / cover no-repeat` : b.value;
         if (projBg.bgType === 'image' && projBg.bgImagePath) return `url('localfile://${encodeURI(projBg.bgImagePath)}') center / cover no-repeat`;
         return projBg.bgColor || '#000000';
     })();
-    const fmtMs = (ms: number) => { const t = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
-    const previewTime = (() => {
-        if (mode === 'countdown') return fmtMs(durationMs);
-        if (mode === 'stopwatch') return '0:00';
+    // timpul brut pe care îl arată proiecția ACUM (live când e proiectat, din ancore)
+    const previewMs = (() => {
+        if (mode === 'countdown') {
+            if (projected) return running
+                ? Math.max(0, (anchorRef.current.targetEpochMs ?? Date.now()) - Date.now())
+                : (lastSentRef.current?.frozenValueMs ?? 0);
+            if (startMode === 'until') return Math.max(0, nextClockOccurrence(untilHH, untilMM).epoch - Date.now());
+            return durationMs;
+        }
+        if (mode === 'stopwatch') {
+            if (projected) return running
+                ? Date.now() - (anchorRef.current.startEpochMs ?? Date.now())
+                : (lastSentRef.current?.frozenValueMs ?? 0);
+            return 0;
+        }
+        return 0;
+    })();
+    const previewAtZero = mode === 'countdown' && projected && running && previewMs <= 0;
+    const previewWarn = mode === 'countdown' && projected && running && previewMs > 0 && previewMs < 60_000;
+    const previewClockText = (() => {
         const d = new Date(); let h = d.getHours();
         const mm = String(d.getMinutes()).padStart(2, '0'); const ss = String(d.getSeconds()).padStart(2, '0');
         let ap = ''; if (!clock24h) { ap = h >= 12 ? ' PM' : ' AM'; h = h % 12 || 12; }
         return `${h}:${mm}${clockShowSeconds ? ':' + ss : ''}${ap}`;
     })();
+    const previewTime = mode === 'clock'
+        ? previewClockText
+        : previewAtZero ? (zeroMessage || 'S-a terminat') : fmtTimerMs(previewMs);
+    // echivalentul în minute pentru „numără până la ora X" (afișat live)
+    const untilEquivMin = Math.max(0, Math.round((nextClockOccurrence(untilHH, untilMM).epoch - Date.now()) / 60_000));
+    // cât mai e până pornește numărătoarea programată
+    const scheduledInMs = scheduled ? Math.max(0, scheduled.fireAtEpochMs - Date.now()) : 0;
 
     return (
         <div className="content-inner timer-panel rt-host">
@@ -3924,9 +4499,70 @@ function TimerPanel() {
                             onChange={e => setSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
                         <span>sec</span>
                     </div>
+
+                    <label className="timer-label">Pornire</label>
+                    <div className="timer-start-modes">
+                        <label className="timer-radio">
+                            <input type="radio" name="startMode" checked={startMode === 'now'} onChange={() => setStartMode('now')} />
+                            <span>Acum, la apăsarea „Proiectează”</span>
+                        </label>
+                        <label className="timer-radio">
+                            <input type="radio" name="startMode" checked={startMode === 'until'} onChange={() => setStartMode('until')} />
+                            <span>Numără până la ora</span>
+                            <input className="timer-time-input" type="number" min={0} max={23} value={untilHH}
+                                onFocus={() => setStartMode('until')}
+                                onChange={e => setUntilHH(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))} />
+                            <span className="timer-colon">:</span>
+                            <input className="timer-time-input" type="number" min={0} max={59} value={untilMM}
+                                onFocus={() => setStartMode('until')}
+                                onChange={e => setUntilMM(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
+                        </label>
+                        {startMode === 'until' && (
+                            <div className="timer-hint-sm">≈ {untilEquivMin} min din acest moment{nextClockOccurrence(untilHH, untilMM).tomorrow ? ' (mâine)' : ''} — durata se calculează singură.</div>
+                        )}
+                        <label className="timer-radio">
+                            <input type="radio" name="startMode" checked={startMode === 'at'} onChange={() => setStartMode('at')} />
+                            <span>Pornește automat la ora</span>
+                            <input className="timer-time-input" type="number" min={0} max={23} value={atHH}
+                                onFocus={() => setStartMode('at')}
+                                onChange={e => setAtHH(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))} />
+                            <span className="timer-colon">:</span>
+                            <input className="timer-time-input" type="number" min={0} max={59} value={atMM}
+                                onFocus={() => setStartMode('at')}
+                                onChange={e => setAtMM(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
+                        </label>
+                        {startMode === 'at' && (
+                            <div className="timer-hint-sm">Numărătoarea de {fmtTimerMs(durationMs)} pornește singură {nextClockOccurrence(atHH, atMM).tomorrow ? 'mâine ' : ''}la {String(atHH).padStart(2, '0')}:{String(atMM).padStart(2, '0')}.</div>
+                        )}
+                    </div>
+
                     <label className="timer-label">Mesaj la final (opțional)</label>
                     <input className="timer-text-input" type="text" placeholder="ex: Bine ați venit!"
                         value={zeroMessage} onChange={e => setZeroMessage(e.target.value)} />
+
+                    <label className="timer-label">După terminare</label>
+                    <div className="timer-after-zero">
+                        <select className="timer-text-input" value={afterZero}
+                            onChange={e => setAfterZero(e.target.value as 'stay' | 'black' | 'stop')}>
+                            <option value="stay">Rămâne mesajul</option>
+                            <option value="black">Ecran negru</option>
+                            <option value="stop">Oprește proiecția</option>
+                        </select>
+                        {afterZero === 'stop' && (
+                            <span className="timer-after-zero-sec">
+                                după
+                                <input className="timer-time-input" type="number" min={0} max={600} value={afterZeroStopSec}
+                                    onChange={e => setAfterZeroStopSec(Math.max(0, Math.min(600, parseInt(e.target.value) || 0)))} />
+                                sec
+                            </span>
+                        )}
+                    </div>
+                    {afterZero === 'black' && (
+                        <div className="timer-hint">La zero ecranul devine negru (fără text).</div>
+                    )}
+                    {afterZero === 'stop' && (
+                        <div className="timer-hint">La zero proiecția se închide automat după {afterZeroStopSec} sec.</div>
+                    )}
                 </div>
             )}
 
@@ -3973,20 +4609,36 @@ function TimerPanel() {
                 <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
             </div>
 
-            <div className="timer-actions">
-                {!projected || mode === 'clock' ? (
-                    <button className="btn-project timer-start" onClick={start}>
-                        {mode === 'clock' ? 'Proiectează ceasul' : 'Proiectează'}
-                    </button>
-                ) : running ? (
-                    <button className="btn-sm timer-pause" onClick={pause}>Pauză</button>
-                ) : (
-                    <button className="btn-project timer-start" onClick={resume}>Continuă</button>
-                )}
-                {projected && (
-                    <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
-                )}
-            </div>
+            {scheduled ? (
+                <div className="timer-scheduled">
+                    <div className="timer-scheduled-info">
+                        <strong>Programat {scheduled.label}</strong>
+                        <span>Pornește în {fmtTimerMs(scheduledInMs)} — proiecția pornește singură.</span>
+                    </div>
+                    <button className="btn-sm timer-stop" onClick={cancelSchedule}>Anulează</button>
+                </div>
+            ) : (
+                <div className="timer-actions">
+                    {!projected || mode === 'clock' ? (
+                        <button className="btn-project timer-start" onClick={start}>
+                            {mode === 'clock' ? 'Proiectează ceasul'
+                                : (mode === 'countdown' && startMode === 'at') ? 'Programează'
+                                    : 'Proiectează'}
+                        </button>
+                    ) : running ? (
+                        previewAtZero ? (
+                            <button className="btn-project timer-start" onClick={startCountdown}>Repornește</button>
+                        ) : (
+                            <button className="btn-sm timer-pause" onClick={pause}>Pauză</button>
+                        )
+                    ) : (
+                        <button className="btn-project timer-start" onClick={resume}>Continuă</button>
+                    )}
+                    {projected && (
+                        <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
+                    )}
+                </div>
+            )}
             <p className="timer-hint">
                 {mode === 'countdown' ? 'Numărătoarea inversă apare pe ecranul de proiecție.'
                     : mode === 'stopwatch' ? 'Cronometrul pornește de la zero și urcă.'
@@ -3999,11 +4651,14 @@ function TimerPanel() {
                 <div className="rt-preview" style={{ background: previewBg }}>
                     <div className="rt-preview-center">
                         {title && <div className="rt-preview-title">{title}</div>}
-                        <div className="rt-preview-time">{previewTime}</div>
+                        <div className="rt-preview-time" style={{ color: previewWarn ? '#f59e0b' : undefined }}>{previewTime}</div>
                         {mode === 'clock' && clockAnalog && <div className="rt-preview-note">(pe proiecție: ceas analogic)</div>}
+                        {projected && !running && mode !== 'clock' && <div className="rt-preview-note">⏸ pauză</div>}
                     </div>
                 </div>
-                {projected && <span className="live-indicator">● LIVE pe proiecție</span>}
+                {projected
+                    ? <span className="live-indicator">● LIVE pe proiecție{previewAtZero ? ' — s-a terminat' : ''}</span>
+                    : scheduled && <span className="live-indicator scheduled">◷ programat {scheduled.label}</span>}
             </div>
           </div>
         </div>
@@ -4036,7 +4691,47 @@ const realtimeCtl = {
     // proiecția s-a închis pe ORICE cale (Esc pe ecranul de proiecție, buton etc.)
     // → indicatorii LIVE din Realtime trebuie să moară odată cu ea
     notifyClosed: () => { /* setat de MessagePanel */ },
+    // R2: navigarea slide-urilor de prezentare din fereastra principală, prin
+    // aceeași rută ca butoanele ‹ › (goSlide → projection.updateText). presSlides
+    // > 1 ⇔ o prezentare cu mai multe slide-uri e proiectată acum.
+    presSlides: 0,
+    nextSlide: () => { /* setat de MessagePanel */ },
+    prevSlide: () => { /* setat de MessagePanel */ },
 };
+
+// Badge LIVE global din header: starea „ce e live acum" vine din surse reactive
+// (proiectare imn/verset, video) DAR și din registre de modul (Ceas = timerCtl,
+// Anunțuri = realtimeCtl). liveBus lasă acele registre să ceară App-ului o
+// re-randare când pornesc/opresc, ca badge-ul să reflecte și ceasul/anunțul.
+const liveBus: { notify: () => void } = { notify: () => { /* setat de App */ } };
+
+// ── Toast global (registru la nivel de MODUL, în stilul realtimeCtl) ──────────
+// Un singur ToastHost e montat în App(); showToast() poate fi apelat de oriunde
+// din acest modul (editor imn, setări, salvări) fără prop-drilling.
+const toastCtl: { show: (msg: string) => void } = {
+    show: () => { /* setat de ToastHost la montare */ },
+};
+function showToast(msg: string) { toastCtl.show(msg); }
+
+function ToastHost() {
+    const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
+    useEffect(() => {
+        toastCtl.show = (msg: string) => {
+            const id = Date.now() + Math.random();
+            setToasts(t => [...t, { id, msg }]);
+            setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2600);
+        };
+        return () => { toastCtl.show = () => { /* demontat */ }; };
+    }, []);
+    if (toasts.length === 0) return null;
+    return (
+        <div className="toast-stack">
+            {toasts.map(t => (
+                <div key={t.id} className="toast">{t.msg}</div>
+            ))}
+        </div>
+    );
+}
 
 // fundaluri predefinite pentru Realtime (CSS — fără asset-uri)
 const BG_PRESETS: { name: string; css: string }[] = [
@@ -4101,7 +4796,7 @@ function bgToPayload(bg: BgChoice, slide?: { bgColor?: string; bgGradient?: stri
     return null; // fundalul global al aplicației
 }
 
-function BackgroundPicker({ bg, onChange, existingLabel = 'Implicit' }: {
+function BackgroundPicker({ bg, onChange, existingLabel = 'Fundalul aplicației' }: {
     bg: BgChoice; onChange: (b: BgChoice) => void; existingLabel?: string;
 }) {
     const pickImage = async () => {
@@ -4111,31 +4806,48 @@ function BackgroundPicker({ bg, onChange, existingLabel = 'Implicit' }: {
     return (
         <div className="field">
             <label className="timer-label">Fundal</label>
-            <div className="bg-presets">
-                {/* fundal existent (din PPT/șablon) sau implicit al proiecției */}
+            <div className="bg-grid">
+                {/* fundal implicit al aplicației / existent din PPT */}
                 <button
                     type="button"
-                    className={`bg-pick-text ${bg.kind === 'preset' && bg.css === '' ? 'active' : ''}`}
+                    className={`bg-card ${bg.kind === 'preset' && bg.css === '' ? 'active' : ''}`}
+                    title={existingLabel}
                     onClick={() => onChange({ kind: 'preset', css: '' })}
-                >{existingLabel}</button>
+                >
+                    <span className="bg-card-swatch bg-card-default">
+                        {bg.kind === 'preset' && bg.css === '' && <span className="bg-card-check">✓</span>}
+                    </span>
+                    <span className="bg-card-name">{existingLabel}</span>
+                </button>
                 {/* culori / gradient predefinite */}
-                {BG_PRESETS.filter(p => p.css).map(p => (
-                    <button
-                        key={p.name}
-                        type="button"
-                        title={p.name}
-                        className={`bg-swatch ${bg.kind === 'preset' && bg.css === p.css ? 'active' : ''}`}
-                        style={{ background: p.css }}
-                        onClick={() => onChange({ kind: 'preset', css: p.css })}
-                    />
-                ))}
-                {/* imagine de pe disc — buton mare, cu text (nu doar iconiță) */}
+                {BG_PRESETS.filter(p => p.css).map(p => {
+                    const active = bg.kind === 'preset' && bg.css === p.css;
+                    return (
+                        <button
+                            key={p.name}
+                            type="button"
+                            className={`bg-card ${active ? 'active' : ''}`}
+                            title={p.name}
+                            onClick={() => onChange({ kind: 'preset', css: p.css })}
+                        >
+                            <span className="bg-card-swatch" style={{ background: p.css }}>
+                                {active && <span className="bg-card-check">✓</span>}
+                            </span>
+                            <span className="bg-card-name">{p.name}</span>
+                        </button>
+                    );
+                })}
+                {/* imagine de pe disc */}
                 <button
                     type="button"
-                    className={`bg-pick-text bg-pick-image ${bg.kind === 'image' ? 'active' : ''}`}
+                    className={`bg-card ${bg.kind === 'image' ? 'active' : ''}`}
+                    title="Imagine de pe disc"
                     onClick={pickImage}
                 >
-                    <ImageIcon className="icon-xs" /> Imagine de pe disc…
+                    <span className="bg-card-swatch bg-card-image">
+                        {bg.kind === 'image' ? <span className="bg-card-check">✓</span> : <ImageIcon className="icon-xs" />}
+                    </span>
+                    <span className="bg-card-name">Imagine…</span>
                 </button>
             </div>
             {bg.kind === 'image' && (
@@ -4242,11 +4954,14 @@ function MessagePanel() {
             setProjected(false);
             setPresProjected(false);
             window.electron.projection.close();
+            liveBus.notify();
         };
         realtimeCtl.notifyClosed = () => {
             setProjected(false);
             setPresProjected(false);
+            liveBus.notify();
         };
+        liveBus.notify();   // badge LIVE global reflectă anunțul pornit/oprit
         return () => { realtimeCtl.projected = false; };
     }, [projected, presProjected]);
 
@@ -4348,6 +5063,16 @@ function MessagePanel() {
         setCurSlide(clamped);
         if (presProjected) projectSlide(clamped, false);
     };
+
+    // R2: publică navigarea slide-urilor pentru handlerul global de taste din App.
+    // Fără listă de dependențe: rulează la fiecare render ca să folosească mereu
+    // goSlide/curSlide curente (3 atribuiri pe obiect de modul — nu re-randează).
+    useEffect(() => {
+        realtimeCtl.presSlides = (mode === 'pres' && presProjected) ? slideCount : 0;
+        realtimeCtl.nextSlide = () => goSlide(curSlide + 1);
+        realtimeCtl.prevSlide = () => goSlide(curSlide - 1);
+        return () => { realtimeCtl.presSlides = 0; };
+    });
 
     const onShapeInput = (shapeIdx: number, el: HTMLElement) => {
         const p = presRef.current;
@@ -4649,13 +5374,12 @@ function MessagePanel() {
                                     <div className="tpl-row">
                                         <button
                                             className="tpl-name"
-                                            title="Deschide în editor"
+                                            title="Încarcă în previzualizare (apoi «Proiectează» sau «Editează»)"
                                             onClick={async () => {
                                                 try {
                                                     const p = await window.electron.templates.load(t.file);
                                                     setPresentation(p, t.file);
                                                     setPresStatus('');
-                                                    setOverlayOpen(true);
                                                 } catch { setPresStatus('Nu am putut încărca șablonul.'); }
                                             }}
                                         >{t.name}{t.builtin && <span className="tpl-badge">implicit</span>}</button>

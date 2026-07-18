@@ -66,6 +66,17 @@ function TimerDisplay({ data, color, fontScale }: {
     };
   }, [data.mode, data.clockShowSeconds, data.running, data.targetEpochMs, data.startEpochMs]);
 
+  // După terminare = „oprește": la N secunde după zero cere închiderea proiecției.
+  // Închiderea reală o face procesul main (projection:key-request → projectionWin.close()).
+  useEffect(() => {
+    if (data.mode !== 'countdown' || data.afterZero !== 'stop' || data.running === false) return;
+    if (data.targetEpochMs == null) return;
+    const secs = Math.max(0, data.afterZeroSeconds ?? 30);
+    const delay = data.targetEpochMs + secs * 1000 - Date.now();
+    const id = setTimeout(() => { window.electron.projection.sendKeyRequest('close'); }, Math.max(0, delay));
+    return () => clearTimeout(id);
+  }, [data.mode, data.afterZero, data.afterZeroSeconds, data.running, data.targetEpochMs]);
+
   let display: string;
   let atZero = false;
 
@@ -94,6 +105,11 @@ function TimerDisplay({ data, color, fontScale }: {
 
   const showZeroMsg = atZero && data.mode === 'countdown' && !!data.zeroMessage;
   const analogClock = data.mode === 'clock' && data.clockAnalog === true;
+
+  // După terminare = „ecran negru": la zero acoperă tot cu negru (fără text/fundal).
+  if (atZero && data.mode === 'countdown' && data.afterZero === 'black') {
+    return <div className="absolute inset-0 z-20" style={{ background: '#000' }} />;
+  }
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ padding: '4vh 4vw' }}>
@@ -366,9 +382,15 @@ export function ProjectionPage() {
     window.electron.projection.onZoom((action) => {
       if (action === 'zoom-in') setZoomLevel(z => Math.min(z + 0.1, 2.5));
       else if (action === 'zoom-out') setZoomLevel(z => Math.max(z - 0.1, 0.5));
+      else if (action === 'zoom-reset') setZoomLevel(1);
     });
     return () => { window.electron.projection.offZoom(); };
   }, []);
+
+  // Raportează nivelul de zoom către fereastra principală (bara de control)
+  useEffect(() => {
+    window.electron.projection.reportZoom(zoomLevel);
+  }, [zoomLevel]);
 
   const section: HymnSection | undefined = data?.sections[data.currentIndex];
   const isBible = data?.contentType === 'bible';
@@ -538,6 +560,14 @@ export function ProjectionPage() {
           onEnded={sendVideoStatus}
           onPause={sendVideoStatus}
           onPlay={sendVideoStatus}
+          onError={() => {
+            const err = videoRef.current?.error;
+            const detail = err?.code === 4 ? 'formatul nu poate fi redat sau fișierul lipsește'
+              : err?.code === 3 ? 'eroare la decodare'
+                : err?.code === 2 ? 'eroare de rețea'
+                  : 'eroare necunoscută';
+            window.electron.video.sendError(`Videoclipul nu a putut fi redat (${detail}).`);
+          }}
         />
       )}
 
@@ -773,42 +803,55 @@ export function ProjectionPage() {
               {data.currentIndex + 1} / {data.sections.length}
             </span>
           ) : (
-            data.sections.map((s, i) => (
-              <div
-                key={i}
-                className={`rounded-full transition-all duration-300 ${i === data.currentIndex
-                  ? 'w-8 h-3'
-                  : s.type === 'refren'
-                    ? 'w-3 h-3 bg-amber-400/80'
-                    : 'w-3 h-3 bg-white'
-                  }`}
-                style={i === data.currentIndex ? { backgroundColor: '#6ee7a0' } : undefined}
-              />
-            ))
+            data.sections.map((s, i) => {
+              const isCurrent = i === data.currentIndex;
+              const isRefren = s.type === 'refren';
+              const strofaNum = data.sections.slice(0, i + 1).filter(x => x.type === 'strofa').length;
+              return (
+                <div
+                  key={i}
+                  className="flex items-center justify-center rounded-lg font-bold tabular-nums transition-all duration-300"
+                  style={{
+                    width: isCurrent ? '2.6rem' : '2rem',
+                    height: '2rem',
+                    fontSize: '1.1rem',
+                    color: isCurrent ? '#0d1020' : isRefren ? '#fbbf24' : 'rgba(255,255,255,0.9)',
+                    background: isCurrent ? '#6ee7a0' : isRefren ? 'rgba(251,191,36,0.18)' : 'rgba(255,255,255,0.12)',
+                    border: isCurrent ? '2px solid #6ee7a0' : isRefren ? '2px solid rgba(251,191,36,0.5)' : '2px solid rgba(255,255,255,0.28)',
+                    boxShadow: isCurrent ? '0 2px 12px rgba(0,0,0,0.5)' : undefined,
+                  }}
+                >
+                  {isRefren ? 'R' : strofaNum}
+                </div>
+              );
+            })
           )}
         </div>
       )}
 
       {/* Keyboard hint — fades in, then out after a few seconds */}
-      <KeyboardHint />
+      <KeyboardHint textOnly={freeText !== null && !freeText.shapes} />
     </div>
   );
 }
 
 // Small hint that appears briefly when the projection window first loads
-function KeyboardHint() {
+function KeyboardHint({ textOnly = false }: { textOnly?: boolean }) {
   const [show, setShow] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setShow(false), 4000);
     return () => clearTimeout(t);
   }, []);
 
+  const keys: [string, string][] = textOnly
+    ? [['Esc', 'Închide']]
+    : [['←', 'Înapoi'], ['→', 'Înainte'], ['Esc', 'Închide']];
   return (
     <div
       className="absolute bottom-8 right-8 flex items-center gap-3 transition-opacity duration-700 z-20"
       style={{ opacity: show ? 0.35 : 0 }}
     >
-      {[['←', 'Înapoi'], ['→', 'Înainte'], ['Esc', 'Închide']].map(([key, label]) => (
+      {keys.map(([key, label]) => (
         <div key={key} className="flex items-center gap-1.5 text-white">
           <kbd className="text-[10px] bg-white/10 border border-white/20 rounded px-1.5 py-0.5 font-mono">{key}</kbd>
           <span className="text-[10px]">{label}</span>
