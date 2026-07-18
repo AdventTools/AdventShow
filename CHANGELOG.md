@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.12 (18 Iulie 2026)
+
+### Modificări
+- Ceas cu pornire programată (numără până la ora fixată sau pornește automat la o oră) și «Continuă» care reia corect din secunda unde ai oprit; monitor video în interfață care arată live ce e pe ecran, cu indicator de sunet, disponibil și lângă Ceas și Anunțuri; mesaje clare când un videoclip nu poate fi redat; badge «LIVE» în bară care arată mereu ce e pe proiector, cu oprire dintr-un click; mărire vizibilă a textului proiectat; «Realtime» redenumit «Anunțuri», cu navigare din tastatură și butoane mai clare; căutarea biblică arată ajutor la greșeli și înțelege pasaje (ex. gen 1:3-5); buton de opțiuni și «Adaugă imn» mereu la vedere; mărime reglabilă a textului din aplicație; pagină de «Ajutor» cu scurtături; și confirmări «Salvat».
+
+---
+
 ## v1.3.11 (13 Iulie 2026)
 
 ### Modificări
