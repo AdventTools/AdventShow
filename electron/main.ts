@@ -122,6 +122,7 @@ interface AppSettings {
   registrySentKey?: string
   unlockCodeHash?: string
   unlockCodeExpiry?: string
+  uiZoom?: number             // marime text interfata fereastra principala (setZoomFactor), default 1
 }
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
@@ -875,6 +876,10 @@ function createWindow() {
   })
 
   win.webContents.on('did-finish-load', () => {
+    // Marimea textului interfetei (accesibilitate) — aplicata pe fereastra
+    // PRINCIPALA la fiecare incarcare; NU atinge fereastra de proiectie.
+    const z = readSettings().uiZoom
+    if (isWinAlive(win) && typeof z === 'number' && z > 0) win.webContents.setZoomFactor(z)
     win?.webContents.send('main-process-message', new Date().toLocaleString())
   })
 
@@ -1081,6 +1086,12 @@ app.whenReady().then(() => {
     const merged = { ...readSettings(), ...patch }
     writeSettings(merged)
     debugLog('[Settings] Saved:', Object.keys(patch).join(', '))
+  })
+  // Aplica LIVE marimea textului interfetei pe fereastra principala. Persistenta
+  // se face separat prin settings:set (uiZoom) — aici doar zoom-ul vizibil imediat.
+  ipcMain.handle('settings:set-ui-zoom', (_e, factor: number) => {
+    const f = Math.max(0.5, Math.min(3, Number(factor) || 1))
+    if (isWinAlive(win)) win.webContents.setZoomFactor(f)
   })
 
   // ── Prezentări (Realtime) + șabloane ───────────────────────────────────────
@@ -1394,9 +1405,9 @@ app.whenReady().then(() => {
     if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:text', data)
   })
 
-  ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') => {
+  ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') => {
     if (action === 'close') { if (isWinAlive(projectionWin)) projectionWin.close(); return }
-    if (action === 'zoom-in' || action === 'zoom-out') {
+    if (action === 'zoom-in' || action === 'zoom-out' || action === 'zoom-reset') {
       if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:zoom', action)
       return
     }
@@ -1406,6 +1417,11 @@ app.whenReady().then(() => {
       ? Math.min(projState.currentIndex + 1, projState.sections.length - 1)
       : Math.max(projState.currentIndex - 1, minIndex)
     sendSlideToProjection(newIndex)
+  })
+
+  // Fereastra de proiecție raportează nivelul de zoom curent → bara de control
+  ipcMain.handle('projection:zoom-report', (_e, level: number) => {
+    if (isWinAlive(win)) win.webContents.send('projection:zoom-level', level)
   })
 
   // Projection renderer signals it has mounted and IPC listeners are registered
@@ -1781,8 +1797,12 @@ app.whenReady().then(() => {
     const playlist = readYouTubePlaylist()
     const entry = playlist.find(e => e.id === id) as any
     if (!entry) return { error: 'Intrarea nu a fost găsită' }
-    // Local file: has localUrl
+    // Local file: has localUrl — verifică existența pe disc (fișier mutat/șters
+    // = altfel ecran negru tăcut în sală)
     if (entry.localUrl) {
+      let localPath: string | null = null
+      try { localPath = entry.localUrl.startsWith('file:') ? fileURLToPath(entry.localUrl) : entry.localUrl } catch { localPath = null }
+      if (localPath && !fs.existsSync(localPath)) return { error: 'Fișierul nu mai există pe disc' }
       return { url: entry.localUrl, name: entry.title }
     }
     // YouTube downloaded file
@@ -1824,6 +1844,12 @@ app.whenReady().then(() => {
   // Relay video status from projection window to main window
   ipcMain.on('video:status-from-projection', (_e, data) => {
     win?.webContents.send('video:status', data)
+  })
+
+  // Relay video PLAYBACK error from projection (fișier corupt/decodare eșuată) →
+  // fereastra principală, ca operatorul să vadă de ce nu apare nimic în sală
+  ipcMain.on('video:error-from-projection', (_e, msg: string) => {
+    win?.webContents.send('video:error', msg)
   })
 
   createWindow()

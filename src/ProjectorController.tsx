@@ -13,10 +13,18 @@ interface ProjectorControllerProps {
   hymnNumber: string;
   onClose: () => void;
   onNavigate: (index: number) => void;
+  videoActive: boolean;
 }
 
-export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, onNavigate }: ProjectorControllerProps) {
+export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, onNavigate, videoActive }: ProjectorControllerProps) {
   const [currentIndex, setCurrentIndex] = useState(-1);
+
+  // Nivelul de zoom al textului pe proiecție, raportat înapoi din fereastra de proiecție
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const [zoomToast, setZoomToast] = useState(false);
+  const zoomToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomPrevRef = useRef(100);
+  const zoomInitedRef = useRef(false);
 
   const navigate = useCallback(async (index: number) => {
     const clamped = Math.max(-1, Math.min(index, sections.length - 1));
@@ -37,6 +45,10 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
   const currentIndexRef = useRef(0);
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
 
+  // Suspendă navigarea imnurilor cât timp rulează un video (Space/săgeți controlează video-ul).
+  const videoActiveRef = useRef(false);
+  useEffect(() => { videoActiveRef.current = videoActive; }, [videoActive]);
+
   // Keyboard prev/next — capture phase, single stable registration (no currentIndex dep)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,6 +57,9 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
 
       // When in a text field, skip arrow handling (global handler manages Escape)
       if (inTextField) return;
+
+      // Cât timp rulează un video, nu naviga imnul — altfel Space/săgeata trimite un slide peste video.
+      if (videoActiveRef.current) return;
 
       if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
         e.preventDefault();
@@ -66,6 +81,26 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
+  // Recepționează nivelul de zoom raportat din fereastra de proiecție și afișează
+  // un scurt toast „Text: NNN%" la fiecare schimbare (nu la raportul inițial)
+  useEffect(() => {
+    window.electron.projection.onZoomLevel((level) => {
+      const pct = Math.round(level * 100);
+      if (zoomInitedRef.current && pct !== zoomPrevRef.current) {
+        setZoomToast(true);
+        if (zoomToastTimer.current) clearTimeout(zoomToastTimer.current);
+        zoomToastTimer.current = setTimeout(() => setZoomToast(false), 2000);
+      }
+      zoomInitedRef.current = true;
+      zoomPrevRef.current = pct;
+      setZoomPercent(pct);
+    });
+    return () => {
+      window.electron.projection.offZoomLevel();
+      if (zoomToastTimer.current) clearTimeout(zoomToastTimer.current);
+    };
+  }, []);
+
   const current = sections[currentIndex];
   const prev = sections[currentIndex - 1];
   const next = sections[currentIndex + 1];
@@ -75,6 +110,12 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
     if (s.type === 'refren') return 'Refren';
     const strofaNum = sections.slice(0, idx + 1).filter(x => x.type === 'strofa').length;
     return `Strofa ${strofaNum}`;
+  };
+
+  // Etichetă scurtă pentru butonul de salt: „R" refren, altfel numărul strofei
+  const dotLabel = (s: HymnSection, idx: number) => {
+    if (s.type === 'refren') return 'R';
+    return String(sections.slice(0, idx + 1).filter(x => x.type === 'strofa').length);
   };
 
   return (
@@ -91,6 +132,36 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           {currentIndex === -1 ? 'Titlu' : `${currentIndex + 1} / ${sections.length}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
+          {/* Zoom text proiecție — A− [nivel] A+ (click pe procent = 100%) */}
+          <div className="relative flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 p-0.5 mr-1" title="Zoom text proiecție">
+            <button
+              onClick={() => window.electron.projection.sendKeyRequest('zoom-out')}
+              className="w-7 h-6 flex items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold"
+              title="Micșorează textul (↓)"
+            >
+              A−
+            </button>
+            <button
+              onClick={() => window.electron.projection.sendKeyRequest('zoom-reset')}
+              className="min-w-[2.75rem] h-6 px-1 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-white/75 hover:text-white hover:bg-white/10 transition-all"
+              title="Resetează la 100%"
+            >
+              {zoomPercent}%
+            </button>
+            <button
+              onClick={() => window.electron.projection.sendKeyRequest('zoom-in')}
+              className="w-7 h-6 flex items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-all text-sm font-bold"
+              title="Mărește textul (↑)"
+            >
+              A+
+            </button>
+            <div
+              className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 rounded-md bg-black/85 border border-white/15 text-[11px] font-semibold text-white shadow-lg pointer-events-none transition-opacity duration-300"
+              style={{ opacity: zoomToast ? 1 : 0 }}
+            >
+              Text: {zoomPercent}%
+            </div>
+          </div>
           <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ Space: navigare · ↑↓: font</kbd>
           <span className="text-[9px] text-white/15">pentru navigare</span>
           <button
@@ -197,31 +268,41 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
         </div>
       </div>
 
-      {/* Dot navigation */}
+      {/* Butoane de salt — etichetă în interior (T / număr strofă / R), curentul cu chenar gros */}
       {sections.length > 1 && (
-        <div className="flex items-center justify-center gap-1.5 py-2 border-t border-white/5">
-          {/* Title slide dot */}
+        <div className="flex items-center justify-center flex-wrap gap-2 py-2.5 border-t border-white/5">
+          {/* Buton slide de titlu */}
           <button
             onClick={() => navigate(-1)}
             title="Titlu"
-            className={`rounded-full transition-all duration-200 ${currentIndex === -1
-              ? 'w-5 h-2 bg-primary'
-              : 'w-2 h-2 bg-primary/30 hover:bg-primary/60'
+            className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums transition-all duration-200 ${currentIndex === -1
+              ? 'bg-primary text-white ring-2 ring-primary ring-offset-1 ring-offset-[#0d1020]'
+              : 'bg-primary/15 text-primary/70 hover:bg-primary/30'
               }`}
-          />
-          {sections.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => navigate(i)}
-              title={sectionLabel(s, i)}
-              className={`rounded-full transition-all duration-200 ${i === currentIndex
-                ? 'w-5 h-2 bg-primary'
-                : s.type === 'refren'
-                  ? 'w-2 h-2 bg-amber-400/40 hover:bg-amber-400/70'
-                  : 'w-2 h-2 bg-white/15 hover:bg-white/40'
-                }`}
-            />
-          ))}
+          >
+            T
+          </button>
+          {sections.map((s, i) => {
+            const isCurrent = i === currentIndex;
+            const isRefren = s.type === 'refren';
+            return (
+              <button
+                key={i}
+                onClick={() => navigate(i)}
+                title={sectionLabel(s, i)}
+                className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums transition-all duration-200 ${isCurrent
+                  ? isRefren
+                    ? 'bg-amber-400 text-black ring-2 ring-amber-400 ring-offset-1 ring-offset-[#0d1020]'
+                    : 'bg-primary text-white ring-2 ring-primary ring-offset-1 ring-offset-[#0d1020]'
+                  : isRefren
+                    ? 'bg-amber-400/20 text-amber-300 hover:bg-amber-400/40'
+                    : 'bg-white/10 text-white/60 hover:bg-white/25'
+                  }`}
+              >
+                {dotLabel(s, i)}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

@@ -97,6 +97,8 @@ export interface ProjectionTimerData {
   frozenValueMs?: number;   // when paused, the exact ms to display
   title?: string;           // optional heading, e.g. "Serviciul începe în"
   zeroMessage?: string;     // countdown: shown when it reaches 0, e.g. "Bine ați venit!"
+  afterZero?: 'stay' | 'black' | 'stop'; // countdown: ce se întâmplă la 0 (implicit: rămâne mesajul)
+  afterZeroSeconds?: number;             // countdown afterZero='stop': secunde până la închiderea proiecției
   clock24h?: boolean;       // clock: 24h (default) vs 12h
   clockShowSeconds?: boolean; // clock: afișează secundele (implicit DEZACTIVATE — economie de CPU)
   clockAnalog?: boolean;    // clock: cadran analogic în loc de digital
@@ -191,6 +193,7 @@ export interface AppSettings {
   registrySentKey?: string;   // datele deja trimise (dedup; retrimite la schimbare)
   unlockCodeHash?: string;    // sha256 al codului de deblocare activ (parolă uitată)
   unlockCodeExpiry?: string;  // ISO — expirarea codului (7 zile)
+  uiZoom?: number;            // marime text interfata fereastra principala (setZoomFactor), default 1
 }
 
 export interface YouTubeEntry {
@@ -255,6 +258,7 @@ export interface IElectronAPI {
   settings: {
     get: () => Promise<AppSettings>;
     set: (patch: Partial<AppSettings>) => Promise<void>;
+    setUiZoom: (factor: number) => Promise<void>;
   };
   registry: {
     submit: () => Promise<boolean>;
@@ -286,15 +290,18 @@ export interface IElectronAPI {
     navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     updateHymn: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     close: () => Promise<void>;
-    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out') => Promise<void>;
+    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') => Promise<void>;
     onSlide: (cb: (data: ProjectionSlideData) => void) => void;
     offSlide: () => void;
     onControllerSync: (cb: (data: { currentIndex: number }) => void) => void;
     offControllerSync: () => void;
     onClosed: (cb: () => void) => void;
     offClosed: () => void;
-    onZoom: (cb: (action: 'zoom-in' | 'zoom-out') => void) => void;
+    onZoom: (cb: (action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void) => void;
     offZoom: () => void;
+    reportZoom: (level: number) => Promise<void>;
+    onZoomLevel: (cb: (level: number) => void) => void;
+    offZoomLevel: () => void;
     signalReady: () => void;
     // Special full-screen modes (timer/clock/free text). Sending any of these
     // takes over the projection; sendSlide/hymn/bible returns to normal content.
@@ -348,6 +355,9 @@ export interface IElectronAPI {
     onConvertProgress: (cb: (line: string) => void) => void;
     offConvertProgress: () => void;
     sendStatus: (data: { currentTime: number; duration: number; paused: boolean }) => void;
+    sendError: (msg: string) => void;
+    onError: (cb: (msg: string) => void) => void;
+    offError: () => void;
   };
   ytdlp: {
     isInstalled: () => Promise<boolean>;
