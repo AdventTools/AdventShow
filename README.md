@@ -15,7 +15,7 @@
 ## ⚡ Pe scurt
 
 - 🎵 **1.324 de imnuri și cântări** — Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus
-- 📖 **Biblia Cornilescu** cu căutare deșteaptă (`ioa 3 16` → Ioan 3:16)
+- 📖 **Biblia Cornilescu** cu căutare rapidă (`ioa 3 16` → Ioan 3:16)
 - 🖥️ **Proiecție pe al doilea ecran** cu fundal, video și font reglabil
 - 🎬 **Redare video** din fișier sau direct de pe **YouTube**
 - 🕰️ **Ceas** — numărătoare inversă, cronometru și ceas (digital sau analogic) pe proiector
