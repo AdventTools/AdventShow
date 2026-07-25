@@ -803,43 +803,19 @@ export function ProjectionPage() {
               {data.currentIndex + 1} / {data.sections.length}
             </span>
           ) : (
-            /* Puncte simple; doar slide-ul curent poartă eticheta (număr strofă / R) */
-            data.sections.map((s, i) => {
-              const isCurrent = i === data.currentIndex;
-              const isRefren = s.type === 'refren';
-              if (!isCurrent) {
-                return (
-                  <div
-                    key={i}
-                    className="rounded-full transition-all duration-300"
-                    style={{
-                      width: '0.85rem',
-                      height: '0.85rem',
-                      background: isRefren ? 'rgba(251,191,36,0.8)' : '#ffffff',
-                    }}
-                  />
-                );
-              }
-              const strofaNum = data.sections.slice(0, i + 1).filter(x => x.type === 'strofa').length;
-              return (
-                <div
-                  key={i}
-                  className="flex items-center justify-center rounded-full font-bold tabular-nums transition-all duration-300"
-                  style={{
-                    height: '1.5rem',
-                    minWidth: '2.1rem',
-                    padding: '0 0.55rem',
-                    fontSize: '0.95rem',
-                    lineHeight: 1,
-                    color: '#0d1020',
-                    background: isRefren ? '#fbbf24' : '#6ee7a0',
-                    boxShadow: '0 2px 10px rgba(0,0,0,0.45)',
-                  }}
-                >
-                  {isRefren ? 'R' : strofaNum}
-                </div>
-              );
-            })
+            /* Puncte simple, fără etichete — cel curent e o pastilă lată */
+            data.sections.map((s, i) => (
+              <div
+                key={i}
+                className={`rounded-full transition-all duration-300 ${i === data.currentIndex
+                  ? 'w-8 h-3'
+                  : s.type === 'refren'
+                    ? 'w-3 h-3 bg-amber-400/80'
+                    : 'w-3 h-3 bg-white'
+                  }`}
+                style={i === data.currentIndex ? { backgroundColor: '#6ee7a0' } : undefined}
+              />
+            ))
           )}
         </div>
       )}
