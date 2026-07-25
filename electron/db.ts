@@ -188,6 +188,33 @@ export function initDB() {
   `).run();
 
   migrateCedillaToCommaBelow(db);
+  migrateHymn664Variants(db);
+}
+
+// Imnul 664 «Ți-aducem, Doamne-acești copii» are în carte două variante: A (la singular,
+// pentru un singur copil) și B (la plural). Bazele de până acum aveau doar varianta B, la
+// numărul simplu «664». Seed-ul le ține de-acum ca imnuri separate — «664a» și «664b» — așa
+// că renumerotăm varianta veche în 664b; altfel sincronizarea cu seed-ul ar insera un al
+// doilea exemplar al variantei B, lăsând un duplicat în lista utilizatorului.
+// Idempotentă: dacă există deja un 664b, nu face nimic.
+function migrateHymn664Variants(db: any) {
+  const category = db
+    .prepare("SELECT id FROM categories WHERE name = 'Imnuri Creștine'")
+    .get() as { id: number } | undefined;
+  if (!category) return;
+
+  const already = db
+    .prepare('SELECT id FROM hymns WHERE category_id = ? AND number = ? LIMIT 1')
+    .get(category.id, '664b');
+  if (already) return;
+
+  db.prepare(`
+    UPDATE hymns
+    SET number = '664b'
+    WHERE category_id = ?
+      AND TRIM(number) IN ('664', '0664')
+      AND (title LIKE 'B.%' OR title LIKE '%aducem%')
+  `).run(category.id);
 }
 
 // Normalizează diacriticele vechi cu sedilă (ş/Ş/ţ/Ţ, moștenite din fonturile

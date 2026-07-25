@@ -268,19 +268,19 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
         </div>
       </div>
 
-      {/* Butoane de salt — etichetă în interior (T / număr strofă / R), curentul cu chenar gros */}
+      {/* Puncte de salt — eticheta (T / număr strofă / R) apare doar pe cel curent */}
       {sections.length > 1 && (
         <div className="flex items-center justify-center flex-wrap gap-2 py-2.5 border-t border-white/5">
-          {/* Buton slide de titlu */}
+          {/* Punct slide de titlu */}
           <button
             onClick={() => navigate(-1)}
             title="Titlu"
-            className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums transition-all duration-200 ${currentIndex === -1
-              ? 'bg-primary text-white ring-2 ring-primary ring-offset-1 ring-offset-[#0d1020]'
-              : 'bg-primary/15 text-primary/70 hover:bg-primary/30'
+            className={`flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none transition-all duration-200 ${currentIndex === -1
+              ? 'h-4 min-w-[1.4rem] px-1.5 bg-primary text-white'
+              : 'w-2 h-2 text-transparent bg-primary/30 hover:bg-primary/60'
               }`}
           >
-            T
+            {currentIndex === -1 ? 'T' : ''}
           </button>
           {sections.map((s, i) => {
             const isCurrent = i === currentIndex;
@@ -290,16 +290,16 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
                 key={i}
                 onClick={() => navigate(i)}
                 title={sectionLabel(s, i)}
-                className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums transition-all duration-200 ${isCurrent
+                className={`flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none transition-all duration-200 ${isCurrent
                   ? isRefren
-                    ? 'bg-amber-400 text-black ring-2 ring-amber-400 ring-offset-1 ring-offset-[#0d1020]'
-                    : 'bg-primary text-white ring-2 ring-primary ring-offset-1 ring-offset-[#0d1020]'
+                    ? 'h-4 min-w-[1.4rem] px-1.5 bg-amber-400 text-black'
+                    : 'h-4 min-w-[1.4rem] px-1.5 bg-primary text-white'
                   : isRefren
-                    ? 'bg-amber-400/20 text-amber-300 hover:bg-amber-400/40'
-                    : 'bg-white/10 text-white/60 hover:bg-white/25'
+                    ? 'w-2 h-2 bg-amber-400/40 hover:bg-amber-400/70'
+                    : 'w-2 h-2 bg-white/15 hover:bg-white/40'
                   }`}
               >
-                {dotLabel(s, i)}
+                {isCurrent ? dotLabel(s, i) : ''}
               </button>
             );
           })}

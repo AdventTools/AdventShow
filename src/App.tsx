@@ -393,6 +393,21 @@ function App() {
     // Mark search as "new" whenever refSearch changes
     useEffect(() => { searchConsumedRef.current = false; setBibleRefError(null); }, [refSearch]);
 
+    // Focus automat pe câmpul de căutare la pornire (tab Imnuri), imediat ce nu mai e
+    // nicio fereastră de start deschisă — ca operatorul să poată tasta numărul direct.
+    const startupFocusDoneRef = useRef(false);
+    useEffect(() => {
+        if (startupFocusDoneRef.current) return;
+        if (tab !== 'imnuri') return;
+        if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup || needsChurchInfo) return;
+        const t = setTimeout(() => {
+            if (startupFocusDoneRef.current) return;
+            startupFocusDoneRef.current = true;
+            refSearchRef.current?.focus();
+        }, 150);
+        return () => clearTimeout(t);
+    }, [tab, modalOpen, hymnEditor, passwordModal, needsPasswordSetup, needsChurchInfo]);
+
     // ── Load categories + books on mount ──
     const loadCategories = useCallback(async () => {
         const cats = await window.electron.db.getCategories();
