@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.14 (25 Iulie 2026)
+
+### Modificări
+- Indicatoarele de strofă de pe proiecție revin la punctele discrete de dinainte: puncte albe pentru strofe, amber pentru refren, iar strofa aflată pe ecran e o liniuță lată verde — fără numere și fără «R» afișate congregației.
+
+---
+
 ## v1.3.13 (25 Iulie 2026)
 
 ### Modificări
