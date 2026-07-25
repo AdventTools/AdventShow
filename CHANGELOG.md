@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.3.13 (25 Iulie 2026)
+
+### Modificări
+- Corecturi la imnuri: strofele care lipseau la «Fii azi cu mine, Domnul meu», «Ziua cea mare e-așa de aproape» și «O, zi, popas divin» au fost adăugate la locul lor; «Zi de zi Eu te chem» și «Venim trudiți» aveau strofele pe jumătate și au acum textul complet; la «Printre nori de osanale» fiecare refren se încheie ca strofa lui, nu toate la fel; imnul 664 apare acum în ambele variante din carte — 664a pentru un singur copil, 664b pentru mai mulți; plus îndreptări la «Nu știam că și eu Te-am răstignit», «Dumnezeu e mare», «Când Dumnezeu te cheamă în lucrare» și la canoanele «Cine-nvață profeția» și «Domnu-i Păstorul meu». În aplicație, indicatoarele de strofă revin la punctele discrete, cu numărul strofei (sau R) afișat doar pe cea curentă, iar la pornire cursorul stă deja în câmpul de căutare, ca să poți tasta numărul imnului fără niciun clic.
+
+---
+
 ## v1.3.12 (18 Iulie 2026)
 
 ### Modificări
