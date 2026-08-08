@@ -1,56 +1,44 @@
 import crypto from 'crypto';
+import { HangarDeps, HangarSettings, sendReport, track } from './hangar';
 
 // ═════════════════════════════════════════════════════════════════════════════
 // Registrul instalărilor + recuperarea parolei de administrare
 //
-// Ambele folosesc UN SINGUR formular Google („AdventShow — Instalări și suport")
-// care alimentează un Sheet PRIVAT al autorilor (coloana Tip face diferența):
+// Amândouă mergeau până acum într-un formular Google, într-un Sheet privat al
+// autorilor. Acum merg în hangar (hangar.it4all.ro), prin două drumuri diferite,
+// pentru că sunt două lucruri diferite:
 //
-// • Tip „instalare":  biserica + localitatea (obligatorii la configurarea
-//   inițială; instalările existente le completează la prima pornire după
-//   upgrade). Se retrimite doar dacă datele se schimbă — un rând per instalare.
-// • Tip „deblocare":  cerere de resetare a parolei. Aplicația generează local
-//   un cod de cerere (afișat utilizatorului) și un cod de deblocare ALEATORIU
-//   (trimis DOAR autorilor, prin formular — nu apare nicăieri în UI). Autorii
-//   citesc codul din Sheet/email și îl dictează telefonic; aplicația îl
-//   verifică după hash-ul păstrat local. Valabil 7 zile, o singură folosință.
+// • Înregistrarea instalării (biserica + localitatea) e o PROPRIETATE a
+//   instalării, nu un mesaj. Pleacă drept `profile` la fiecare ping de
+//   telemetrie și se SUPRASCRIE pe server. Nu mai există „am trimis deja":
+//   ultimul ping spune adevărul, iar o biserică redenumită se corectează
+//   singură la următoarea pornire. (Formularul, în schimb, producea un rând
+//   nou la fiecare retrimitere.)
+//
+// • Cererea de deblocare e un MESAJ către autori, deci e un raport de tip
+//   `unlock`. Aplicația generează local un cod de cerere (afișat utilizatorului)
+//   și un cod de deblocare ALEATORIU, trimis DOAR autorilor — nu apare nicăieri
+//   în interfață. Autorii îl citesc din hangar și îl dictează telefonic;
+//   aplicația îl verifică după hash-ul păstrat local. Valabil 7 zile, o singură
+//   folosință.
 //
 // Securitatea e intenționat modestă (aplicația e open-source): parola e o
 // protecție împotriva modificărilor accidentale, nu un secret criptografic.
 // ═════════════════════════════════════════════════════════════════════════════
 
-const REGISTRY_FORM_URL =
-  'https://docs.google.com/forms/d/e/1FAIpQLSdJh1t54GszlCdOuKDH0DsUVi6m0qw7KpQYVUupJDV_YIjENg/formResponse';
-const REGISTRY_FIELDS = {
-  tip: 'entry.1139450279',
-  biserica: 'entry.390457942',
-  localitatea: 'entry.606185971',
-  installId: 'entry.1120324490',
-  appVersion: 'entry.1517130169',
-  telefon: 'entry.510558853',
-  codCerere: 'entry.1661958779',
-  codDeblocare: 'entry.886906709',
-};
-
-const FETCH_TIMEOUT_MS = 8000;
 const UNLOCK_VALID_DAYS = 7;
 // fără caractere ambigue (0/O, 1/I/l) — codurile se dictează la telefon
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
-interface RegistrySettings {
-  churchName?: string;
-  churchCity?: string;
-  registrySentKey?: string;      // „biserică|localitate|installId" deja trimis (dedup)
-  contribInstallId?: string;     // același ID anonim ca la contribuții
+interface RegistrySettings extends HangarSettings {
   unlockCodeHash?: string;       // sha256 al codului de deblocare activ
   unlockCodeExpiry?: string;     // ISO — după această dată codul moare
 }
 
-export interface RegistryDeps {
-  appVersion: string;
+/** Aceleași dependențe ca restul comunicării cu hangar, cu setările de aici. */
+export interface RegistryDeps extends HangarDeps {
   getSettings: () => RegistrySettings;
   patchSettings: (patch: Partial<RegistrySettings>) => void;
-  log: (...args: unknown[]) => void;
 }
 
 function randomCode(len: number): string {
@@ -68,66 +56,20 @@ function normalizeCode(input: string): string {
   return (input || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-async function postRow(fields: Record<string, string>): Promise<boolean> {
-  const body = new URLSearchParams(fields);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(REGISTRY_FORM_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-      signal: controller.signal,
-    });
-    return res.ok;
-  } catch {
-    return false; // offline — apelantul decide dacă reîncearcă
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function ensureInstallId(deps: RegistryDeps): string {
-  const s = deps.getSettings();
-  if (s.contribInstallId) return s.contribInstallId;
-  const id = crypto.randomUUID();
-  deps.patchSettings({ contribInstallId: id });
-  return id;
-}
-
 // ── Înregistrarea instalării ─────────────────────────────────────────────────
-// Idempotent: nu trimite nimic dacă datele curente au fost deja trimise.
-// Offline = tace; reîncearcă automat la următoarea pornire (cheia rămâne nesetată).
+// Un singur ping. Idempotent prin natura lui: profilul se suprascrie pe server.
+// Offline = tace; datele pleacă oricum la următorul heartbeat.
 export async function maybeSendRegistration(deps: RegistryDeps): Promise<boolean> {
   const s = deps.getSettings();
-  const church = (s.churchName || '').trim();
-  const city = (s.churchCity || '').trim();
-  if (!church || !city) return false;
-
-  const installId = ensureInstallId(deps);
-  const key = `${church}|${city}|${installId}`;
-  if (s.registrySentKey === key) return true; // deja trimis, nimic nou
-
-  const ok = await postRow({
-    [REGISTRY_FIELDS.tip]: 'instalare',
-    [REGISTRY_FIELDS.biserica]: church,
-    [REGISTRY_FIELDS.localitatea]: city,
-    [REGISTRY_FIELDS.installId]: installId,
-    [REGISTRY_FIELDS.appVersion]: `${deps.appVersion} (${process.platform})`,
-    [REGISTRY_FIELDS.telefon]: '—',
-    [REGISTRY_FIELDS.codCerere]: '—',
-    [REGISTRY_FIELDS.codDeblocare]: '—',
-  });
-  if (ok) {
-    deps.patchSettings({ registrySentKey: key });
-    deps.log('[Registry] instalare înregistrată:', church, city);
-  }
-  return ok;
+  if (!(s.churchName || '').trim() || !(s.churchCity || '').trim()) return false;
+  const reply = await track(deps, 'launch');
+  if (reply) deps.log('[Registry] instalare anunțată:', s.churchName, s.churchCity);
+  return reply !== null;
 }
 
 // ── Cerere de deblocare (parolă uitată) ──────────────────────────────────────
 // Generează codurile, păstrează LOCAL doar hash-ul + expirarea, trimite totul
-// autorilor prin formular. Codul de deblocare NU se afișează utilizatorului.
+// autorilor. Codul de deblocare NU se afișează utilizatorului.
 export async function sendUnlockRequest(
   deps: RegistryDeps, phone: string,
 ): Promise<{ ok: boolean; requestCode?: string; error?: string }> {
@@ -135,22 +77,31 @@ export async function sendUnlockRequest(
   if (!tel) return { ok: false, error: 'Introduceți un număr de telefon.' };
 
   const s = deps.getSettings();
-  const installId = ensureInstallId(deps);
+  const biserica = (s.churchName || '').trim() || '—';
+  const localitatea = (s.churchCity || '').trim() || '—';
   const requestCode = randomCode(4);
   const unlockCode = `${randomCode(4)}-${randomCode(4)}`;
 
-  const ok = await postRow({
-    [REGISTRY_FIELDS.tip]: 'deblocare',
-    [REGISTRY_FIELDS.biserica]: (s.churchName || '').trim() || '—',
-    [REGISTRY_FIELDS.localitatea]: (s.churchCity || '').trim() || '—',
-    [REGISTRY_FIELDS.installId]: installId,
-    [REGISTRY_FIELDS.appVersion]: `${deps.appVersion} (${process.platform})`,
-    [REGISTRY_FIELDS.telefon]: tel,
-    [REGISTRY_FIELDS.codCerere]: requestCode,
-    [REGISTRY_FIELDS.codDeblocare]: unlockCode,
+  const res = await sendReport(deps, {
+    kind: 'unlock',
+    subject: `Deblocare — ${biserica}, ${localitatea}`,
+    body: `Cerere de resetare a parolei de administrare.\n`
+      + `Sunați la ${tel} și dictați codul de deblocare de mai jos.`,
+    contact: tel,
+    fields: {
+      biserica,
+      localitatea,
+      telefon: tel,
+      cod_cerere: requestCode,     // îl vede și utilizatorul, ca să vă potriviți
+      cod_deblocare: unlockCode,   // NU se afișează în aplicație; se dictează
+    },
+    // O a doua cerere de la aceeași instalare, cu alte coduri, e un rând nou:
+    // codul vechi rămâne valabil până expiră, deci autorii trebuie să le vadă pe
+    // amândouă. De asta nu punem dedup aici.
   });
-  if (!ok) {
-    return { ok: false, error: 'Cererea nu a putut fi trimisă — verificați conexiunea la internet și reîncercați.' };
+
+  if (!res.ok) {
+    return { ok: false, error: res.message };
   }
 
   const expiry = new Date(Date.now() + UNLOCK_VALID_DAYS * 24 * 3600 * 1000).toISOString();

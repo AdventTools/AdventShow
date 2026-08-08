@@ -2,6 +2,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { createRequire } from 'module';
 import { getDb } from './db';
+import { HANGAR_CORRECTIONS_URL, HangarDeps, HangarSettings, sendProposals } from './hangar';
 
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
@@ -15,45 +16,32 @@ const Database = require('better-sqlite3');
 //
 // • Contribuții: modificările utilizatorului față de baza oficială (seed), aflate
 //   în „carantină" de cel puțin 7 zile de la ultima editare, se trimit AUTOMAT
-//   către un formular Google — ajung într-un Sheet PRIVAT al autorilor. DOAR
-//   autorii decid manual ce se acceptă; nimic nu se aplică programatic.
-// • Corecturi OTA: aplicația citește feed-ul public `content/corrections.json`
-//   din repo și aplică intrările noi (seq crescător). `force: true` suprascrie
-//   necondiționat; altfel modificările proprii ale utilizatorului au prioritate.
+//   în hangar, ca propuneri de conținut. DOAR autorii decid manual ce se acceptă;
+//   nimic nu se aplică programatic. (Până la v1.3.14 mergeau într-un formular
+//   Google.) `hash`-ul fiecărei propuneri e cheia de idempotență PE SERVER:
+//   aceeași corectură trimisă de a doua oară nu creează un rând nou, iar venită
+//   de la altă biserică devine un vot în plus pe același rând. Formula lui NU se
+//   schimbă — istoricul importat în hangar e cheiat pe ea.
+// • Corecturi OTA: aplicația citește feed-ul publicat de autori din hangar și
+//   aplică intrările noi (seq crescător). `force: true` suprascrie necondiționat;
+//   altfel modificările proprii ale utilizatorului au prioritate.
 // ═════════════════════════════════════════════════════════════════════════════
-
-const CONTRIB_FORM_URL =
-  'https://docs.google.com/forms/d/e/1FAIpQLSd-y91QslfEYkD21UBFZLbnly0dOrYl3zOz9jbVewkaUUFkTw/formResponse';
-const CONTRIB_FIELDS = {
-  rezumat: 'entry.1527083151',
-  json: 'entry.643641871',
-  installId: 'entry.193889901',
-  appVersion: 'entry.1588190463',
-  nume: 'entry.1625824451',
-};
-
-const CORRECTIONS_FEED_URL =
-  'https://raw.githubusercontent.com/AdventTools/AdventShow/main/content/corrections.json';
 
 const QUARANTINE_DAYS = 7;
 const MAX_HYMNS_PER_SUBMISSION = 20; // restul pleacă la verificarea următoare
 const FETCH_TIMEOUT_MS = 4000;
 
-interface ContribSettings {
-  contribName?: string;
-  contribInstallId?: string;
+interface ContribSettings extends HangarSettings {
   contribLastCheckAt?: string;
   contribSentHashes?: Record<string, string>;
   correctionsLastSeq?: number;
   correctionsLastCheckAt?: string;
 }
 
-export interface ContribDeps {
+export interface ContribDeps extends HangarDeps {
   seedDbPath: string;
-  appVersion: string;
   getSettings: () => ContribSettings;
   patchSettings: (patch: Partial<ContribSettings>) => void;
-  log: (...args: unknown[]) => void;
 }
 
 interface SectionRow { type: 'strofa' | 'refren'; text: string }
@@ -121,9 +109,16 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
   const settings = deps.getSettings();
   if (!onceADay(settings.correctionsLastCheckAt)) return;
 
-  const res = await fetchWithTimeout(CORRECTIONS_FEED_URL);
-  // marcăm verificarea doar dacă am ajuns la rețea — offline reîncearcă la următoarea pornire
-  if (!res || !res.ok) return;
+  const res = await fetchWithTimeout(HANGAR_CORRECTIONS_URL);
+  // Offline sau timeout: reîncercăm la următoarea pornire, fără să marcăm nimic.
+  if (!res) return;
+  // 404 = autorii n-au publicat încă nicio corectură. Nu e o eroare; marcăm
+  // verificarea, altfel am bate la ușă la fiecare pornire.
+  if (res.status === 404) {
+    deps.patchSettings({ correctionsLastCheckAt: new Date().toISOString() });
+    return;
+  }
+  if (!res.ok) return;
 
   let entries: CorrectionEntry[] = [];
   try {
@@ -199,6 +194,8 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
   });
   tx();
 
+  // Salvăm DUPĂ ce tranzacția a trecut: o cădere la jumătate lasă seq-ul vechi,
+  // deci corecturile se reiau, în loc să fie sărite pentru totdeauna.
   deps.patchSettings({
     correctionsLastSeq: fresh[fresh.length - 1].seq,
     correctionsLastCheckAt: new Date().toISOString(),
@@ -286,27 +283,9 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
   }
 }
 
-function buildRezumat(candidates: Candidate[], name: string): string {
-  const lines: string[] = [];
-  if (name) lines.push(`De la: ${name}`, '');
-  for (const c of candidates) {
-    lines.push(`══ ${c.action.toUpperCase()} — ${c.category ?? '(fără categorie)'} #${c.number} «${c.content.title}» ══`);
-    if (c.before && nfc(c.before.title) !== nfc(c.content.title)) {
-      lines.push(`titlu înainte: ${c.before.title}`, `titlu după:    ${c.content.title}`);
-    }
-    const max = Math.max(c.content.sections.length, c.before?.sections.length ?? 0);
-    for (let i = 0; i < max; i++) {
-      const a = c.before?.sections[i];
-      const b = c.content.sections[i];
-      if (a && b && a.type === b.type && nfc(a.text) === nfc(b.text)) continue;
-      if (a) lines.push(`— înainte [${i}:${a.type}]`, a.text);
-      if (b) lines.push(`+ după    [${i}:${b.type}]`, b.text);
-      lines.push('');
-    }
-    lines.push('');
-  }
-  return lines.join('\n');
-}
+// Rezumatul text „înainte / după" nu se mai construiește aici: hangar primește
+// `before` și conținutul nou și desenează singur diferența, cu cuvintele schimbate
+// marcate și strofele neatinse pliate — mai bine decât orice text plat.
 
 export async function maybeSendContributions(deps: ContribDeps): Promise<void> {
   const settings = deps.getSettings();
@@ -321,57 +300,34 @@ export async function maybeSendContributions(deps: ContribDeps): Promise<void> {
     return;
   }
 
-  const installId = settings.contribInstallId || crypto.randomUUID();
-  const name = settings.contribName || '';
-  const payload = {
-    installId,
-    appVersion: deps.appVersion,
-    platform: process.platform,
-    generatedAt: new Date().toISOString(),
-    hymns: fresh.map(c => ({
-      action: c.action, category: c.category, number: c.number,
-      title: c.content.title, sections: c.content.sections,
-      before: c.before,
-    })),
-  };
+  // Câte un element per imn, fiecare cu hash-ul lui: serverul le judecă separat,
+  // le dedupe și le numără voturile.
+  const res = await sendProposals(deps, 'hymn', fresh.map(c => ({
+    action: c.action,
+    category: c.category,
+    number: c.number,
+    title: c.content.title,
+    sections: c.content.sections,
+    before: c.before,
+    hash: c.hash,
+  })));
 
-  const body = new URLSearchParams({
-    [CONTRIB_FIELDS.rezumat]: buildRezumat(fresh, name),
-    [CONTRIB_FIELDS.json]: JSON.stringify(payload),
-    [CONTRIB_FIELDS.installId]: installId,
-    [CONTRIB_FIELDS.appVersion]: `${deps.appVersion} (${process.platform})`,
-    [CONTRIB_FIELDS.nume]: name,
+  if (!res) {
+    // Offline sau refuz: NU marcăm nimic ca trimis, ca să reîncercăm mâine.
+    deps.patchSettings({ contribLastCheckAt: new Date().toISOString() });
+    return;
+  }
+
+  // Lista locală de hash-uri rămâne, dar acum doar ca să nu mai batem drumul
+  // degeaba — protecția reală împotriva duplicatelor e pe server.
+  const newHashes = { ...sentHashes };
+  for (const c of fresh) newHashes[c.key] = c.hash;
+  deps.patchSettings({
+    contribSentHashes: newHashes,
+    contribLastCheckAt: new Date().toISOString(),
   });
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
-  let okSend = false;
-  try {
-    const res = await fetch(CONTRIB_FORM_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-      signal: controller.signal,
-    });
-    okSend = res.ok;
-  } catch {
-    okSend = false; // offline — reîncercăm la următoarea verificare
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (okSend) {
-    const newHashes = { ...sentHashes };
-    for (const c of fresh) newHashes[c.key] = c.hash;
-    deps.patchSettings({
-      contribInstallId: installId,
-      contribSentHashes: newHashes,
-      contribLastCheckAt: new Date().toISOString(),
-    });
-    deps.log(`[Contrib] trimise ${fresh.length} modificări (carantină ${QUARANTINE_DAYS} zile)`);
-  } else {
-    deps.patchSettings({ contribInstallId: installId, contribLastCheckAt: new Date().toISOString() });
-  }
+  deps.log(`[Contrib] trimise ${fresh.length} propuneri: ${res.stored} noi,`
+    + ` ${res.duplicates} deja cunoscute (carantină ${QUARANTINE_DAYS} zile)`);
 }
 
 // numărul de modificări aflate în așteptare (pentru afișare în Setări)

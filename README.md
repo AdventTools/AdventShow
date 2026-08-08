@@ -34,9 +34,12 @@ Apasă pe linkul potrivit calculatorului tău — descărcarea pornește direct:
 
 | Platformă | Descarcă |
 |-----------|----------|
-| **Windows** | [AdventShow-Setup.exe](https://github.com/AdventTools/AdventShow/releases/download/v1.3.14/AdventShow-Setup.exe) |
-| **macOS** | [AdventShow-Mac-1.3.14.dmg](https://github.com/AdventTools/AdventShow/releases/download/v1.3.14/AdventShow-Mac-1.3.14.dmg) |
-| **Linux** | [AdventShow-Linux.AppImage](https://github.com/AdventTools/AdventShow/releases/download/v1.3.14/AdventShow-Linux.AppImage) |
+| **Windows** | [Descarcă pentru Windows](https://hangar.it4all.ro/get/ba3166b608233a30/win/) |
+| **macOS** | [Descarcă pentru macOS](https://hangar.it4all.ro/get/ba3166b608233a30/mac/) |
+| **Linux** | [Descarcă pentru Linux](https://hangar.it4all.ro/get/ba3166b608233a30/linux/) |
+
+> Link-urile duc mereu la ultima versiune. Dacă nu ești sigur ce sistem ai,
+> apasă aici: [descarcă versiunea potrivită](https://hangar.it4all.ro/get/ba3166b608233a30/).
 
 > 💡 La prima pornire, aplicația se pregătește singură — nu trebuie să imporți nimic. Toate cele 1.324 de imnuri și întreaga Biblie Cornilescu sunt deja incluse.
 
@@ -44,7 +47,7 @@ La prima pornire îți setezi o **parolă de administrare** și completezi **bis
 
 ### 🪟 Pe Windows
 
-1. Dublu-clic pe `AdventShow-Setup.exe`
+1. Dublu-clic pe fișierul descărcat (`AdventShow-Setup-…exe`)
 2. Instalarea se face singură, în câteva secunde
 3. Pornește aplicația din meniul Start sau de pe Desktop
 
@@ -70,8 +73,8 @@ La prima pornire îți setezi o **parolă de administrare** și completezi **bis
 ### 🐧 Pe Linux
 
 1. Deschide un terminal în folderul în care ai descărcat fișierul
-2. Rulează: `chmod +x AdventShow-Linux.AppImage`
-3. Apoi: `./AdventShow-Linux.AppImage`
+2. Rulează: `chmod +x AdventShow-Linux-*.AppImage`
+3. Apoi: `./AdventShow-Linux-*.AppImage`
 
 ---
 
