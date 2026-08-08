@@ -42,13 +42,21 @@
   ],
   "afterPack": "./scripts/afterPack.cjs",
   // electron-updater reads release metadata (latest.yml / latest-mac.yml) from
-  // GitHub Releases. Declaring `publish` makes electron-builder GENERATE those yml
-  // files next to the artifacts. It does NOT auto-publish here — our build scripts
-  // run electron-builder without `--publish`, and release.sh uploads everything via gh.
+  // hangar.it4all.ro. Declaring `publish` is what writes the feed URL into
+  // app-update.yml inside the installer; it does NOT auto-publish — our build
+  // scripts run electron-builder without `--publish`, and release.sh uploads the
+  // artifacts through the hub API.
+  //
+  // The yml files electron-builder generates next to the artifacts are NOT uploaded:
+  // hangar builds the feeds from its own database at every promotion, so an uploaded
+  // one would be ignored. The `channel` here only names the default feed; the app
+  // switches to beta.yml at runtime (autoUpdater.channel).
+  //
+  // The path segment is a public key, not a secret — it ships inside every installer.
   "publish": {
-    "provider": "github",
-    "owner": "AdventTools",
-    "repo": "AdventShow"
+    "provider": "generic",
+    "url": "https://hangar.it4all.ro/d/ba3166b608233a30/",
+    "channel": "latest"
   },
   "mac": {
     "icon": "build/icons/mac/icon.icns",
@@ -106,7 +114,10 @@
         ]
       }
     ],
-    "artifactName": "AdventShow-Setup.${ext}",
+    // Versiunea TREBUIE să fie în nume: electron-updater deduce numele fișierului
+    // vechi înlocuind versiunea, iar hangar publică fiecare versiune în același
+    // director plat — două release-uri cu „AdventShow-Setup.exe" s-ar suprascrie.
+    "artifactName": "AdventShow-Setup-${version}.${ext}",
     "sign": "./scripts/sign-windows.cjs",
     "signingHashAlgorithms": ["sha256"]
   },
@@ -135,6 +146,6 @@
     "target": [
       "AppImage"
     ],
-    "artifactName": "AdventShow-Linux.${ext}"
+    "artifactName": "AdventShow-Linux-${version}.${ext}"
   }
 }

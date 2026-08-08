@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, screen, shell } from 'electron'
 import { execFile, spawn } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -39,6 +40,10 @@ import {
 } from './db'
 import { applyOtaCorrections, maybeSendContributions, getContributionStatus, ContribDeps } from './contrib'
 import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
+import {
+  HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, compareVersions, flushReportQueue,
+  hangarPlatform, pendingReportCount, sendReport, startHeartbeat, track, updateChannel,
+} from './hangar'
 import {
   parsePresentationFile, seedTemplatesIfNeeded, listTemplates, loadTemplate,
   saveTemplate, deleteTemplate, reorderTemplates, resetBuiltinTemplate, Presentation,
@@ -119,9 +124,11 @@ interface AppSettings {
   // ── Registrul instalărilor + recuperare parolă ──
   churchName?: string
   churchCity?: string
-  registrySentKey?: string
+  registrySentKey?: string      // nefolosit din v1.4.0 (profilul se suprascrie pe server)
   unlockCodeHash?: string
   unlockCodeExpiry?: string
+  // ── Canal de actualizare ──
+  updateChannel?: 'stable' | 'beta'
   uiZoom?: number             // marime text interfata fereastra principala (setZoomFactor), default 1
 }
 
@@ -161,31 +168,82 @@ function writeSettings(settings: AppSettings) {
   fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
 }
 
-// dependențele modulului de contribuții/OTA — main.ts rămâne singurul proprietar
-// al settings.json (citire-modificare-scriere atomică aici, nu în contrib.ts)
-function contribDeps(seedDbPath: string): ContribDeps {
+// dependențele pentru tot ce vorbește cu hangar — main.ts rămâne singurul
+// proprietar al settings.json (citire-modificare-scriere aici, nu în module)
+function hangarDeps(): HangarDeps {
   return {
-    seedDbPath,
     appVersion: app.getVersion(),
+    userDataDir: app.getPath('userData'),
     getSettings: () => readSettings(),
     patchSettings: (patch) => writeSettings({ ...readSettings(), ...patch }),
     log: debugLog,
   }
 }
 
+function contribDeps(seedDbPath: string): ContribDeps {
+  return { ...hangarDeps(), seedDbPath }
+}
+
 function registryDeps(): RegistryDeps {
-  return {
-    appVersion: app.getVersion(),
-    getSettings: () => readSettings(),
-    patchSettings: (patch) => writeSettings({ ...readSettings(), ...patch }),
-    log: debugLog,
+  return hangarDeps()
+}
+
+// ── Crash-uri necaptate ───────────────────────────────────────────────────────
+// Le raportăm în hangar, grupate după semnătură (`dedup`), ca o buclă de crash să
+// rămână un rând cu contor în loc de o mie de rapoarte.
+//
+// Aplicația NU se închide: pe un ecran de proiecție, în mijlocul serviciului, o
+// eroare într-un colț e mai puțin gravă decât dispariția imnului de pe perete.
+// Erorile ajung oricum în log și în hangar, deci nu se pierd.
+let crashHandlersWired = false
+
+function wireCrashReporting() {
+  if (crashHandlersWired) return
+  crashHandlersWired = true
+
+  const report = (kind: string, err: unknown) => {
+    const e = err instanceof Error ? err : new Error(String(err))
+    const stack = String(e.stack || e.message || err)
+    debugLog(`[crash] ${kind}:`, stack)
+    try {
+      const tail = readLogTail(200)
+      sendReport(hangarDeps(), {
+        kind: 'crash',
+        subject: `${kind}: ${String(e.message || err).slice(0, 160)}`,
+        body: stack.slice(0, 8000),
+        severity: 'high',
+        // Semnătura NU include mesajul complet (poate conține căi cu nume de
+        // utilizator sau numere care diferă la fiecare apariție) — doar tipul și
+        // primele cadre din stivă, adică locul.
+        dedup: crypto.createHash('sha256')
+          .update(`${e.name}|${stack.split('\n').slice(0, 4).join('|')}`)
+          .digest('hex').slice(0, 24),
+        fields: { tip: kind, platforma: hangarPlatform() },
+        ...(tail ? { log: tail, log_name: 'adventshow-debug.log' } : {}),
+      }, true).catch(() => { /* niciodată nu blocăm pe raportare */ })
+    } catch { /* raportarea unui crash nu are voie să producă un crash */ }
+  }
+
+  process.on('uncaughtException', err => report('uncaughtException', err))
+  process.on('unhandledRejection', err => report('unhandledRejection', err))
+}
+
+/** Ultimele N linii din logul de depanare, pentru atașat la un raport. */
+function readLogTail(lines: number): string {
+  try {
+    const p = getLogPath()
+    if (!fs.existsSync(p)) return ''
+    const all = fs.readFileSync(p, 'utf-8').split('\n')
+    return all.slice(-lines).join('\n').slice(-200000)
+  } catch {
+    return ''
   }
 }
 
 // ── Auto-update (electron-updater) ────────────────────────────────────────────
-// Native, battle-tested updater. Reads latest.yml / latest-mac.yml from the
-// GitHub Release (configured via `publish` in electron-builder.json5), downloads
-// the signed artifact, verifies it, and installs:
+// Native, battle-tested updater. Reads latest.yml / latest-mac.yml from hangar
+// (configured via `publish` in electron-builder.json5), downloads the signed
+// artifact, verifies it, and installs:
 //   • Windows: runs the one-click NSIS installer silently — it closes the running
 //     app, installs, and relaunches automatically (no cmd window, no manual steps).
 //   • macOS: Squirrel.Mac swaps the .app in place from the signed+notarized zip
@@ -196,10 +254,31 @@ const { autoUpdater } = electronUpdater
 
 let updaterWired = false
 
+/**
+ * Update obligatoriu: starea curentă, aflată din răspunsul hub-ului la ping.
+ * `mandatory` = versiunea publicată e marcată „forced"; `minSupported` = orice
+ * versiune sub ea nu mai e acceptată. Amândouă sunt decizii luate în hangar, nu
+ * în cod, ca să nu fie nevoie de un release ca să forțezi un release.
+ */
+let forcedUpdate: { required: boolean; version: string | null; reason: string } =
+  { required: false, version: null, reason: '' }
+
+/** Canalul cerut de utilizator, tradus în numele feed-ului din hangar. */
+function applyUpdateChannel() {
+  const channel = updateChannel(hangarDeps())
+  autoUpdater.channel = channel === 'beta' ? 'beta' : 'latest'
+  // Ieșirea din beta trebuie să funcționeze: cine e pe 1.4.0-beta și revine pe
+  // stable 1.3.14 nu are ce update să primească fără asta, și ar rămâne blocat
+  // pe canalul beta pentru totdeauna.
+  autoUpdater.allowDowngrade = channel === 'stable'
+  debugLog(`[Update] canal: ${channel} (feed ${autoUpdater.channel}, downgrade ${autoUpdater.allowDowngrade})`)
+}
+
 function wireAutoUpdater() {
   if (updaterWired) return
   updaterWired = true
 
+  applyUpdateChannel()
   // We drive download/install from the UI, so don't auto-download on check.
   autoUpdater.autoDownload = false
   // If an update was downloaded but the user didn't click install, apply on quit.
@@ -227,6 +306,7 @@ function wireAutoUpdater() {
   autoUpdater.on('update-downloaded', (info) => {
     debugLog('[autoUpdater] update-downloaded', info.version)
     if (isWinAlive(win)) win.webContents.send('update:downloaded', { version: info.version })
+    if (forcedUpdate.required) installWhenNotProjecting()
   })
   autoUpdater.on('error', (err) => {
     debugLog('[autoUpdater] error', err == null ? 'unknown' : (err.stack || err.message || String(err)))
@@ -238,6 +318,103 @@ function wireAutoUpdater() {
 // In dev (not packaged) there is no app-update.yml, so updates are unavailable.
 function updatesSupported(): boolean {
   return app.isPackaged
+}
+
+/**
+ * Instalează un update OBLIGATORIU, dar niciodată peste o proiecție în curs.
+ *
+ * Un update forțat înseamnă „aplicația se închide singură și repornește". Sâmbătă
+ * la ora 10, cu imnul pe ecran în fața bisericii, asta e mai rău decât orice bug
+ * pe care l-ar repara. Așa că așteptăm să se închidă fereastra de proiecție;
+ * dacă nu se închide niciodată, update-ul se aplică oricum la ieșirea din
+ * aplicație (autoInstallOnAppQuit e pornit).
+ */
+let waitingForProjectionToClose = false
+
+function installWhenNotProjecting() {
+  if (isWinAlive(projectionWin)) {
+    if (waitingForProjectionToClose) return
+    waitingForProjectionToClose = true
+    debugLog('[Update] obligatoriu, dar proiecția e activă — aștept închiderea ei')
+    if (isWinAlive(win)) win.webContents.send('update:forced-waiting', { version: forcedUpdate.version })
+    projectionWin!.once('closed', () => {
+      waitingForProjectionToClose = false
+      // Lăsăm interfața să respire o clipă înainte să dispară tot.
+      setTimeout(() => { if (forcedUpdate.required) installWhenNotProjecting() }, 3000)
+    })
+    return
+  }
+  debugLog('[Update] aplic update-ul obligatoriu', forcedUpdate.version)
+  performQuitAndInstall()
+}
+
+/**
+ * Închide tot și pornește installerul.
+ *
+ * Închidere FORȚATĂ și completă înainte de quitAndInstall: dacă vreo fereastră
+ * (ex. proiecția) sau vreun listener amână quit-ul, installerul NSIS pornește
+ * peste un proces încă viu și moare la jumătate (v1.2.7→v1.3.0: aplicație
+ * dezinstalată, iconiță ștearsă, fără relansare). Rețeta canonică:
+ */
+function performQuitAndInstall() {
+  if (!updatesSupported()) return
+  try {
+    debugLog('[Update] quitAndInstall: închid ferestrele și pornesc installerul')
+    isInstalling = true // ca win.on('closed') să nu cheme app.quit() în paralel
+    app.removeAllListeners('window-all-closed')
+    for (const w of BrowserWindow.getAllWindows()) {
+      try {
+        w.removeAllListeners('close')
+        w.destroy()
+      } catch { /* fereastra poate fi deja distrusă */ }
+    }
+    setImmediate(() => {
+      // isSilent=true (no installer UI), isForceRunAfter=true (relaunch after install).
+      autoUpdater.quitAndInstall(true, true)
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    debugLog('[Update] install failed:', msg)
+    if (isWinAlive(win)) win.webContents.send('update:error', msg || 'Instalarea a eșuat')
+  }
+}
+
+/**
+ * Verifică la hub dacă versiunea curentă mai e acceptată. Tot aici pleacă și
+ * ping-ul de telemetrie — o singură cerere face ambele treburi.
+ */
+async function checkForcedUpdate(event: 'launch' | 'heartbeat' = 'launch') {
+  const reply = await track(hangarDeps(), event)
+  if (!reply) return
+  const current = app.getVersion()
+  const tooOld = !!reply.minSupported && compareVersions(current, reply.minSupported) < 0
+  const newerExists = !!reply.latest && compareVersions(current, reply.latest) < 0
+  const required = (reply.mandatory || tooOld) && newerExists
+
+  forcedUpdate = {
+    required,
+    version: reply.latest,
+    reason: tooOld
+      ? `Versiunea minimă acceptată este ${reply.minSupported}.`
+      : 'Actualizarea a fost marcată ca obligatorie.',
+  }
+  if (!required) return
+
+  debugLog(`[Update] OBLIGATORIU: ${current} -> ${reply.latest} (${forcedUpdate.reason})`)
+  if (isWinAlive(win)) {
+    win.webContents.send('update:forced', {
+      version: reply.latest, reason: forcedUpdate.reason, notes: reply.notes,
+    })
+  }
+  if (!updatesSupported()) return
+  try {
+    wireAutoUpdater()
+    await autoUpdater.checkForUpdates()
+    await autoUpdater.downloadUpdate()
+  } catch (err) {
+    debugLog('[Update] descărcarea obligatorie a eșuat:',
+      err instanceof Error ? err.message : String(err))
+  }
 }
 
 // ── Video conversion (FFmpeg) ─────────────────────────────────────────────────
@@ -1011,6 +1188,9 @@ app.whenReady().then(() => {
     ].join('\n'),
   })
 
+  // Erorile necaptate ajung în hangar, grupate după semnătură.
+  wireCrashReporting()
+
   // Prevent system sleep / screensaver / hibernate while the app is running
   startPowerSaveBlocker()
 
@@ -1063,13 +1243,17 @@ app.whenReady().then(() => {
           const deps = contribDeps(sp)
           applyOtaCorrections(deps)
             .then(() => maybeSendContributions(deps))
-            // registrul instalărilor: idempotent (sare instant dacă datele au
-            // fost deja trimise); offline reîncearcă la următoarea pornire
-            .then(() => maybeSendRegistration(registryDeps()))
+            // rapoartele rămase în coadă de când nu era internet
+            .then(() => flushReportQueue(deps))
             .catch(err => debugLog('[startup] contrib/OTA error:', String(err)))
           break
         }
       }
+      // Telemetrie: un ping de pornire care aduce înapoi și verdictul „mai e
+      // acceptată versiunea asta?". Apoi heartbeat din 6 în 6 ore, ca hangar să
+      // știe câte instalări chiar rulează, nu doar câte au existat vreodată.
+      checkForcedUpdate('launch').catch(err => debugLog('[startup] track:', String(err)))
+      startHeartbeat(hangarDeps())
     } catch (err) {
       debugLog('[startup] deferred seed/sync error:', String(err))
     }
@@ -1479,31 +1663,61 @@ app.whenReady().then(() => {
       if (isWinAlive(win)) win.webContents.send('update:error', err?.message ?? 'Descărcarea a eșuat')
     }
   })
-  ipcMain.handle('update:install', () => {
-    if (!updatesSupported()) return
-    try {
-      debugLog('[Update] quitAndInstall: închid ferestrele și pornesc installerul')
-      // Închidere FORȚATĂ și completă înainte de quitAndInstall: dacă vreo fereastră
-      // (ex. proiecția) sau vreun listener amână quit-ul, installerul NSIS pornește
-      // peste un proces încă viu și moare la jumătate (v1.2.7→v1.3.0: aplicație
-      // dezinstalată, iconiță ștearsă, fără relansare). Rețeta canonică:
-      isInstalling = true // ca win.on('closed') să nu cheme app.quit() în paralel
-      app.removeAllListeners('window-all-closed')
-      for (const w of BrowserWindow.getAllWindows()) {
-        try {
-          w.removeAllListeners('close')
-          w.destroy()
-        } catch { /* fereastra poate fi deja distrusă */ }
-      }
-      setImmediate(() => {
-        // isSilent=true (no installer UI), isForceRunAfter=true (relaunch after install).
-        autoUpdater.quitAndInstall(true, true)
-      })
-    } catch (err: any) {
-      debugLog('[Update] install failed:', err?.message ?? String(err))
-      if (isWinAlive(win)) win.webContents.send('update:error', err?.message ?? 'Instalarea a eșuat')
-    }
+  ipcMain.handle('update:install', () => performQuitAndInstall())
+
+  // Canalul de actualizare: „stable" pentru toată lumea, „beta" pentru cine vrea
+  // să încerce înainte. Se aplică imediat, fără repornire.
+  ipcMain.handle('update:get-channel', () => updateChannel(hangarDeps()))
+  ipcMain.handle('update:set-channel', (_e, channel: 'stable' | 'beta') => {
+    const value = channel === 'beta' ? 'beta' : 'stable'
+    writeSettings({ ...readSettings(), updateChannel: value })
+    if (updaterWired) applyUpdateChannel()
+    debugLog('[Update] canal schimbat în', value)
+    return value
   })
+  // Starea update-ului obligatoriu, pentru interfața care nu poate fi închisă.
+  ipcMain.handle('update:forced-state', () => forcedUpdate)
+  ipcMain.handle('update:download-page', () => HANGAR_DOWNLOAD_URL)
+
+  // ── Feedback (bug / sugestie) ──────────────────────────────────────────────
+  ipcMain.handle('feedback:send', async (_e, payload: {
+    kind: 'bug' | 'suggestion'
+    subject: string
+    body: string
+    severity?: 'low' | 'medium' | 'high' | 'critical'
+    contact?: string
+    attachLog?: boolean
+  }) => {
+    const report: ReportPayload = {
+      kind: payload.kind === 'suggestion' ? 'suggestion' : 'bug',
+      subject: (payload.subject || '').slice(0, 200),
+      body: payload.body || '',
+      severity: payload.kind === 'bug' ? (payload.severity ?? 'medium') : undefined,
+      contact: payload.contact || undefined,
+      fields: {
+        biserica: (readSettings().churchName || '').trim() || '(necompletat)',
+        localitatea: (readSettings().churchCity || '').trim() || '(necompletat)',
+      },
+    }
+    if (payload.attachLog) {
+      const tail = readLogTail(200)
+      if (tail) { report.log = tail; report.log_name = 'adventshow-debug.log' }
+    }
+    // Mesaj scris de om chiar acum: nu-l punem în coadă pe tăcute, îi spunem ce
+    // s-a întâmplat ca să nu-și piardă textul.
+    const res = await sendReport(hangarDeps(), report, false)
+    return res.ok
+      ? { ok: true as const }
+      : { ok: false as const, reason: res.reason, message: res.message }
+  })
+  // Ce a rămas de trimis din lipsă de internet (afișat în Setări).
+  ipcMain.handle('feedback:pending', () => pendingReportCount(hangarDeps()))
+  ipcMain.handle('feedback:retry-pending', async () => {
+    await flushReportQueue(hangarDeps())
+    return pendingReportCount(hangarDeps())
+  })
+  // Ce anume se atașează, ca utilizatorul să poată vedea înainte să trimită.
+  ipcMain.handle('feedback:log-preview', () => readLogTail(200))
 
   ipcMain.handle('update:open-log', () => {
     const logPath = getLogPath()

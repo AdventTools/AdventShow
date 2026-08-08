@@ -1,24 +1,33 @@
-name: Build & Release (Linux)
+name: Build Linux (AppImage)
 
-# Windows și macOS sunt build-uite local și semnate (Developer ID, Azure Trusted Signing)
-# înainte de tag — vezi docs/PROCEDURE.md. CI-ul GitHub Actions construiește
-# doar AppImage pentru Linux la push de tag.
+# Windows si macOS sunt build-uite local si semnate (Developer ID, Azure Trusted
+# Signing) inainte de tag. CI-ul construieste doar AppImage-ul de Linux, care nu se
+# semneaza, si il urca DIRECT in hangar — nu in GitHub Releases: din v1.4.0
+# distributia si update-urile trec exclusiv prin hangar.it4all.ro.
+#
+# Secretul HANGAR_TOKEN e un token de upload legat de proiectul adventshow. NU poate
+# promova: fisierul ajunge in aceeasi versiune deja publicata, iar hub-ul isi
+# regenereaza singur feed-urile. Daca secretul lipseste, AppImage-ul ramane ca
+# artefact de workflow, ca sa nu se piarda build-ul.
 
 on:
   push:
     tags:
       - 'v*'
   # fallback manual: gh workflow run build.yml --ref vX.Y.Z
-  # (util cand tag-ul e creat prin publicarea unui release draft si evenimentul
-  # push nu se declanseaza)
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # Secretul se ridica in env la nivel de job: contextul `secrets` NU e disponibil
+    # in conditiile `if` ale pasilor, dar `env` este.
+    env:
+      HUB_TOKEN: ${{ secrets.HANGAR_TOKEN }}
 
     steps:
       - name: Checkout
@@ -40,10 +49,19 @@ jobs:
       - name: Build Linux
         run: npm run build && npx electron-builder --linux --publish never
 
-      - name: Upload AppImage
-        uses: softprops/action-gh-release@v2
+      - name: Push AppImage to hangar
+        if: ${{ env.HUB_TOKEN != '' }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          curl -sfO https://hangar.it4all.ro/hub/tools/hub-push.mjs
+          # Fara .yml: hangar genereaza feed-urile din baza lui de date.
+          node hub-push.mjs --project adventshow --version "$VERSION" \
+            release/"$VERSION"/*.AppImage
+
+      - name: Keep AppImage as artifact when no hangar token
+        if: ${{ env.HUB_TOKEN == '' }}
+        uses: actions/upload-artifact@v4
         with:
-          files: |
-            release/**/*.AppImage
-          draft: false
-          prerelease: false
+          name: AdventShow-Linux
+          path: release/**/*.AppImage
+          if-no-files-found: error

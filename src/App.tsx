@@ -315,6 +315,11 @@ function App() {
     const [updateTotal, setUpdateTotal] = useState(0);
     const [updateReady, setUpdateReady] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
+    // Update OBLIGATORIU (decis în hangar). Nu se poate refuza, dar nici nu întrerupe
+    // o proiecție în curs — instalarea așteaptă închiderea ecranului.
+    const [forcedUpdate, setForcedUpdate] = useState<{
+        version: string | null; reason: string; waitingForProjection: boolean;
+    } | null>(null);
 
     // ── Video state ──
     const [videoStatus, setVideoStatus] = useState<{
@@ -481,12 +486,28 @@ function App() {
             setUpdateDownloading(false);
             setUpdateError(msg);
         });
+        window.electron.update.onForced(({ version, reason }) => {
+            setForcedUpdate({ version, reason, waitingForProjection: false });
+        });
+        window.electron.update.onForcedWaiting(({ version }) => {
+            setForcedUpdate(f => ({
+                version: version ?? f?.version ?? null,
+                reason: f?.reason ?? '',
+                waitingForProjection: true,
+            }));
+        });
+        // Dacă verdictul a venit înainte ca fereastra să fie gata de ascultat.
+        window.electron.update.forcedState()
+            .then(s => { if (s.required) setForcedUpdate({ version: s.version, reason: s.reason, waitingForProjection: false }); })
+            .catch(() => { /* fără rețea, se reia la următoarea pornire */ });
 
         return () => {
             clearInterval(interval);
             window.electron.update.offProgress();
             window.electron.update.offDownloaded();
             window.electron.update.offError();
+            window.electron.update.offForced();
+            window.electron.update.offForcedWaiting();
         };
     }, []);
 
@@ -1353,6 +1374,25 @@ function App() {
 
     return (
         <div className="app-root">
+            {/* ── Actualizare obligatorie ──
+                O bandă, nu un dialog care blochează: dacă asta apare sâmbătă la 10:00,
+                operatorul trebuie să poată proiecta mai departe. Aplicația se repornește
+                singură abia după ce ecranul de proiecție e închis. */}
+            {forcedUpdate && (
+                <div className="forced-update-bar">
+                    <strong>Actualizare obligatorie{forcedUpdate.version ? ` — versiunea ${forcedUpdate.version}` : ''}.</strong>
+                    {' '}
+                    {forcedUpdate.waitingForProjection
+                        ? 'Este descărcată și se instalează singură imediat ce închideți proiecția.'
+                        : updateProgress > 0 && updateProgress < 100
+                            ? `Se descarcă… ${updateProgress}%`
+                            : 'Se descarcă în fundal. Nu întrerupe programul.'}
+                    {forcedUpdate.reason && (
+                        <span className="forced-update-reason"> {forcedUpdate.reason}</span>
+                    )}
+                </div>
+            )}
+
             {/* ── Header ── */}
             <header className="header">
                 <div className="header-logo">
@@ -1565,7 +1605,8 @@ function App() {
                             <div style={{ marginTop: 4, textAlign: 'center' }}>
                                 <button
                                     style={{ fontSize: 10, opacity: 0.5, background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', textDecoration: 'underline' }}
-                                    onClick={() => window.electron.openExternal('https://github.com/AdventTools/AdventShow/releases/latest')}
+                                    onClick={async () =>
+                                        window.electron.openExternal(await window.electron.update.downloadPage())}
                                 >
                                     Descarcă manual din browser
                                 </button>
@@ -3555,6 +3596,137 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Feedback — o problemă sau o sugestie, trimisă direct autorilor
+//
+// Regula, învățată din ghidul hangar: dacă trimiterea eșuează, dialogul NU se
+// închide și textul NU se pierde. Un feedback pierdut pentru că omul era offline
+// e un feedback care nu mai vine niciodată.
+// ═════════════════════════════════════════════════════════════════════════════
+
+function FeedbackModal({ initialKind, onClose, onSent }: {
+    initialKind: 'bug' | 'suggestion';
+    onClose: () => void;
+    onSent: (msg: string) => void;
+}) {
+    const [kind, setKind] = useState<'bug' | 'suggestion'>(initialKind);
+    const [severity, setSeverity] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+    const [subject, setSubject] = useState('');
+    const [body, setBody] = useState('');
+    const [contact, setContact] = useState('');
+    const [attachLog, setAttachLog] = useState(true);
+    const [showLog, setShowLog] = useState(false);
+    const [logPreview, setLogPreview] = useState('');
+    const [error, setError] = useState('');
+    const [busy, setBusy] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    const send = async () => {
+        if (!subject.trim()) { setError('Scrieți pe scurt despre ce e vorba.'); return; }
+        if (!body.trim()) { setError('Adăugați câteva detalii — ce ați făcut și ce s-a întâmplat.'); return; }
+        setBusy(true);
+        setError('');
+        const res = await window.electron.feedback.send({
+            kind,
+            subject: subject.trim(),
+            body: body.trim(),
+            severity: kind === 'bug' ? severity : undefined,
+            contact: contact.trim() || undefined,
+            attachLog,
+        });
+        setBusy(false);
+        if (res.ok) {
+            onSent('Mulțumim! Mesajul a ajuns la autori.');
+            onClose();
+            return;
+        }
+        // Textul rămâne pe ecran, indiferent de motiv.
+        setError(res.message);
+    };
+
+    const toggleLogPreview = async () => {
+        if (!showLog && !logPreview) setLogPreview(await window.electron.feedback.logPreview());
+        setShowLog(!showLog);
+    };
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="modal-dialog modal-sm">
+                <div className="modal-header">
+                    <h3>{kind === 'bug' ? 'Raportează o problemă' : 'Sugerează o îmbunătățire'}</h3>
+                    <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
+                </div>
+                <div className="modal-body">
+                    <div className="field">
+                        <label>Tip</label>
+                        <select className="timer-text-input" value={kind}
+                            onChange={e => setKind(e.target.value as 'bug' | 'suggestion')}>
+                            <option value="bug">Problemă (ceva nu merge)</option>
+                            <option value="suggestion">Sugestie (ceva ar merge mai bine)</option>
+                        </select>
+                    </div>
+                    {kind === 'bug' && (
+                        <div className="field">
+                            <label>Cât de grav e</label>
+                            <select className="timer-text-input" value={severity}
+                                onChange={e => setSeverity(e.target.value as typeof severity)}>
+                                <option value="low">Mic — mă încurcă, dar merge</option>
+                                <option value="medium">Mediu — trebuie să ocolesc problema</option>
+                                <option value="high">Mare — nu pot folosi o funcție</option>
+                                <option value="critical">Critic — nu pot ține serviciul</option>
+                            </select>
+                        </div>
+                    )}
+                    <div className="field">
+                        <label>Pe scurt</label>
+                        <input ref={inputRef} type="text" className="timer-text-input" maxLength={200}
+                            value={subject} onChange={e => { setSubject(e.target.value); setError(''); }}
+                            placeholder={kind === 'bug'
+                                ? 'ex: proiecția rămâne neagră la al doilea imn'
+                                : 'ex: căutare după primul vers, nu doar după titlu'} />
+                    </div>
+                    <div className="field">
+                        <label>Detalii</label>
+                        <textarea className="timer-text-input" rows={6} maxLength={20000}
+                            value={body} onChange={e => { setBody(e.target.value); setError(''); }}
+                            placeholder={kind === 'bug'
+                                ? 'Ce ați făcut, ce ați așteptat să se întâmple și ce s-a întâmplat de fapt.'
+                                : 'Ce ați vrea să puteți face și de ce v-ar ajuta.'} />
+                    </div>
+                    <div className="field">
+                        <label>Cum vă putem contacta (opțional)</label>
+                        <input type="text" className="timer-text-input" maxLength={120}
+                            value={contact} onChange={e => setContact(e.target.value)}
+                            placeholder="telefon sau e-mail, dacă vreți răspuns" />
+                    </div>
+                    <label className="flex items-center gap-2 text-white/70 text-xs mt-1 cursor-pointer">
+                        <input type="checkbox" checked={attachLog}
+                            onChange={e => setAttachLog(e.target.checked)} />
+                        Atașează ultimele 200 de linii din jurnalul aplicației
+                        <button type="button" className="underline opacity-60" onClick={toggleLogPreview}>
+                            {showLog ? 'ascunde' : 'vezi ce se trimite'}
+                        </button>
+                    </label>
+                    {showLog && (
+                        <pre className="text-white/50 text-[10px] mt-2 p-2 rounded bg-black/40 max-h-40 overflow-auto whitespace-pre-wrap">
+                            {logPreview || '(jurnalul e gol — depanarea nu e pornită)'}
+                        </pre>
+                    )}
+                    {error && <div className="editor-error">{error}</div>}
+                    <div className="editor-actions" style={{ marginTop: 12 }}>
+                        <button className="btn-clear" onClick={onClose} disabled={busy}>Renunță</button>
+                        <button className="btn-project" onClick={send} disabled={busy}>
+                            {busy ? 'Se trimite…' : 'Trimite'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Parolă uitată — cerere de deblocare prin formular + cod dictat telefonic
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -3779,9 +3951,14 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'admin' | 'about' | 'help'>(initialTab ?? 'projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
+    const [updateChannelValue, setUpdateChannelValue] = useState<'stable' | 'beta'>('stable');
+    const [feedbackKind, setFeedbackKind] = useState<'bug' | 'suggestion' | null>(null);
+    const [pendingFeedback, setPendingFeedback] = useState(0);
 
     useEffect(() => {
         window.electron.settings.get().then(s => setSettings(s));
+        window.electron.update.getChannel().then(setUpdateChannelValue).catch(() => { });
+        window.electron.feedback.pending().then(setPendingFeedback).catch(() => { });
     }, []);
 
     // Close on Escape
@@ -4058,6 +4235,54 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 la recuperarea parolei. Modificările se retrimit automat.
                             </p>
                             <div className="border-t border-white/10 w-full mb-3" />
+
+                            <div className="field">
+                                <label>Canal de actualizare</label>
+                                <select
+                                    className="timer-text-input"
+                                    value={updateChannelValue}
+                                    onChange={async e => {
+                                        const ch = e.target.value as 'stable' | 'beta';
+                                        setUpdateChannelValue(ch);
+                                        await window.electron.update.setChannel(ch);
+                                        showToast(ch === 'beta'
+                                            ? 'Veți primi versiunile de test, înaintea celorlalți'
+                                            : 'Veți primi doar versiunile stabile');
+                                    }}
+                                >
+                                    <option value="stable">Stabil — recomandat</option>
+                                    <option value="beta">Beta — versiuni de test, înaintea tuturor</option>
+                                </select>
+                                <p className="text-white/40 text-xs mt-2">
+                                    Pe „beta" primiți versiunile noi cu câteva zile mai devreme, ca să
+                                    le încercați înainte să ajungă la toate bisericile. Dacă vă
+                                    întoarceți la „stabil", următoarea actualizare vă readuce pe
+                                    versiunea stabilă curentă.
+                                </p>
+                            </div>
+
+                            <div className="border-t border-white/10 w-full mb-3" />
+
+                            <div className="field">
+                                <label>Trimite-ne un mesaj</label>
+                                <p className="text-white/40 text-xs mb-2">
+                                    Ajunge direct la autori, împreună cu versiunea și platforma.
+                                    {pendingFeedback > 0 && (
+                                        <> {pendingFeedback} {pendingFeedback === 1 ? 'mesaj așteaptă' : 'mesaje așteaptă'} să
+                                        plece (nu era internet) — se trimit automat.</>
+                                    )}
+                                </p>
+                                <div className="flex gap-2">
+                                    <button className="btn-action" onClick={() => setFeedbackKind('bug')}>
+                                        Raportează o problemă
+                                    </button>
+                                    <button className="btn-clear" onClick={() => setFeedbackKind('suggestion')}>
+                                        Sugerează o îmbunătățire
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-white/10 w-full mb-3" />
                             <div className="field">
                                 <label>Parola de administrare</label>
                                 <p className="text-white/40 text-xs mb-2">
@@ -4184,6 +4409,17 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                 </div>
             </div>
+
+            {feedbackKind && (
+                <FeedbackModal
+                    initialKind={feedbackKind}
+                    onClose={() => {
+                        setFeedbackKind(null);
+                        window.electron.feedback.pending().then(setPendingFeedback).catch(() => { });
+                    }}
+                    onSent={msg => showToast(msg)}
+                />
+            )}
         </div>
     );
 }

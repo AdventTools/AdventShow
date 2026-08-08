@@ -190,7 +190,8 @@ export interface AppSettings {
   // ── Registrul instalărilor + recuperare parolă ──
   churchName?: string;        // numele bisericii (obligatoriu la configurare)
   churchCity?: string;        // localitatea
-  registrySentKey?: string;   // datele deja trimise (dedup; retrimite la schimbare)
+  registrySentKey?: string;   // nefolosit din v1.4.0 (profilul se suprascrie pe server)
+  updateChannel?: 'stable' | 'beta';  // canalul de actualizare ales de utilizator
   unlockCodeHash?: string;    // sha256 al codului de deblocare activ (parolă uitată)
   unlockCodeExpiry?: string;  // ISO — expirarea codului (7 zile)
   uiZoom?: number;            // marime text interfata fereastra principala (setZoomFactor), default 1
@@ -324,6 +325,27 @@ export interface IElectronAPI {
     offDownloaded: () => void;
     onError: (cb: (msg: string) => void) => void;
     offError: () => void;
+    getChannel: () => Promise<'stable' | 'beta'>;
+    setChannel: (channel: 'stable' | 'beta') => Promise<'stable' | 'beta'>;
+    forcedState: () => Promise<{ required: boolean; version: string | null; reason: string }>;
+    downloadPage: () => Promise<string>;
+    onForced: (cb: (data: { version: string | null; reason: string; notes: string }) => void) => void;
+    offForced: () => void;
+    onForcedWaiting: (cb: (data: { version: string | null }) => void) => void;
+    offForcedWaiting: () => void;
+  };
+  feedback: {
+    send: (payload: {
+      kind: 'bug' | 'suggestion';
+      subject: string;
+      body: string;
+      severity?: 'low' | 'medium' | 'high' | 'critical';
+      contact?: string;
+      attachLog?: boolean;
+    }) => Promise<{ ok: true } | { ok: false; reason: 'rate-limit' | 'refused' | 'offline'; message: string }>;
+    pending: () => Promise<number>;
+    retryPending: () => Promise<number>;
+    logPreview: () => Promise<string>;
   };
   video: {
     pickFile: () => Promise<string | undefined>;

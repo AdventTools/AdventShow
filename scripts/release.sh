@@ -14,16 +14,22 @@
 #     scriptul .cmd se generează local și se urcă cu scp (echo prin ssh se pierde)
 #   • asset-urile se copiază în /tmp înainte de upload (iCloud evacuează fișierele
 #     mari din ~/Documents fix în timpul upload-ului — v1.3.0 EXE, v1.3.1 ZIP)
-#   • GitHub Release ATOMIC: draft → upload TOT → verificare nume+mărime exactă →
-#     publicare. Tag-ul se creează DOAR la publicare, deci utilizatorii nu văd
-#     niciodată un release incomplet (la v1.3.1 au prins 404 pe zip mid-upload)
 #   • asset obligatoriu lipsă = STOP, nu release parțial
+#
+# DIN v1.4.0 DISTRIBUȚIA E ÎN HANGAR (hangar.it4all.ro), nu pe GitHub Releases:
+#   • artefactele se urcă prin API-ul hub-ului (uploader reluabil, pe bucăți) și
+#     ajung în STAGING — nevăzute de nimeni până când OMUL le promovează din
+#     interfață. Scriptul NU promovează; token-ul nici n-are dreptul.
+#   • GitHub primește doar tag-ul și notele de versiune, fără binare.
+#   • feed-urile (latest.yml, latest-mac.yml) NU se urcă: hangar le generează din
+#     baza lui de date la fiecare promovare.
+#   • AppImage-ul de Linux îl urcă direct CI-ul, cu secretul HANGAR_TOKEN.
 #
 # Pași:
 #   1. Pre-flight   2. Bump versiune + README + CHANGELOG   3. Build macOS semnat
 #   4. Notary submit   5. Sync sursă VM   6. Build Windows detașat   7. Pull EXE
-#   8. Notary poll + staple   9. Git push main   10. Release draft→verify→publish
-#   11. CI Linux (AppImage) cu fallback workflow_dispatch
+#   8. Notary poll + staple   9. Git push main   10. Upload în hangar + verificare
+#   11. Tag + note pe GitHub (declanșează CI-ul de Linux)
 #
 # Usage:
 #   ./scripts/release.sh "descriere modificări" [patch|minor|major]
@@ -139,7 +145,7 @@ TAG="v${NEW_VERSION}"
 RELEASE_DIR="release/${NEW_VERSION}"
 DMG="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
 ZIP="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip"
-EXE="${RELEASE_DIR}/AdventShow-Setup.exe"
+EXE="${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe"
 
 # working tree curat — doar la început de release nou (la reluare e deja bumped)
 if [ ! -f "$STATE/bump.done" ]; then
@@ -154,11 +160,10 @@ if [ ! -f "$STATE/bump.done" ]; then
   DATE=$(date +"%d %B %Y" | sed 's/January/Ianuarie/;s/February/Februarie/;s/March/Martie/;s/April/Aprilie/;s/May/Mai/;s/June/Iunie/;s/July/Iulie/;s/August/August/;s/September/Septembrie/;s/October/Octombrie/;s/November/Noiembrie/;s/December/Decembrie/')
   echo "   ${OLD_VERSION} → ${NEW_VERSION}"
   sed -i '' "s/\"version\": \"${OLD_VERSION}\"/\"version\": \"${NEW_VERSION}\"/" package.json
+  # Link-urile de descărcare din README sunt permanente (hangar detectează
+  # sistemul de operare), deci nu mai trebuie rescrise la fiecare versiune —
+  # doar badge-ul de versiune.
   sed -i '' "s/versiune-${OLD_VERSION}-green/versiune-${NEW_VERSION}-green/" README.md
-  sed -i '' "s|releases/download/v${OLD_VERSION}/AdventShow-Setup\.exe|releases/download/v${NEW_VERSION}/AdventShow-Setup.exe|g" README.md
-  sed -i '' "s|releases/download/v${OLD_VERSION}/AdventShow-Linux\.AppImage|releases/download/v${NEW_VERSION}/AdventShow-Linux.AppImage|g" README.md
-  sed -i '' "s|AdventShow-Mac-${OLD_VERSION}\.dmg|AdventShow-Mac-${NEW_VERSION}.dmg|g" README.md
-  sed -i '' "s|releases/download/v${OLD_VERSION}/AdventShow-Mac|releases/download/v${NEW_VERSION}/AdventShow-Mac|g" README.md
   # CHANGELOG prin Node (nu sed) — descrierea e text liber; slash/ampersand au
   # crăpat release-ul 1.2.5 pe varianta sed
   CL_VERSION="$NEW_VERSION" CL_DATE="$DATE" CL_DESC="$DESCRIPTION" node -e '
@@ -195,7 +200,10 @@ if [ ! -f "$STATE/mac.done" ]; then
   [ -n "$built" ] || fail "build mac eșuat de 4 ori"
   [ -f "$DMG" ] || fail "DMG nu există: $DMG"
   [ -f "$ZIP" ] || fail "ZIP mac nu există: $ZIP (necesar pentru auto-update)"
-  [ -f "${RELEASE_DIR}/latest-mac.yml" ] || fail "latest-mac.yml lipsă (necesar pentru auto-update macOS)"
+  # Nu se urcă nicăieri (hangar își face singur feed-urile), dar absența lui
+  # înseamnă că `publish` a dispărut din electron-builder.json5 — iar fără el
+  # installerul nu mai știe de unde să-și ia update-urile.
+  [ -f "${RELEASE_DIR}/latest-mac.yml" ] || fail "latest-mac.yml lipsă — verifică blocul publish din electron-builder.json5"
   touch "$STATE/mac.done"
   ok "DMG + ZIP + latest-mac.yml"
 fi
@@ -286,17 +294,19 @@ fi
 # ── Pull artefacte Windows ────────────────────────────────────────────────────
 
 if [ ! -f "$STATE/winpull.done" ]; then
-  step "7/11 Pull EXE + latest.yml"
+  step "7/11 Pull EXE de pe VM"
   REMOTE_DIR_FWD="$(echo "${WIN_PROJECT}\\release\\${NEW_VERSION}" | tr '\\' '/')"
   mkdir -p "$RELEASE_DIR"
-  retry "scp Setup.exe" 40 20 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/AdventShow-Setup.exe" "$EXE" || fail "scp Setup.exe"
-  retry "scp latest.yml" 40 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/latest.yml" "${RELEASE_DIR}/latest.yml" || fail "scp latest.yml (necesar pentru auto-update Windows)"
-  scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/AdventShow-Setup.exe.blockmap" "${RELEASE_DIR}/AdventShow-Setup.exe.blockmap" 2>/dev/null \
-    || log "  (blockmap exe lipsă — non-critic)"
+  EXE_NAME="AdventShow-Setup-${NEW_VERSION}.exe"
+  retry "scp Setup.exe" 40 20 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/${EXE_NAME}" "$EXE" || fail "scp ${EXE_NAME}"
+  # blockmap-ul NU mai e opțional: hangar face update diferențial pe baza lui, iar
+  # fără el fiecare biserică descarcă 113 MB întregi la fiecare versiune.
+  retry "scp blockmap exe" 20 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/${EXE_NAME}.blockmap" "${RELEASE_DIR}/${EXE_NAME}.blockmap" \
+    || log "  (blockmap exe lipsă — update-ul diferențial nu va funcționa pe Windows)"
   SIZE_BYTES=$(stat -f%z "$EXE")
   [ "$SIZE_BYTES" -gt 50000000 ] || { rm -f "$EXE"; fail "EXE pare incomplet ($SIZE_BYTES bytes)"; }
   touch "$STATE/winpull.done"
-  ok "EXE ($(du -h "$EXE" | cut -f1)) + latest.yml"
+  ok "EXE ($(du -h "$EXE" | cut -f1))"
 fi
 
 # ── Notary poll + staple ──────────────────────────────────────────────────────
@@ -338,71 +348,92 @@ fi
 
 # ── GitHub Release: DRAFT → upload TOT → verificare → publicare ───────────────
 
-if [ ! -f "$STATE/gh.done" ]; then
-  step "10/11 GitHub Release (draft → upload → verify → publish)"
+if [ ! -f "$STATE/hangar.done" ]; then
+  step "10/11 Upload în hangar (staging)"
 
+  # Token-ul de upload NU stă în repo. Trăiește în ~/.hangar/tokens.env, mod 600.
+  # Nu poate promova — tot ce urcăm rămâne invizibil până când promovezi din interfață.
+  # shellcheck disable=SC1090
+  [ -f "$HOME/.hangar/tokens.env" ] || fail "lipsește ~/.hangar/tokens.env (ADVENTSHOW_HUB_TOKEN=hub_…)"
+  . "$HOME/.hangar/tokens.env"
+  [ -n "${ADVENTSHOW_HUB_TOKEN:-}" ] || fail "ADVENTSHOW_HUB_TOKEN nesetat în ~/.hangar/tokens.env"
+
+  # Staging în /tmp: iCloud evacuează fișierele mari din ~/Documents fix în timpul
+  # upload-ului (pățit la v1.3.0 EXE și v1.3.1 ZIP).
   STAGING="/tmp/ashow-assets-${NEW_VERSION}"
   mkdir -p "$STAGING"
-  REQUIRED=("$DMG" "$ZIP" "$EXE" "${RELEASE_DIR}/latest.yml" "${RELEASE_DIR}/latest-mac.yml")
+  # Feed-urile .yml NU se urcă: hangar le generează din baza lui la promovare.
+  REQUIRED=("$DMG" "$ZIP" "$EXE")
   OPTIONAL=("${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap"
             "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg.blockmap"
-            "${RELEASE_DIR}/AdventShow-Setup.exe.blockmap")
-  UPDATE_ASSETS=()
+            "${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe.blockmap")
+  UPLOAD=()
   for f in "${REQUIRED[@]}"; do
-    [ -f "$f" ] || fail "ASSET OBLIGATORIU LIPSĂ: $f — nu public un release incomplet"
+    [ -f "$f" ] || fail "ASSET OBLIGATORIU LIPSĂ: $f — nu urc un release incomplet"
     cp "$f" "$STAGING/" || fail "staging a eșuat pentru $f"
-    UPDATE_ASSETS+=("$STAGING/$(basename "$f")")
+    UPLOAD+=("$STAGING/$(basename "$f")")
   done
   for f in "${OPTIONAL[@]}"; do
-    [ -f "$f" ] && cp "$f" "$STAGING/" && UPDATE_ASSETS+=("$STAGING/$(basename "$f")")
+    [ -f "$f" ] && cp "$f" "$STAGING/" && UPLOAD+=("$STAGING/$(basename "$f")")
   done
-  ok "staged ${#UPDATE_ASSETS[@]} asset-uri (toate cele obligatorii prezente)"
+  ok "staged ${#UPLOAD[@]} fișiere (toate cele obligatorii prezente)"
 
-  NOTES=$(awk "/^## v${NEW_VERSION}/{f=1; next} f && /^---/{exit} f" CHANGELOG.md)
-  create_draft() {
-    gh release view "$TAG" >/dev/null 2>&1 && return 0
-    gh release create "$TAG" --draft --target main --title "${TAG}" --notes "${NOTES}"
+  # Uploaderul oficial al hub-ului: pe bucăți de 1 MB, reluabil — după o cădere de
+  # rețea rulezi aceeași comandă și continuă de unde a rămas.
+  PUSHER="$STAGING/hub-push.mjs"
+  retry "descarc hub-push.mjs" 20 10 -- curl -sfLo "$PUSHER" https://hangar.it4all.ro/hub/tools/hub-push.mjs \
+    || fail "nu pot lua hub-push.mjs de pe hangar"
+
+  push_hangar() {
+    HUB_TOKEN="$ADVENTSHOW_HUB_TOKEN" node "$PUSHER" \
+      --project adventshow --version "$NEW_VERSION" "${UPLOAD[@]}"
   }
-  retry "gh release create (draft)" 40 20 -- create_draft || fail "gh release create"
+  retry "upload în hangar" 60 20 -- push_hangar || fail "upload în hangar"
 
-  upload_assets() { gh release upload "$TAG" "${UPDATE_ASSETS[@]}" --clobber; }
-  retry "upload asset-uri" 60 20 -- upload_assets || fail "upload asset-uri"
-
-  verify_assets() {
-    local listing
-    listing=$(gh release view "$TAG" --json assets --jq '.assets[] | .name + " " + (.size|tostring)') || return 1
-    for f in "${REQUIRED[@]}"; do
-      local name size
-      name=$(basename "$f")
-      size=$(stat -f%z "$STAGING/$name")
-      echo "$listing" | grep -qx "$name $size" || { log "  …lipsește/mărime greșită: $name ($size)"; return 1; }
-    done
+  # Verificăm ce a ajuns efectiv, nu ce credem că am trimis.
+  verify_hangar() {
+    local n
+    n=$(curl -sf -H "Authorization: Bearer $ADVENTSHOW_HUB_TOKEN" \
+      "https://hangar.it4all.ro/hub/api.php?do=releases&project=adventshow" \
+      | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+          const v=(JSON.parse(s).versions||[]).find(x=>x.version===process.argv[1]);
+          console.log(v?v.files:0);});' "$NEW_VERSION") || return 1
+    [ "${n:-0}" -ge "${#UPLOAD[@]}" ] || { log "  …hangar are $n fișiere, am urcat ${#UPLOAD[@]}"; return 1; }
   }
-  retry "verificare asset-uri" 20 15 -- verify_assets || fail "verificare asset-uri (nume + mărime)"
-  ok "toate asset-urile verificate (nume + mărime exactă)"
-
-  publish_release() { gh release edit "$TAG" --draft=false; }
-  retry "publicare release" 40 15 -- publish_release || fail "publicare"
-  retry "fetch tags" 10 10 -- git fetch origin --tags || true
-  touch "$STATE/gh.done"
-  ok "release PUBLICAT complet (tag-ul ${TAG} creat de publicare)"
+  retry "verificare în hangar" 20 15 -- verify_hangar || fail "hangar nu are toate fișierele"
+  rm -rf "$STAGING"
+  touch "$STATE/hangar.done"
+  ok "v${NEW_VERSION} e în hangar, în STAGING (invizibil public până promovezi)"
 fi
 
-# ── CI Linux (AppImage) ───────────────────────────────────────────────────────
+# ── Tag + note pe GitHub (fără binare) ───────────────────────────────────────
 
-if [ ! -f "$STATE/ci.done" ]; then
-  step "11/11 CI Linux (AppImage)"
-  sleep 30
+if [ ! -f "$STATE/gh.done" ]; then
+  step "11/11 Tag + note pe GitHub"
+  NOTES=$(awk "/^## v${NEW_VERSION}/{f=1; next} f && /^---/{exit} f" CHANGELOG.md)
+  create_release() {
+    gh release view "$TAG" >/dev/null 2>&1 && return 0
+    # Fără binare: descărcarea și update-urile trec prin hangar. Tag-ul e ce
+    # declanșează CI-ul care construiește AppImage-ul și îl urcă tot în hangar.
+    gh release create "$TAG" --target main --title "${TAG}" --notes "${NOTES}"
+  }
+  retry "gh release create" 40 20 -- create_release || fail "gh release create"
+  retry "fetch tags" 10 10 -- git fetch origin --tags || true
+
+  sleep 20
   if ! gh run list --workflow=build.yml --json headBranch --jq '.[].headBranch' 2>/dev/null | grep -qx "$TAG"; then
     log "CI nu a pornit de la tag — declanșez manual (workflow_dispatch)"
     retry "workflow_dispatch" 20 15 -- gh workflow run build.yml --ref "$TAG" || true
   fi
-  touch "$STATE/ci.done"
-  ok "CI pornit pentru ${TAG}"
+  touch "$STATE/gh.done"
+  ok "tag ${TAG} + note publicate, CI Linux pornit"
 fi
 
-step "GATA — v${NEW_VERSION} publicat"
-gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null || true
+step "GATA — v${NEW_VERSION} urcat"
 echo ""
-echo "  Verifică: https://github.com/AdventTools/AdventShow/releases/tag/${TAG}"
-echo "  (inclusiv că nu apar arhive 'Source code' — vezi to-do.md #1)"
+echo "  MAI TREBUIE UN PAS, FĂCUT DE OM: promovează versiunea în hangar."
+echo "  https://hangar.it4all.ro/hub/?p=adventshow&t=releases"
+echo ""
+echo "  Până atunci, v${NEW_VERSION} e în staging: nimeni nu o vede și nimeni nu o"
+echo "  primește prin auto-update. La promovare, hangar generează feed-urile."
+echo "  AppImage-ul de Linux ajunge singur, din CI, în aceeași versiune."

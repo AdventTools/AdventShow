@@ -177,6 +177,36 @@ contextBridge.exposeInMainWorld('electron', {
     onError: (cb: (msg: string) => void) =>
       ipcRenderer.on('update:error', (_e, msg) => cb(msg)),
     offError: () => ipcRenderer.removeAllListeners('update:error'),
+    // canal: stable (implicit) sau beta
+    getChannel: () => ipcRenderer.invoke('update:get-channel') as Promise<'stable' | 'beta'>,
+    setChannel: (channel: 'stable' | 'beta') =>
+      ipcRenderer.invoke('update:set-channel', channel) as Promise<'stable' | 'beta'>,
+    // update obligatoriu — decis în hangar, nu în aplicație
+    forcedState: () => ipcRenderer.invoke('update:forced-state') as
+      Promise<{ required: boolean; version: string | null; reason: string }>,
+    downloadPage: () => ipcRenderer.invoke('update:download-page') as Promise<string>,
+    onForced: (cb: (data: { version: string | null; reason: string; notes: string }) => void) =>
+      ipcRenderer.on('update:forced', (_e, data) => cb(data)),
+    offForced: () => ipcRenderer.removeAllListeners('update:forced'),
+    // update obligatoriu descărcat, dar amânat cât timp proiecția e pe ecran
+    onForcedWaiting: (cb: (data: { version: string | null }) => void) =>
+      ipcRenderer.on('update:forced-waiting', (_e, data) => cb(data)),
+    offForcedWaiting: () => ipcRenderer.removeAllListeners('update:forced-waiting'),
+  },
+
+  feedback: {
+    send: (payload: {
+      kind: 'bug' | 'suggestion'
+      subject: string
+      body: string
+      severity?: 'low' | 'medium' | 'high' | 'critical'
+      contact?: string
+      attachLog?: boolean
+    }) => ipcRenderer.invoke('feedback:send', payload) as
+      Promise<{ ok: true } | { ok: false; reason: 'rate-limit' | 'refused' | 'offline'; message: string }>,
+    pending: () => ipcRenderer.invoke('feedback:pending') as Promise<number>,
+    retryPending: () => ipcRenderer.invoke('feedback:retry-pending') as Promise<number>,
+    logPreview: () => ipcRenderer.invoke('feedback:log-preview') as Promise<string>,
   },
 
   video: {
