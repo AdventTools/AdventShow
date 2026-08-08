@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.4.0 (08 August 2026)
+
+### Modificări
+- AdventShow se actualizează de acum de pe serverul nostru, nu de pe GitHub — descărcarea e la fel de simplă, dar apare în plus un canal «beta» pentru cine vrea versiunile noi cu câteva zile mai devreme, iar dacă vreodată găsim o problemă gravă putem trimite o actualizare obligatorie care NU întrerupe niciodată o proiecție în curs: se descarcă în fundal și se instalează abia după ce închizi ecranul. Din Setări poți trimite acum direct autorilor o problemă sau o sugestie, cu ultimele linii din jurnal atașate — pe care le vezi înainte să plece — iar erorile neașteptate ne ajung automat, ca să le putem repara fără să ne scrie nimeni. Imnurile pe care le adaugi tu au de-acum colecția lor, «Imnurile mele», unde nimic din ce trimitem noi nu le atinge vreodată; «Imnuri Speciale» devine colecția oficială cu imnuri din afara cărților, numerotată de autori. Vezi în sfârșit și ce s-a hotărât cu ce ai trimis: fiecare corectură primește un răspuns cu motiv, iar tu alegi dacă păstrezi varianta ta sau revii la cea oficială. Corecturile la imnuri ajung acum și fără repornirea aplicației. În carte: imnul 75 devine «Doar Tu ne ești cale-adevăr și viață» (corectură trimisă de o biserică), iar în Imnuri Speciale intră «O cântare de mărire».
+
+---
+
 ## v1.3.14 (25 Iulie 2026)
 
 ### Modificări
