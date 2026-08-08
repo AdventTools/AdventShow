@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.4.2 (08 August 2026)
+
+### Modificări
+- Dacă ți-ai adaptat singur un imn, varianta ta nu se mai pierde. Până acum, o corectură venită de la autori îți suprascria textul sau nu, în funcție de cât de demult îl modificaseși — o regulă pe care n-o hotărâse nimeni. Acum imnurile la care ai umblat rămân ale tale, iar când apare o variantă oficială nouă ești întrebat, cu ambele texte în față, și alegi. Singura excepție e când textul oficial chiar era greșit: atunci îl înlocuim, dar îți păstrăm varianta și îți dăm butonul de pus la loc. În antetul aplicației apare un buton cu numărul răspunsurilor care te așteaptă, ca să nu trebuiască să intri în Setări ca să afli că ți s-a răspuns.
+
+---
+
 ## v1.4.1 (08 August 2026)
 
 ### Modificări
