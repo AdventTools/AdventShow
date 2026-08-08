@@ -192,6 +192,7 @@ export interface AppSettings {
   churchCity?: string;        // localitatea
   registrySentKey?: string;   // nefolosit din v1.4.0 (profilul se suprascrie pe server)
   updateChannel?: 'stable' | 'beta';  // canalul de actualizare ales de utilizator
+  pendingDowngrade?: boolean; // adevărat doar între ieșirea din beta și primul update reușit
   unlockCodeHash?: string;    // sha256 al codului de deblocare activ (parolă uitată)
   unlockCodeExpiry?: string;  // ISO — expirarea codului (7 zile)
   uiZoom?: number;            // marime text interfata fereastra principala (setZoomFactor), default 1
