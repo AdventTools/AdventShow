@@ -104,11 +104,15 @@ EXE_LOCAL="release/${VERSION}/${EXE_NAME}"
 scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/${EXE_NAME}" "$EXE_LOCAL" \
     || { echo "❌ scp ${EXE_NAME} înapoi a eșuat"; exit 1; }
 
-# 2) The blockmap, which is what makes an update a few MB instead of 113. latest.yml
-#    is NOT fetched: hangar generates the feeds from its own database at promotion,
-#    so an uploaded one would be ignored.
+# 2) The blockmap, which is what makes an update a few MB instead of 113.
 scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/${EXE_NAME}.blockmap" "release/${VERSION}/${EXE_NAME}.blockmap" \
     || echo "   ⚠️  blockmap lipsă — update-ul diferențial nu va merge pe Windows"
+
+# 3) latest.yml. Hangar NU are nevoie de el (își generează feed-urile din baza lui),
+#    dar puntea de pe GitHub da: instalările de sub 1.4.0 citesc update-urile de
+#    acolo. Cât timp mai există astfel de instalări, fișierul trebuie adus.
+scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/latest.yml" "release/${VERSION}/latest.yml" \
+    || echo "   ⚠️  latest.yml lipsă — puntea GitHub pentru instalările vechi nu se poate publica"
 
 SIZE_BYTES=$(stat -f%z "$EXE_LOCAL")
 [ "$SIZE_BYTES" -gt 50000000 ] \
