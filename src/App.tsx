@@ -52,6 +52,7 @@ import {
     VolumeX,
     Headphones,
     HelpCircle,
+    Mail,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
@@ -316,6 +317,10 @@ function App() {
     const [updateTotal, setUpdateTotal] = useState(0);
     const [updateReady, setUpdateReady] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
+    // Răspunsuri de la autori care așteaptă o alegere (corectură nepreluată, imn intrat
+    // în colecția oficială). Se vede în antet, ca omul să nu trebuiască să intre în Setări.
+    const [decisionsCount, setDecisionsCount] = useState(0);
+    const [decisionsOpen, setDecisionsOpen] = useState(false);
     // Update OBLIGATORIU (decis în hangar). Nu se poate refuza, dar nici nu întrerupe
     // o proiecție în curs — instalarea așteaptă închiderea ecranului.
     const [forcedUpdate, setForcedUpdate] = useState<{
@@ -498,6 +503,12 @@ function App() {
             }));
         });
         // Dacă verdictul a venit înainte ca fereastra să fie gata de ascultat.
+        window.electron.contrib.decisions()
+            .then(d => setDecisionsCount(d.length)).catch(() => { });
+        window.electron.contrib.onDecisions(() => {
+            window.electron.contrib.decisions()
+                .then(d => setDecisionsCount(d.length)).catch(() => { });
+        });
         window.electron.update.forcedState()
             .then(s => { if (s.required) setForcedUpdate({ version: s.version, reason: s.reason, waitingForProjection: false }); })
             .catch(() => { /* fără rețea, se reia la următoarea pornire */ });
@@ -509,6 +520,7 @@ function App() {
             window.electron.update.offError();
             window.electron.update.offForced();
             window.electron.update.offForcedWaiting();
+            window.electron.contrib.offDecisions();
         };
     }, []);
 
@@ -1397,6 +1409,17 @@ function App() {
                 </div>
             )}
 
+            {decisionsOpen && (
+                <DecisionsModal
+                    onClose={() => {
+                        setDecisionsOpen(false);
+                        window.electron.contrib.decisions()
+                            .then(d => setDecisionsCount(d.length)).catch(() => { });
+                    }}
+                    onChanged={() => { loadHymns(); }}
+                />
+            )}
+
             {/* ── Header ── */}
             <header className="header">
                 <div className="header-logo">
@@ -1485,6 +1508,20 @@ function App() {
                         title="Adaugă imn"
                     >
                         <Plus className="icon-sm" />
+                    </button>
+                )}
+
+                {/* Răspunsuri de la autori — apare doar când chiar așteaptă ceva */}
+                {decisionsCount > 0 && (
+                    <button
+                        className="header-btn header-btn-answers"
+                        onClick={() => setDecisionsOpen(true)}
+                        title="Autorii au răspuns la ce ai trimis"
+                    >
+                        <Mail className="icon-sm" />
+                        <span className="header-btn-label">
+                            {decisionsCount} {decisionsCount === 1 ? 'răspuns' : 'răspunsuri'}
+                        </span>
                     </button>
                 )}
 
