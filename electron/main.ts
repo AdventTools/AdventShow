@@ -1252,8 +1252,16 @@ app.whenReady().then(() => {
       // Telemetrie: un ping de pornire care aduce înapoi și verdictul „mai e
       // acceptată versiunea asta?". Apoi heartbeat din 6 în 6 ore, ca hangar să
       // știe câte instalări chiar rulează, nu doar câte au existat vreodată.
-      checkForcedUpdate('launch').catch(err => debugLog('[startup] track:', String(err)))
-      startHeartbeat(hangarDeps())
+      //
+      // Doar din build-uri împachetate: altfel fiecare `npm run dev` de pe mașina
+      // unui dezvoltator ar apărea ca o biserică activă și ar strica exact cifra
+      // pe care pagina de instalări o promite ca fiind reală.
+      if (app.isPackaged) {
+        checkForcedUpdate('launch').catch(err => debugLog('[startup] track:', String(err)))
+        startHeartbeat(hangarDeps())
+      } else {
+        debugLog('[startup] telemetrie sărită — build nepachetat (dev)')
+      }
     } catch (err) {
       debugLog('[startup] deferred seed/sync error:', String(err))
     }
