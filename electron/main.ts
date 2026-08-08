@@ -132,6 +132,8 @@ interface AppSettings {
   unlockCodeExpiry?: string
   // ── Canal de actualizare ──
   updateChannel?: 'stable' | 'beta'
+  // adevărat doar între ieșirea din beta și prima actualizare reușită
+  pendingDowngrade?: boolean
   uiZoom?: number             // marime text interfata fereastra principala (setZoomFactor), default 1
 }
 
@@ -283,11 +285,26 @@ let forcedUpdate: { required: boolean; version: string | null; reason: string } 
 function applyUpdateChannel() {
   const channel = updateChannel(hangarDeps())
   autoUpdater.channel = channel === 'beta' ? 'beta' : 'latest'
-  // Ieșirea din beta trebuie să funcționeze: cine e pe 1.4.0-beta și revine pe
-  // stable 1.3.14 nu are ce update să primească fără asta, și ar rămâne blocat
-  // pe canalul beta pentru totdeauna.
-  autoUpdater.allowDowngrade = channel === 'stable'
+  // Coborârea de versiune se permite DOAR imediat după ce omul a ieșit din beta:
+  // altfel rămâne blocat pe o versiune de test mai nouă decât cea stabilă. În rest
+  // e periculoasă — dacă feed-ul stabil e (temporar) în urma versiunii instalate,
+  // aplicația s-ar oferi să se „actualizeze" înapoi.
+  autoUpdater.allowDowngrade = channel === 'stable' && readSettings().pendingDowngrade === true
   debugLog(`[Update] canal: ${channel} (feed ${autoUpdater.channel}, downgrade ${autoUpdater.allowDowngrade})`)
+}
+
+/**
+ * Merită oferită versiunea din feed?
+ *
+ * Numai dacă e strict mai nouă. „Diferită de cea instalată" nu e destul: cât timp o
+ * versiune stă în staging, feed-ul rămâne în urma celor care au instalat-o deja
+ * manual, iar aplicația le-ar anunța vesel „versiune nouă: cea veche".
+ */
+function isWorthOffering(latest: string | null | undefined): boolean {
+  if (!latest) return false
+  const diff = compareVersions(latest, app.getVersion())
+  if (diff > 0) return true
+  return diff < 0 && readSettings().pendingDowngrade === true
 }
 
 function wireAutoUpdater() {
@@ -321,6 +338,12 @@ function wireAutoUpdater() {
   })
   autoUpdater.on('update-downloaded', (info) => {
     debugLog('[autoUpdater] update-downloaded', info.version)
+    // Coborârea permisă la ieșirea din beta s-a consumat.
+    if (readSettings().pendingDowngrade) {
+      const s = readSettings()
+      delete s.pendingDowngrade
+      writeSettings(s)
+    }
     if (isWinAlive(win)) win.webContents.send('update:downloaded', { version: info.version })
     if (forcedUpdate.required) installWhenNotProjecting()
   })
@@ -1697,7 +1720,7 @@ app.whenReady().then(() => {
       const result = await autoUpdater.checkForUpdates()
       const latest = result?.updateInfo?.version ?? null
       const current = app.getVersion()
-      const available = !!latest && latest !== current
+      const available = isWorthOffering(latest)
       debugLog(`[Update] check: current=${current} latest=${latest} available=${available}`)
       return { available, version: latest ?? undefined }
     } catch (err: any) {
@@ -1722,7 +1745,12 @@ app.whenReady().then(() => {
   ipcMain.handle('update:get-channel', () => updateChannel(hangarDeps()))
   ipcMain.handle('update:set-channel', (_e, channel: 'stable' | 'beta') => {
     const value = channel === 'beta' ? 'beta' : 'stable'
-    writeSettings({ ...readSettings(), updateChannel: value })
+    const inainte = updateChannel(hangarDeps())
+    // Ieșirea din beta e singurul moment în care o coborâre de versiune e legitimă:
+    // versiunea de test poate fi mai nouă decât cea stabilă. Marcajul se consumă la
+    // prima instalare reușită.
+    const pendingDowngrade = inainte === 'beta' && value === 'stable' ? true : undefined
+    writeSettings({ ...readSettings(), updateChannel: value, pendingDowngrade })
     if (updaterWired) applyUpdateChannel()
     debugLog('[Update] canal schimbat în', value)
     return value
