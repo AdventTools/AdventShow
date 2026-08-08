@@ -187,10 +187,16 @@ export async function track(
 /**
  * Pornește heartbeat-ul. Timer-ul e `unref`-uit: dacă tot restul aplicației s-a
  * închis, procesul nu mai are motiv să rămână viu pentru un ping.
+ *
+ * `alsoDo` rulează la fiecare bătaie, după ping: acolo intră verificarea de
+ * corecturi și verdictele propunerilor. Altfel un calculator lăsat pornit o
+ * săptămână în biserică n-ar afla nimic nou până la o repornire.
  */
-export function startHeartbeat(deps: HangarDeps): NodeJS.Timeout {
+export function startHeartbeat(deps: HangarDeps, alsoDo?: () => void | Promise<void>): NodeJS.Timeout {
   const timer = setInterval(() => {
-    track(deps, 'heartbeat').catch(() => { /* tăcere */ });
+    track(deps, 'heartbeat')
+      .then(() => alsoDo?.())
+      .catch(() => { /* tăcere */ });
   }, HEARTBEAT_INTERVAL_MS);
   timer.unref?.();
   return timer;
@@ -384,4 +390,38 @@ export async function flushReportQueue(deps: HangarDeps): Promise<void> {
 
 export function pendingReportCount(deps: HangarDeps): number {
   return readQueue(deps).length;
+}
+
+// ── Ce s-a decis cu propunerile lui ──────────────────────────────────────────
+
+export interface ProposalVerdict {
+  hash: string;
+  status: 'new' | 'accepted' | 'rejected';
+  note: string;
+  category?: string;   // doar la accepted
+  number?: string;     // doar la accepted
+  decided_at?: string;
+}
+
+/**
+ * Întreabă hub-ul ce s-a hotărât cu propunerile pe care le-am trimis. Cheia e
+ * `hash`-ul, pe care îl știm deja — nu ținem id-uri și nu cerem lista instalării,
+ * ca nimeni să nu poată enumera ce a trimis altcineva.
+ *
+ * Un hash necunoscut lipsește din răspuns; o propunere încă neanalizată vine cu
+ * `new`. Null înseamnă „n-am putut întreba" — se reîncearcă mai târziu.
+ */
+export async function fetchProposalVerdicts(
+  deps: HangarDeps, hashes: string[],
+): Promise<ProposalVerdict[] | null> {
+  if (hashes.length === 0) return [];
+  const out = await postJson(`${CONTENT_URL}?do=status`, {
+    project: HANGAR_KEY,
+    install: installId(deps),
+    // Trimitem în tranșe rezonabile; restul se află la verificarea următoare.
+    hashes: hashes.slice(0, 200),
+  }, 10000);
+  if (!out || hubStatus(out.res) !== 200 || !out.json.ok) return null;
+  const items = Array.isArray(out.json.items) ? out.json.items : [];
+  return items as ProposalVerdict[];
 }

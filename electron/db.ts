@@ -97,6 +97,16 @@ export function getDb() {
 
 // ── Predefined categories (locked) ───────────────────────────────────────────
 
+/**
+ * Colecțiile care există la toată lumea. Ultimele două au reguli speciale:
+ *
+ * • „Imnuri Speciale" e colecția OFICIALĂ de imnuri care nu sunt în cărțile de mai
+ *   sus. Numerele din ea le dă autorul, la acceptarea unei propuneri, și nu se
+ *   refolosesc niciodată — o corectură se aplică după perechea (colecție, număr),
+ *   deci un număr reciclat ar înlocui tăcut un imn cu altul.
+ * • „Imnurile mele" e a utilizatorului. Nimic de la noi nu ajunge acolo, deci nimic
+ *   nu i se suprascrie vreodată.
+ */
 const BUILTIN_CATEGORIES = [
   'Imnuri Creștine',
   'Licurici',
@@ -105,7 +115,13 @@ const BUILTIN_CATEGORIES = [
   'Tineret',
   'Amicus',
   'Imnuri Speciale',
+  'Imnurile mele',
 ];
+
+/** Colecția în care utilizatorul își ține imnurile proprii. */
+export const MY_HYMNS_CATEGORY = 'Imnurile mele';
+/** Colecția oficială de imnuri din afara cărților; numerotată doar de autori. */
+export const SPECIAL_HYMNS_CATEGORY = 'Imnuri Speciale';
 
 export function initDB() {
   const db = getDb();
@@ -189,6 +205,41 @@ export function initDB() {
 
   migrateCedillaToCommaBelow(db);
   migrateHymn664Variants(db);
+  migrateOwnHymnsOutOfSpecial(db);
+}
+
+/**
+ * „Imnuri Speciale" devine colecție oficială, numerotată de autori. Până acum era o
+ * categorie goală în care unii utilizatori și-au pus imnurile proprii — iar la prima
+ * sincronizare cu seed-ul nou, un imn oficial cu același număr le-ar fi înlocuit
+ * tăcut imnul (potrivirea se face după `(categorie, număr)`). Le mutăm în „Imnurile
+ * mele", unde nu scriem niciodată nimic.
+ *
+ * Se face O SINGURĂ DATĂ, înainte ca vreun imn oficial să ajungă în colecție: tot ce
+ * găsim acolo la momentul migrării e, prin definiție, al utilizatorului.
+ * Idempotentă prin `PRAGMA user_version`.
+ */
+const OWN_HYMNS_MIGRATION_VERSION = 2;
+function migrateOwnHymnsOutOfSpecial(db: ReturnType<typeof getDb>) {
+  const current = Number(db.pragma('user_version', { simple: true })) || 0;
+  if (current >= OWN_HYMNS_MIGRATION_VERSION) return;
+
+  const special = db.prepare('SELECT id FROM categories WHERE name = ?').get(SPECIAL_HYMNS_CATEGORY) as
+    { id: number } | undefined;
+  const mine = db.prepare('SELECT id FROM categories WHERE name = ?').get(MY_HYMNS_CATEGORY) as
+    { id: number } | undefined;
+
+  const tx = db.transaction(() => {
+    if (special && mine) {
+      const moved = db.prepare('UPDATE hymns SET category_id = ? WHERE category_id = ?')
+        .run(mine.id, special.id).changes as number;
+      if (moved > 0) {
+        console.log(`[migrare] ${moved} imnuri proprii mutate din „${SPECIAL_HYMNS_CATEGORY}" în „${MY_HYMNS_CATEGORY}"`);
+      }
+    }
+    db.pragma(`user_version = ${OWN_HYMNS_MIGRATION_VERSION}`);
+  });
+  tx();
 }
 
 // Imnul 664 «Ți-aducem, Doamne-acești copii» are în carte două variante: A (la singular,

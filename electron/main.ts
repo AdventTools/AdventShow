@@ -38,7 +38,10 @@ import {
   syncSeedCorrections,
   syncSeedContent,
 } from './db'
-import { applyOtaCorrections, maybeSendContributions, getContributionStatus, ContribDeps } from './contrib'
+import {
+  applyOtaCorrections, maybeSendContributions, getContributionStatus, listPendingDecisions,
+  refreshProposalDecisions, resolveDecision, ContribDeps,
+} from './contrib'
 import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
 import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, compareVersions, flushReportQueue,
@@ -195,6 +198,19 @@ function registryDeps(): RegistryDeps {
 // Aplicația NU se închide: pe un ecran de proiecție, în mijlocul serviciului, o
 // eroare într-un colț e mai puțin gravă decât dispariția imnului de pe perete.
 // Erorile ajung oricum în log și în hangar, deci nu se pierd.
+/**
+ * Rutina de conținut (corecturi, propuneri, verdicte, coada de rapoarte). Se
+ * construiește o dată, la pornire, când știm calea bazei livrate cu aplicația, și
+ * se reia la fiecare heartbeat.
+ */
+let contentRoutine: (() => Promise<void>) | null = null
+
+/** Îi spunem interfeței câte decizii îl așteaptă, ca să apară pastila în Setări. */
+function notifyDecisions(deps: ContribDeps) {
+  const n = listPendingDecisions(deps).length
+  if (n > 0 && isWinAlive(win)) win.webContents.send('contrib:decisions', n)
+}
+
 let crashHandlersWired = false
 
 function wireCrashReporting() {
@@ -1241,11 +1257,18 @@ app.whenReady().then(() => {
           // corecturi OTA + contribuții (async, silențioase, max 1/zi, timeout scurt;
           // offline = se sar instant — nimic nu blochează pornirea sau proiecția)
           const deps = contribDeps(sp)
-          applyOtaCorrections(deps)
-            .then(() => maybeSendContributions(deps))
-            // rapoartele rămase în coadă de când nu era internet
+          // Rutina de conținut: corecturile de la autori, propunerile utilizatorului,
+          // verdictele la ce a trimis deja, plus rapoartele rămase din lipsă de rețea.
+          contentRoutine = () => applyOtaCorrections(deps)
+            // Propunerile pleacă doar din build-uri împachetate: altfel baza de lucru
+            // a unui dezvoltator (mereu decalată față de seed) ar trimite „corecturi"
+            // la fiecare `npm run dev`.
+            .then(() => (app.isPackaged ? maybeSendContributions(deps) : undefined))
+            .then(() => refreshProposalDecisions(deps))
             .then(() => flushReportQueue(deps))
-            .catch(err => debugLog('[startup] contrib/OTA error:', String(err)))
+            .then(() => { notifyDecisions(deps) })
+            .catch(err => debugLog('[content] eroare:', String(err)))
+          contentRoutine()
           break
         }
       }
@@ -1258,7 +1281,9 @@ app.whenReady().then(() => {
       // pe care pagina de instalări o promite ca fiind reală.
       if (app.isPackaged) {
         checkForcedUpdate('launch').catch(err => debugLog('[startup] track:', String(err)))
-        startHeartbeat(hangarDeps())
+        // La fiecare bătaie reluăm și rutina de conținut: o corectură publicată
+        // sâmbătă dimineața ajunge peste tot până la amiază, fără repornire.
+        startHeartbeat(hangarDeps(), () => contentRoutine?.())
       } else {
         debugLog('[startup] telemetrie sărită — build nepachetat (dev)')
       }
@@ -1347,6 +1372,25 @@ app.whenReady().then(() => {
       debugLog('[Registry] parola de administrare a fost resetată prin cod de deblocare')
     }
     return ok
+  })
+
+  // ── Ce s-a hotărât cu propunerile utilizatorului ───────────────────────────
+  const withContribDeps = <T>(fn: (d: ContribDeps) => T, fallback: T): T => {
+    const sp = [
+      path.join(process.resourcesPath ?? '', 'hymns.db'),
+      path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
+    ].find(p => fs.existsSync(p))
+    return sp ? fn(contribDeps(sp)) : fallback
+  }
+
+  ipcMain.handle('contrib:decisions', () => withContribDeps(listPendingDecisions, []))
+  ipcMain.handle('contrib:resolve-decision',
+    (_e, hash: string, alegere: 'pastrat' | 'revenit' | 'sters') =>
+      withContribDeps(d => resolveDecision(d, hash, alegere), { ok: false, error: 'Baza oficială lipsește.' }))
+  // Verificare la cerere (butonul din Setări), fără să aștepte următorul heartbeat.
+  ipcMain.handle('contrib:refresh-decisions', async () => {
+    await withContribDeps(d => refreshProposalDecisions(d), Promise.resolve(0))
+    return withContribDeps(d => listPendingDecisions(d).length, 0)
   })
 
   // status contribuții pentru panoul Setări (câte modificări așteaptă / trimise)

@@ -411,13 +411,57 @@ fi
 if [ ! -f "$STATE/gh.done" ]; then
   step "11/11 Tag + note pe GitHub"
   NOTES=$(awk "/^## v${NEW_VERSION}/{f=1; next} f && /^---/{exit} f" CHANGELOG.md)
+
+  # ── PUNTE, O SINGURĂ DATĂ (v1.4.0) ──────────────────────────────────────────
+  # Instalările de până acum au în `app-update.yml` adresa GitHub, scrisă la build.
+  # Ele NU știu de hangar și n-ar vedea niciodată versiunea asta — adică exact
+  # versiunea care le mută pe hangar. Deci 1.4.0 se publică și aici, cu tot cu
+  # feed-uri, ca ele să aibă de unde se actualiza. De la următoarea versiune,
+  # GitHub primește doar tag și note: pune GITHUB_BRIDGE=0.
+  GITHUB_BRIDGE="${GITHUB_BRIDGE:-1}"
+  BRIDGE_ASSETS=()
+  if [ "$GITHUB_BRIDGE" = "1" ]; then
+    BRIDGE_STAGING="/tmp/ashow-bridge-${NEW_VERSION}"
+    mkdir -p "$BRIDGE_STAGING"
+    for f in "$DMG" "$ZIP" "$EXE" "${RELEASE_DIR}/latest.yml" "${RELEASE_DIR}/latest-mac.yml"; do
+      [ -f "$f" ] || fail "PUNTE: lipsește $f — fără el, instalările vechi rămân blocate pe versiunea veche"
+      cp "$f" "$BRIDGE_STAGING/"
+      BRIDGE_ASSETS+=("$BRIDGE_STAGING/$(basename "$f")")
+    done
+    for f in "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap" \
+             "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg.blockmap" \
+             "${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe.blockmap"; do
+      [ -f "$f" ] && cp "$f" "$BRIDGE_STAGING/" && BRIDGE_ASSETS+=("$BRIDGE_STAGING/$(basename "$f")")
+    done
+    NOTES="${NOTES}
+
+---
+
+**Începând cu versiunea următoare, AdventShow se actualizează din hangar.it4all.ro.**
+Versiunea aceasta e ultima publicată cu fișiere aici, ca instalările mai vechi să o
+poată prelua. Descărcare: https://hangar.it4all.ro/get/ba3166b608233a30/"
+    ok "punte GitHub pregătită (${#BRIDGE_ASSETS[@]} fișiere)"
+  fi
+
   create_release() {
     gh release view "$TAG" >/dev/null 2>&1 && return 0
-    # Fără binare: descărcarea și update-urile trec prin hangar. Tag-ul e ce
-    # declanșează CI-ul care construiește AppImage-ul și îl urcă tot în hangar.
     gh release create "$TAG" --target main --title "${TAG}" --notes "${NOTES}"
   }
   retry "gh release create" 40 20 -- create_release || fail "gh release create"
+
+  if [ "${#BRIDGE_ASSETS[@]}" -gt 0 ]; then
+    upload_bridge() { gh release upload "$TAG" "${BRIDGE_ASSETS[@]}" --clobber; }
+    retry "upload punte GitHub" 60 20 -- upload_bridge || fail "upload punte GitHub"
+    verify_bridge() {
+      local listing; listing=$(gh release view "$TAG" --json assets --jq '.assets[].name') || return 1
+      for f in "${BRIDGE_ASSETS[@]}"; do
+        echo "$listing" | grep -qx "$(basename "$f")" || { log "  …lipsește $(basename "$f")"; return 1; }
+      done
+    }
+    retry "verificare punte" 20 15 -- verify_bridge || fail "punte incompletă — instalările vechi ar primi 404"
+    rm -rf "$BRIDGE_STAGING"
+    ok "punte publicată: instalările vechi pot ajunge la ${NEW_VERSION}"
+  fi
   retry "fetch tags" 10 10 -- git fetch origin --tags || true
 
   sleep 20

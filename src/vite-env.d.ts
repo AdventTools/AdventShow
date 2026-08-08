@@ -268,6 +268,12 @@ export interface IElectronAPI {
   };
   contrib: {
     status: () => Promise<{ pending: number; sent: number }>;
+    decisions: () => Promise<PendingDecision[]>;
+    refreshDecisions: () => Promise<number>;
+    resolveDecision: (hash: string, alegere: 'pastrat' | 'revenit' | 'sters')
+      => Promise<{ ok: boolean; error?: string }>;
+    onDecisions: (cb: (n: number) => void) => void;
+    offDecisions: () => void;
   };
   presentation: {
     pickFile: () => Promise<string | undefined>;
@@ -415,4 +421,21 @@ declare global {
   interface Window {
     electron: IElectronAPI;
   }
+}
+
+/**
+ * O decizie a autorilor care așteaptă un răspuns de la utilizator: fie o corectură
+ * de-a lui care nu a fost preluată, fie un imn propriu care a intrat în colecția
+ * oficială și acum are un duplicat local.
+ */
+export interface PendingDecision {
+  hash: string;
+  key: string;
+  category: string;
+  number: string;
+  title: string;
+  status: 'accepted' | 'rejected';
+  note: string;
+  publishedAs?: { category: string; number: string };
+  fel: 'corectura' | 'imn';
 }
