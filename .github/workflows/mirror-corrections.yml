@@ -23,9 +23,16 @@ jobs:
 
       - name: Ia feed-ul din hangar
         run: |
-          curl -sfL --retry 3 \
+          COD=$(curl -sL --retry 3 -A 'AdventShow-mirror/1.0' \
+            -w '%{http_code}' \
             https://hangar.it4all.ro/d/ba3166b608233a30/corrections.json \
-            -o /tmp/corrections.json
+            -o /tmp/corrections.json)
+          echo "raspuns HTTP: $COD"
+          if [ "$COD" != "200" ]; then
+            echo "--- primele randuri din raspuns ---"
+            head -c 400 /tmp/corrections.json
+            exit 1
+          fi
 
           # Un feed gol sau nevalid ar sterge corecturile existente din repo.
           node -e '
