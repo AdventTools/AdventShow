@@ -64,6 +64,7 @@ import type {
     Category,
     Hymn,
     HymnSection,
+    HymnState,
     PendingDecision,
     Presentation,
     PresShape,
@@ -503,12 +504,12 @@ function App() {
             }));
         });
         // Dacă verdictul a venit înainte ca fereastra să fie gata de ascultat.
-        window.electron.contrib.decisions()
-            .then(d => setDecisionsCount(d.length)).catch(() => { });
-        window.electron.contrib.onDecisions(() => {
-            window.electron.contrib.decisions()
-                .then(d => setDecisionsCount(d.length)).catch(() => { });
-        });
+        const numaraRaspunsuri = () => Promise.all([
+            window.electron.contrib.decisions(),
+            window.electron.contrib.hymnStates(),
+        ]).then(([d, st]) => setDecisionsCount(d.length + st.length)).catch(() => { });
+        numaraRaspunsuri();
+        window.electron.contrib.onDecisions(() => { numaraRaspunsuri(); });
         window.electron.update.forcedState()
             .then(s => { if (s.required) setForcedUpdate({ version: s.version, reason: s.reason, waitingForProjection: false }); })
             .catch(() => { /* fără rețea, se reia la următoarea pornire */ });
@@ -1413,8 +1414,10 @@ function App() {
                 <DecisionsModal
                     onClose={() => {
                         setDecisionsOpen(false);
-                        window.electron.contrib.decisions()
-                            .then(d => setDecisionsCount(d.length)).catch(() => { });
+                        Promise.all([
+                            window.electron.contrib.decisions(),
+                            window.electron.contrib.hymnStates(),
+                        ]).then(([d, st]) => setDecisionsCount(d.length + st.length)).catch(() => { });
                     }}
                     onChanged={() => { loadHymns(); }}
                 />
@@ -3654,13 +3657,26 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
 
 function DecisionsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
     const [items, setItems] = useState<PendingDecision[]>([]);
+    const [states, setStates] = useState<HymnState[]>([]);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState('');
 
     const load = useCallback(() => {
         window.electron.contrib.decisions().then(setItems).catch(() => setItems([]));
+        window.electron.contrib.hymnStates().then(setStates).catch(() => setStates([]));
     }, []);
     useEffect(() => { load(); }, [load]);
+
+    const alegeImn = async (key: string,
+        alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu') => {
+        setBusy(key);
+        setError('');
+        const res = await window.electron.contrib.applyHymnState(key, alegere);
+        setBusy(null);
+        if (!res.ok) { setError(res.error ?? 'Nu am putut aplica alegerea.'); return; }
+        load();
+        onChanged();
+    };
 
     const alege = async (hash: string, alegere: 'pastrat' | 'revenit' | 'sters') => {
         setBusy(hash);
@@ -3680,12 +3696,58 @@ function DecisionsModal({ onClose, onChanged }: { onClose: () => void; onChanged
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
-                    {items.length === 0 && (
+                    {items.length === 0 && states.length === 0 && (
                         <div className="text-white/50 text-sm py-6 text-center">
                             Nu așteaptă nimic un răspuns din partea ta.
                         </div>
                     )}
                     {error && <div className="editor-error">{error}</div>}
+
+                    {states.map(st => (
+                        <div key={st.key} className="decision-card">
+                            <div className="decision-head">
+                                <strong>{st.category} #{st.number} — {st.titlu}</strong>
+                                <span className={`badge-decision ${st.fel === 'inlocuit' ? 'no' : 'ok'}`}>
+                                    {st.fel === 'inlocuit' ? 'înlocuit' : 'variantă nouă'}
+                                </span>
+                            </div>
+                            {st.fel === 'oficial-nou' ? (
+                                <>
+                                    <p className="decision-text">
+                                        Ai varianta ta la imnul ăsta, iar între timp a apărut una oficială
+                                        nouă. Nu am schimbat nimic — alegi tu.
+                                    </p>
+                                    <div className="row">
+                                        <button className="btn-action" disabled={busy === st.key}
+                                            onClick={() => alegeImn(st.key, 'adopta-oficial')}>
+                                            Trec pe varianta oficială
+                                        </button>
+                                        <button className="btn-clear" disabled={busy === st.key}
+                                            onClick={() => alegeImn(st.key, 'pastreaza-al-meu')}>
+                                            Rămân cu a mea
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="decision-text">
+                                        Am înlocuit varianta ta pentru că textul oficial era greșit. Ți-am
+                                        păstrat-o — o poți pune la loc oricând.
+                                    </p>
+                                    <div className="row">
+                                        <button className="btn-clear" disabled={busy === st.key}
+                                            onClick={() => alegeImn(st.key, 'pune-la-loc-al-meu')}>
+                                            Pune la loc varianta mea
+                                        </button>
+                                        <button className="btn-action" disabled={busy === st.key}
+                                            onClick={() => alegeImn(st.key, 'pastreaza-al-meu')}>
+                                            E în regulă
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ))}
 
                     {items.map(d => (
                         <div key={d.hash} className="decision-card">
@@ -4109,7 +4171,8 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
         window.electron.settings.get().then(s => setSettings(s));
         window.electron.update.getChannel().then(setUpdateChannelValue).catch(() => { });
         window.electron.feedback.pending().then(setPendingFeedback).catch(() => { });
-        window.electron.contrib.decisions().then(d => setPendingDecisions(d.length)).catch(() => { });
+        Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates()])
+            .then(([d, st]) => setPendingDecisions(d.length + st.length)).catch(() => { });
     }, []);
 
     // Close on Escape
@@ -4576,8 +4639,8 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                 <DecisionsModal
                     onClose={() => setDecisionsOpen(false)}
                     onChanged={() => {
-                        window.electron.contrib.decisions()
-                            .then(d => setPendingDecisions(d.length)).catch(() => { });
+                        Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates()])
+                            .then(([d, st]) => setPendingDecisions(d.length + st.length)).catch(() => { });
                         onHymnsChanged();
                     }}
                 />

@@ -39,8 +39,8 @@ import {
   syncSeedContent,
 } from './db'
 import {
-  applyOtaCorrections, maybeSendContributions, getContributionStatus, listPendingDecisions,
-  refreshProposalDecisions, resolveDecision, ContribDeps,
+  applyOtaCorrections, applyHymnState, maybeSendContributions, getContributionStatus,
+  listHymnStates, listPendingDecisions, refreshProposalDecisions, resolveDecision, ContribDeps,
 } from './contrib'
 import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
 import {
@@ -209,7 +209,7 @@ let contentRoutine: (() => Promise<void>) | null = null
 
 /** Îi spunem interfeței câte decizii îl așteaptă, ca să apară pastila în Setări. */
 function notifyDecisions(deps: ContribDeps) {
-  const n = listPendingDecisions(deps).length
+  const n = listPendingDecisions(deps).length + listHymnStates(deps).length
   if (n > 0 && isWinAlive(win)) win.webContents.send('contrib:decisions', n)
 }
 
@@ -1407,6 +1407,13 @@ app.whenReady().then(() => {
   }
 
   ipcMain.handle('contrib:decisions', () => withContribDeps(listPendingDecisions, []))
+  // Imnuri despre care avem ceva de spus: varianta oficială mai nouă pe care n-am
+  // pus-o peste a lor, sau varianta lor pe care am înlocuit-o pentru că textul
+  // oficial era greșit.
+  ipcMain.handle('contrib:hymn-states', () => withContribDeps(listHymnStates, []))
+  ipcMain.handle('contrib:apply-hymn-state',
+    (_e, key: string, alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu') =>
+      withContribDeps(d => applyHymnState(d, key, alegere), { ok: false, error: 'Baza oficială lipsește.' }))
   ipcMain.handle('contrib:resolve-decision',
     (_e, hash: string, alegere: 'pastrat' | 'revenit' | 'sters') =>
       withContribDeps(d => resolveDecision(d, hash, alegere), { ok: false, error: 'Baza oficială lipsește.' }))

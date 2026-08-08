@@ -42,6 +42,10 @@ interface ContribSettings extends HangarSettings {
   // Fără asta, corectura noastră arată exact ca o modificare făcută de el și ne-o
   // trimite înapoi ca propunere (s-a întâmplat: 10 din 106 propuneri erau ale noastre).
   otaApplied?: Record<string, string>;
+  // corectură oficială nepusă, pentru că imnul e modificat de biserică
+  pendingOfficial?: Record<string, PendingOfficial>;
+  // textul bisericii, înlocuit de o corectură marcată drept „textul oficial era greșit"
+  forceReplaced?: Record<string, ReplacedText>;
   // hash-ul propunerii -> ce s-a hotărât cu ea și ce a ales utilizatorul mai departe
   decisions?: Record<string, StoredDecision>;
 }
@@ -53,6 +57,8 @@ export interface ContribDeps extends HangarDeps {
 }
 
 interface SectionRow { type: 'strofa' | 'refren'; text: string }
+export interface PendingOfficial { seq: number; title: string; sections: SectionRow[]; ts: string }
+export interface ReplacedText { title: string; sections: SectionRow[]; at: string }
 interface HymnContent { title: string; sections: SectionRow[] }
 
 // ── Helpers (aceeași semantică precum db.ts) ─────────────────────────────────
@@ -93,6 +99,35 @@ function textHash(c: HymnContent): string {
     sections: c.sections.map(s => ({ t: s.type, x: nfc(s.text) })),
   });
   return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+/**
+ * Amprentele textului din baza livrată cu aplicația, pe „categorie|număr".
+ *
+ * E referința față de care spunem dacă biserica a umblat la un imn. Se citește doar
+ * când chiar avem corecturi de aplicat, deci nu la fiecare pornire.
+ */
+function seedTextHashes(seedDbPath: string): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!fs.existsSync(seedDbPath)) return out;
+  const seed = new Database(seedDbPath, { readonly: true });
+  try {
+    const cats = new Map<number, string>(
+      (seed.prepare('SELECT id, name FROM categories').all() as { id: number; name: string }[])
+        .map(c => [c.id, c.name]));
+    for (const h of seed.prepare('SELECT id, number, title, category_id FROM hymns WHERE category_id IS NOT NULL').all() as
+      { id: number; number: string; title: string; category_id: number }[]) {
+      const cat = cats.get(h.category_id);
+      if (!cat) continue;
+      const sections = seed.prepare(
+        'SELECT type, text FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
+      ).all(h.id) as SectionRow[];
+      out.set(`${cat}|${normalizeHymnNumber(h.number)}`, textHash({ title: h.title, sections }));
+    }
+  } finally {
+    seed.close();
+  }
+  return out;
 }
 
 async function fetchWithTimeout(url: string): Promise<Response | null> {
@@ -165,11 +200,19 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
   let skipped = 0;
   // Ce text devine „oficial" la el, ca să nu-l luăm mai târziu drept modificare a lui.
   const officialNow: Record<string, string> = { ...(settings.otaApplied ?? {}) };
+  // Corecturi pe care NU le-am aplicat, pentru că imnul e al lui — le ține ca să le
+  // poată vedea și adopta când vrea.
+  const official: Record<string, PendingOfficial> = { ...(settings.pendingOfficial ?? {}) };
+  // Variante ale lui pe care le-am înlocuit forțat, ca să le poată pune la loc.
+  const replaced: Record<string, ReplacedText> = { ...(settings.forceReplaced ?? {}) };
+  // Amprentele bazei livrate cu aplicația — referința pentru „a umblat la imn?".
+  const seedHashes = seedTextHashes(deps.seedDbPath);
   const tx = db.transaction(() => {
     for (const entry of fresh) {
       const cat = db.prepare('SELECT id FROM categories WHERE name = ?').get(entry.category) as { id: number } | undefined;
       if (!cat) { skipped++; continue; }
       const number = normalizeHymnNumber(String(entry.number));
+      const key = `${entry.category}|${number}`;
       const ts = entry.ts || new Date().toISOString();
       const sections = entry.sections.filter(s => s && (s.type === 'strofa' || s.type === 'refren') && s.text);
       if (sections.length === 0) { skipped++; continue; }
@@ -200,11 +243,34 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
         continue;
       }
 
-      if (!entry.force) {
-        // neforțat: modificările PROPRII ale utilizatorului (mai noi decât corectura) rămân
-        const userNewest = [user.updated_at || '', ...userSections.map(s => s.updated_at || '')]
-          .reduce((a, b) => (a > b ? a : b), '');
-        if (userNewest > ts) { skipped++; continue; }
+      // A umblat biserica la imnul ăsta?
+      //
+      // NU după data ultimei atingeri — aia era o loterie: cine își adaptase imnul
+      // acum doi ani îl pierdea, cine îl atinsese din greșeală săptămâna trecută îl
+      // păstra, fără ca cineva să fi hotărât ceva. Ci după TEXT: comparăm ce are cu
+      // ce i-am dat noi ultima oară (corectura precedentă, dacă a fost, altfel baza
+      // livrată cu aplicația).
+      const localHash = textHash({ title: user.title, sections: userSections });
+      const referinta = officialNow[key] ?? seedHashes.get(key);
+      const alLui = referinta !== undefined && localHash !== referinta;
+
+      if (alLui && !entry.force) {
+        // Varianta lui rămâne. Dar nu o îngropăm: reținem textul oficial, ca să-l
+        // poată vedea și adopta oricând. Fără asta, corectura ar fi pierdută pentru
+        // el pentru totdeauna — seq-ul merge înainte oricum.
+        official[key] = { seq: entry.seq, title: entry.title, sections, ts };
+        skipped++;
+        continue;
+      }
+
+      if (alLui && entry.force) {
+        // Îi înlocuim varianta pentru că textul oficial era greșit. Îi păstrăm textul
+        // și îi spunem — nimic nu dispare în tăcere.
+        replaced[key] = {
+          title: user.title,
+          sections: userSections.map(s => ({ type: s.type, text: s.text })),
+          at: new Date().toISOString(),
+        };
       }
 
       db.prepare('UPDATE hymns SET title = ?, search_text = ?, updated_at = ? WHERE id = ?')
@@ -213,7 +279,8 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
       sections.forEach((s, i) => db.prepare(
         'INSERT INTO hymn_sections (hymn_id, order_index, type, text, updated_at) VALUES (?, ?, ?, ?, ?)'
       ).run(user.id, i, s.type, s.text, ts));
-      officialNow[`${entry.category}|${number}`] = textHash({ title: entry.title, sections });
+      officialNow[key] = textHash({ title: entry.title, sections });
+      delete official[key];   // varianta oficială a ajuns la el, n-o mai ținem deoparte
       applied++;
     }
   });
@@ -225,6 +292,8 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
     correctionsLastSeq: fresh[fresh.length - 1].seq,
     correctionsLastCheckAt: new Date().toISOString(),
     otaApplied: officialNow,
+    pendingOfficial: official,
+    forceReplaced: replaced,
   });
   deps.log(`[OTA] corecturi: ${applied} aplicate, ${skipped} sărite (seq → ${fresh[fresh.length - 1].seq})`);
 }
@@ -440,6 +509,98 @@ export async function refreshProposalDecisions(deps: ContribDeps): Promise<numbe
   deps.patchSettings({ decisions: known });
   if (noi > 0) deps.log(`[Contrib] ${noi} verdicte noi de la autori`);
   return noi;
+}
+
+/**
+ * Starea imnurilor despre care avem ceva de spus. Doar astea — o comparație a
+ * întregii baze la fiecare randare ar fi degeaba: pentru restul imnurilor nu există
+ * nimic de comunicat.
+ */
+export interface HymnState {
+  key: string;
+  category: string;
+  number: string;
+  /**
+   * `oficial-nou` — biserica are varianta ei, iar noi am publicat între timp una
+   *   oficială pe care n-am aplicat-o peste a ei.
+   * `inlocuit`    — i-am înlocuit varianta printr-o corectură marcată „textul
+   *   oficial era greșit"; îi putem pune la loc textul.
+   */
+  fel: 'oficial-nou' | 'inlocuit';
+  titlu: string;
+  cand: string;
+}
+
+export function listHymnStates(deps: ContribDeps): HymnState[] {
+  const s = deps.getSettings();
+  const out: HymnState[] = [];
+  const desparte = (key: string) => ({
+    category: key.slice(0, key.lastIndexOf('|')),
+    number: key.slice(key.lastIndexOf('|') + 1),
+  });
+  for (const [key, v] of Object.entries(s.pendingOfficial ?? {})) {
+    out.push({ key, ...desparte(key), fel: 'oficial-nou', titlu: v.title, cand: v.ts });
+  }
+  for (const [key, v] of Object.entries(s.forceReplaced ?? {})) {
+    out.push({ key, ...desparte(key), fel: 'inlocuit', titlu: v.title, cand: v.at });
+  }
+  return out;
+}
+
+/**
+ * Trece imnul pe varianta oficială pe care o țineam deoparte (sau, la unul înlocuit
+ * forțat, pune la loc varianta bisericii). Ambele sunt reversibile: textul celălalt
+ * rămâne păstrat până când omul alege definitiv.
+ */
+export function applyHymnState(
+  deps: ContribDeps, key: string, alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu',
+): { ok: boolean; error?: string } {
+  const s = deps.getSettings();
+  const pending = { ...(s.pendingOfficial ?? {}) };
+  const replaced = { ...(s.forceReplaced ?? {}) };
+  const otaApplied = { ...(s.otaApplied ?? {}) };
+  const category = key.slice(0, key.lastIndexOf('|'));
+  const number = key.slice(key.lastIndexOf('|') + 1);
+
+  const db = getDb();
+  const row = db.prepare(`SELECT h.id FROM hymns h JOIN categories c ON c.id = h.category_id
+    WHERE c.name = ? AND h.number = ? LIMIT 1`).get(category, number) as { id: number } | undefined;
+
+  const scrie = (titlu: string, sections: SectionRow[], ts: string) => {
+    if (!row) return false;
+    const searchText = normalizeSearchText(`${number} ${titlu} ${sections.map(x => x.text).join(' ')}`);
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE hymns SET title = ?, search_text = ?, updated_at = ? WHERE id = ?')
+        .run(titlu, searchText, ts, row.id);
+      db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(row.id);
+      sections.forEach((x, i) => db.prepare(
+        'INSERT INTO hymn_sections (hymn_id, order_index, type, text, updated_at) VALUES (?,?,?,?,?)'
+      ).run(row.id, i, x.type, x.text, ts));
+    });
+    tx();
+    return true;
+  };
+
+  if (alegere === 'adopta-oficial') {
+    const v = pending[key];
+    if (!v) return { ok: false, error: 'Nu mai există o variantă oficială de pus.' };
+    if (!scrie(v.title, v.sections, v.ts)) return { ok: false, error: 'Imnul nu mai există.' };
+    otaApplied[key] = textHash({ title: v.title, sections: v.sections });
+    delete pending[key];
+  } else if (alegere === 'pune-la-loc-al-meu') {
+    const v = replaced[key];
+    if (!v) return { ok: false, error: 'Nu mai există varianta ta păstrată.' };
+    if (!scrie(v.title, v.sections, new Date().toISOString())) return { ok: false, error: 'Imnul nu mai există.' };
+    delete replaced[key];
+  } else {
+    // Rămâne varianta lui. Nu-l mai întrebăm despre corectura asta.
+    delete pending[key];
+    delete replaced[key];
+  }
+
+  deps.patchSettings({ pendingOfficial: pending, forceReplaced: replaced, otaApplied });
+  deps.log(`[Contrib] ${category} #${number}: ${alegere}`);
+  return { ok: true };
 }
 
 /** Ce așteaptă un răspuns din partea utilizatorului. */

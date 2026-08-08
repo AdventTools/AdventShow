@@ -89,6 +89,11 @@ contextBridge.exposeInMainWorld('electron', {
     resolveDecision: (hash: string, alegere: 'pastrat' | 'revenit' | 'sters') =>
       ipcRenderer.invoke('contrib:resolve-decision', hash, alegere) as
         Promise<{ ok: boolean; error?: string }>,
+    // imnuri cu variantă oficială mai nouă, sau cu varianta proprie înlocuită
+    hymnStates: () => ipcRenderer.invoke('contrib:hymn-states'),
+    applyHymnState: (key: string, alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu') =>
+      ipcRenderer.invoke('contrib:apply-hymn-state', key, alegere) as
+        Promise<{ ok: boolean; error?: string }>,
     onDecisions: (cb: (n: number) => void) =>
       ipcRenderer.on('contrib:decisions', (_e, n) => cb(n)),
     offDecisions: () => ipcRenderer.removeAllListeners('contrib:decisions'),

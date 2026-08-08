@@ -273,6 +273,9 @@ export interface IElectronAPI {
     refreshDecisions: () => Promise<number>;
     resolveDecision: (hash: string, alegere: 'pastrat' | 'revenit' | 'sters')
       => Promise<{ ok: boolean; error?: string }>;
+    hymnStates: () => Promise<HymnState[]>;
+    applyHymnState: (key: string, alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu')
+      => Promise<{ ok: boolean; error?: string }>;
     onDecisions: (cb: (n: number) => void) => void;
     offDecisions: () => void;
   };
@@ -439,4 +442,18 @@ export interface PendingDecision {
   note: string;
   publishedAs?: { category: string; number: string };
   fel: 'corectura' | 'imn';
+}
+
+/**
+ * Un imn despre care aplicația are ceva de spus: fie am publicat o variantă oficială
+ * mai nouă pe care n-am pus-o peste a bisericii, fie i-am înlocuit varianta pentru că
+ * textul oficial era greșit.
+ */
+export interface HymnState {
+  key: string;
+  category: string;
+  number: string;
+  fel: 'oficial-nou' | 'inlocuit';
+  titlu: string;
+  cand: string;
 }
