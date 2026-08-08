@@ -2369,6 +2369,7 @@
 .display-picker {
     display: flex;
     flex-direction: column;
+    align-items: flex-start;
     gap: 8px;
 }
 
@@ -3440,6 +3441,49 @@
 }
 .sgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 720px) { .sgrid2 { grid-template-columns: 1fr; } }
+
+/* Mai multe reglaje inrudite, unul sub altul, in acelasi bloc. */
+.sstack { display: flex; flex-direction: column; gap: 14px; }
+
+/* Butoane alaturate. Clasa era folosita in mai multe locuri (si in fereastra de
+   raspunsuri), dar nu fusese definita niciodata, asa ca butoanele stateau unul
+   sub altul. */
+.row { display: flex; align-items: center; gap: 8px; }
+
+/* ── Meniul butonului „+" (imn scris de mana / adus din PowerPoint) ──────────── */
+.add-wrap { position: relative; display: inline-flex; }
+.add-menu-backdrop { position: fixed; inset: 0; z-index: 40; }
+.add-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  min-width: 232px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated, #1b1b26);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.add-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.add-menu button:hover { background: var(--bg-hover); }
+
+/* .settings-content are deja spatiu intre copii; fara asta blocurile s-ar
+   departa de doua ori. */
+.settings-content > .sgroup { margin-bottom: 0; }
 
 /* Contorul de lângă „Răspunsuri la ce ai trimis". */
 .pill-count {
