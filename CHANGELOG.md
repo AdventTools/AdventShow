@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.4.3 (09 August 2026)
+
+### Modificări
+- Reparație la felul în care ajung corecturile de la autori: un imn pe care l-ai scris tu nu mai poate fi înlocuit de o intrare oficială care nimerește același număr — textul oficial se ține deoparte și alegi tu, iar dacă apare o colecție nouă, aplicația o creează în loc să sară peste ea în tăcere. Setările nu mai sunt o listă lungă prin care derulezi: fiecare reglaj stă într-un bloc cu titlu și o explicație scurtă, la fundal vezi doar ce ai ales, verificarea actualizărilor a trecut lângă alegerea canalului, iar copia de siguranță în Administrare. Importul din PowerPoint s-a mutat la butonul + din capul ferestrei, de unde alegi un fișier, mai multe sau un folder întreg. Nu e doar o mutare: importat din Setări, imnul intra în baza de date fără categorie și nu apărea în nicio listă, nici la «Toate». Acum intră în «Imnurile mele», care se și deschide ca să-l vezi, iar imnurile pierdute până acum sunt aduse acolo la prima pornire.
+
+---
+
 ## v1.4.2 (08 August 2026)
 
 ### Modificări
