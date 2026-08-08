@@ -384,8 +384,12 @@ if [ ! -f "$STATE/hangar.done" ]; then
   retry "descarc hub-push.mjs" 20 10 -- curl -sfLo "$PUSHER" https://hangar.it4all.ro/hub/tools/hub-push.mjs \
     || fail "nu pot lua hub-push.mjs de pe hangar"
 
+  # --url explicit: uploaderul servit de hub are încă în el adresa de dinainte de
+  # mutarea pe hangar.it4all.ro, iar apex-ul nu mai are /hub — postarea acolo se
+  # întoarce cu pagina de eroare a panoului, nu cu JSON.
   push_hangar() {
     HUB_TOKEN="$ADVENTSHOW_HUB_TOKEN" node "$PUSHER" \
+      --url https://hangar.it4all.ro/hub/upload.php \
       --project adventshow --version "$NEW_VERSION" "${UPLOAD[@]}"
   }
   retry "upload în hangar" 60 20 -- push_hangar || fail "upload în hangar"
