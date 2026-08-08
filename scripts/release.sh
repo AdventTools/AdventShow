@@ -131,9 +131,11 @@ CANDIDATE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 
 STATE_ROOT="scripts/.release-state"
 mkdir -p "$STATE_ROOT"
-# reluare: DOAR dacă package.json e la o versiune cu release început și NETERMINAT
-# (un release terminat are ci.done — atunci pornim un release NOU cu bump)
-if [ -f "$STATE_ROOT/${OLD_VERSION}/bump.done" ] && [ ! -f "$STATE_ROOT/${OLD_VERSION}/ci.done" ]; then
+# reluare: DOAR dacă package.json e la o versiune cu release început și NETERMINAT.
+# Marcajul de „terminat" e cel scris de ULTIMUL pas — `gh.done`. (A fost `ci.done`
+# până când pașii 10-11 au devenit „upload în hangar" + „tag pe GitHub"; condiția
+# rămăsese pe numele vechi, deci orice release nou reintra în cel precedent.)
+if [ -f "$STATE_ROOT/${OLD_VERSION}/bump.done" ] && [ ! -f "$STATE_ROOT/${OLD_VERSION}/gh.done" ]; then
     NEW_VERSION="$OLD_VERSION"
 else
     NEW_VERSION="$CANDIDATE_VERSION"
