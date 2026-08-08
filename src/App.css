@@ -3498,3 +3498,15 @@
   font-size: 12px;
   line-height: 1.55;
 }
+
+/* Antet: răspunsurile autorilor. Apare doar când chiar așteaptă o alegere, ca să nu
+   devină încă o iconiță pe care ochiul o ignoră. */
+.header-btn-answers {
+  width: auto;
+  gap: 6px;
+  padding: 0 12px;
+  background: rgba(180, 83, 9, 0.18);
+  border-color: rgba(251, 146, 60, 0.35);
+  color: #fed7aa;
+}
+.header-btn-answers:hover { background: rgba(180, 83, 9, 0.3); }
