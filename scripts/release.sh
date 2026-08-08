@@ -305,6 +305,10 @@ if [ ! -f "$STATE/winpull.done" ]; then
   # fără el fiecare biserică descarcă 113 MB întregi la fiecare versiune.
   retry "scp blockmap exe" 20 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/${EXE_NAME}.blockmap" "${RELEASE_DIR}/${EXE_NAME}.blockmap" \
     || log "  (blockmap exe lipsă — update-ul diferențial nu va funcționa pe Windows)"
+  # latest.yml nu se urcă în hangar (își generează singur feed-urile), dar puntea de
+  # pe GitHub îl cere: instalările de sub 1.4.0 de acolo își iau update-urile.
+  retry "scp latest.yml" 30 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/latest.yml" "${RELEASE_DIR}/latest.yml" \
+    || fail "scp latest.yml — fără el puntea GitHub nu se poate publica"
   SIZE_BYTES=$(stat -f%z "$EXE")
   [ "$SIZE_BYTES" -gt 50000000 ] || { rm -f "$EXE"; fail "EXE pare incomplet ($SIZE_BYTES bytes)"; }
   touch "$STATE/winpull.done"
