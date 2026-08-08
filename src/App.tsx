@@ -63,6 +63,7 @@ import type {
     Category,
     Hymn,
     HymnSection,
+    PendingDecision,
     Presentation,
     PresShape,
     ProjectionTextData,
@@ -1043,12 +1044,15 @@ function App() {
         }
     }, [selectedHymnId, clearPreview, loadHymns, loadCategories, requirePassword]);
 
-    // ── Adaugă imn (permanent pe tabul Imnuri; imnurile noi merg la „Imnuri Speciale") ──
+    // ── Adaugă imn ──
+    // Imnurile noi merg în „Imnurile mele", colecția utilizatorului. „Imnuri Speciale"
+    // e colecția oficială, numerotată de autori: dacă ar scrie direct acolo, un imn
+    // oficial cu același număr i l-ar înlocui la prima actualizare.
     const openAddHymn = useCallback(() => {
-        const special = categories.find(c => c.name === 'Imnuri Speciale');
-        const specialId = special?.id;
+        const mine = categories.find(c => c.name === 'Imnurile mele');
+        const specialId = mine?.id;
         if (specialId !== undefined && activeCategoryId !== specialId) {
-            if (!confirm('Imnurile noi se adaugă la «Imnuri Speciale». Continui?')) return;
+            if (!confirm('Imnurile pe care le adaugi tu se strâng în «Imnurile mele». Continui?')) return;
             setActiveCategoryId(specialId);
         }
         setHymnEditor({
@@ -2050,6 +2054,14 @@ function HymnList({
             <div className="content-status">
                 {hymns.length} {hymns.length === 1 ? 'imn' : 'imnuri'} în <strong>{catName}</strong>
             </div>
+            {catName === 'Imnurile mele' && (
+                <div className="mine-notice">
+                    Aici stau imnurile adăugate de tine. Nimic din colecțiile oficiale nu le
+                    atinge vreodată. Ce scrii aici ajunge și la autorii AdventShow, care pot
+                    alege să adauge imnul în colecția oficială „Imnuri Speciale" — vei fi
+                    anunțat dacă se întâmplă.
+                </div>
+            )}
             {hymns.length === 0 ? (
                 <div className="empty-state">
                     <Search className="icon-lg opacity-40" />
@@ -3596,6 +3608,105 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Ce s-a hotărât cu ce ai trimis
+//
+// Până la 1.4.0, o corectură trimisă dispărea fără urmă: omul nu afla niciodată
+// dacă a intrat sau nu, iar dacă o refuzam el rămânea cu varianta lui pentru
+// totdeauna, fără să știe. Aici își vede răspunsul și alege ce se întâmplă.
+// ═════════════════════════════════════════════════════════════════════════════
+
+function DecisionsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+    const [items, setItems] = useState<PendingDecision[]>([]);
+    const [busy, setBusy] = useState<string | null>(null);
+    const [error, setError] = useState('');
+
+    const load = useCallback(() => {
+        window.electron.contrib.decisions().then(setItems).catch(() => setItems([]));
+    }, []);
+    useEffect(() => { load(); }, [load]);
+
+    const alege = async (hash: string, alegere: 'pastrat' | 'revenit' | 'sters') => {
+        setBusy(hash);
+        setError('');
+        const res = await window.electron.contrib.resolveDecision(hash, alegere);
+        setBusy(null);
+        if (!res.ok) { setError(res.error ?? 'Nu am putut aplica alegerea.'); return; }
+        load();
+        onChanged();
+    };
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="modal-dialog">
+                <div className="modal-header">
+                    <h3>Răspunsuri la ce ai trimis</h3>
+                    <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
+                </div>
+                <div className="modal-body">
+                    {items.length === 0 && (
+                        <div className="text-white/50 text-sm py-6 text-center">
+                            Nu așteaptă nimic un răspuns din partea ta.
+                        </div>
+                    )}
+                    {error && <div className="editor-error">{error}</div>}
+
+                    {items.map(d => (
+                        <div key={d.hash} className="decision-card">
+                            <div className="decision-head">
+                                <strong>{d.category} #{d.number} — {d.title}</strong>
+                                <span className={`badge-decision ${d.status === 'accepted' ? 'ok' : 'no'}`}>
+                                    {d.status === 'accepted' ? 'acceptat' : 'nepreluat'}
+                                </span>
+                            </div>
+
+                            {d.status === 'accepted' && d.publishedAs ? (
+                                <>
+                                    <p className="decision-text">
+                                        Imnul tău a intrat în colecția oficială, la <strong>
+                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>. Îl ai acum de
+                                        două ori: o dată acolo și o dată în „{d.category}".
+                                    </p>
+                                    <div className="row">
+                                        <button className="btn-action" disabled={busy === d.hash}
+                                            onClick={() => alege(d.hash, 'sters')}>
+                                            Șterge copia mea
+                                        </button>
+                                        <button className="btn-clear" disabled={busy === d.hash}
+                                            onClick={() => alege(d.hash, 'pastrat')}>
+                                            Le păstrez pe amândouă
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="decision-text">
+                                        {d.note || 'Modificarea ta nu a fost preluată în versiunea oficială.'}
+                                    </p>
+                                    <div className="row">
+                                        <button className="btn-action" disabled={busy === d.hash}
+                                            onClick={() => alege(d.hash, 'revenit')}>
+                                            Revino la varianta oficială
+                                        </button>
+                                        <button className="btn-clear" disabled={busy === d.hash}
+                                            onClick={() => alege(d.hash, 'pastrat')}>
+                                            Păstrez varianta mea
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ))}
+
+                    <p className="text-white/40 text-xs mt-3">
+                        Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Feedback — o problemă sau o sugestie, trimisă direct autorilor
 //
 // Regula, învățată din ghidul hangar: dacă trimiterea eșuează, dialogul NU se
@@ -3954,11 +4065,14 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     const [updateChannelValue, setUpdateChannelValue] = useState<'stable' | 'beta'>('stable');
     const [feedbackKind, setFeedbackKind] = useState<'bug' | 'suggestion' | null>(null);
     const [pendingFeedback, setPendingFeedback] = useState(0);
+    const [decisionsOpen, setDecisionsOpen] = useState(false);
+    const [pendingDecisions, setPendingDecisions] = useState(0);
 
     useEffect(() => {
         window.electron.settings.get().then(s => setSettings(s));
         window.electron.update.getChannel().then(setUpdateChannelValue).catch(() => { });
         window.electron.feedback.pending().then(setPendingFeedback).catch(() => { });
+        window.electron.contrib.decisions().then(d => setPendingDecisions(d.length)).catch(() => { });
     }, []);
 
     // Close on Escape
@@ -4208,95 +4322,106 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                     {activeTab === 'admin' && (
                         <div className="settings-content">
-                            <div className="field">
-                                <label>Biserica</label>
-                                <input
-                                    type="text"
-                                    className="timer-text-input"
-                                    placeholder="ex: Biserica Adventistă Speranța"
-                                    value={settings.churchName ?? ''}
-                                    onChange={e => saveSettings({ churchName: e.target.value })}
-                                    onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
-                                />
-                            </div>
-                            <div className="field">
-                                <label>Localitatea</label>
-                                <input
-                                    type="text"
-                                    className="timer-text-input"
-                                    placeholder="ex: Cluj-Napoca"
-                                    value={settings.churchCity ?? ''}
-                                    onChange={e => saveSettings({ churchCity: e.target.value })}
-                                    onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
-                                />
-                            </div>
-                            <p className="text-white/40 text-xs mb-3">
-                                Se trimit autorilor pentru evidența instalărilor și pentru ajutor
-                                la recuperarea parolei. Modificările se retrimit automat.
-                            </p>
-                            <div className="border-t border-white/10 w-full mb-3" />
 
-                            <div className="field">
-                                <label>Canal de actualizare</label>
-                                <select
-                                    className="timer-text-input"
-                                    value={updateChannelValue}
-                                    onChange={async e => {
-                                        const ch = e.target.value as 'stable' | 'beta';
-                                        setUpdateChannelValue(ch);
-                                        await window.electron.update.setChannel(ch);
-                                        showToast(ch === 'beta'
-                                            ? 'Veți primi versiunile de test, înaintea celorlalți'
-                                            : 'Veți primi doar versiunile stabile');
-                                    }}
-                                >
-                                    <option value="stable">Stabil — recomandat</option>
-                                    <option value="beta">Beta — versiuni de test, înaintea tuturor</option>
-                                </select>
-                                <p className="text-white/40 text-xs mt-2">
-                                    Pe „beta" primiți versiunile noi cu câteva zile mai devreme, ca să
-                                    le încercați înainte să ajungă la toate bisericile. Dacă vă
-                                    întoarceți la „stabil", următoarea actualizare vă readuce pe
-                                    versiunea stabilă curentă.
-                                </p>
-                            </div>
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Biserica</h4>
+                                    <p>Se trimit autorilor pentru evidența instalărilor și ca să te poată
+                                        ajuta dacă uiți parola. Modificările pleacă singure.</p>
+                                </div>
+                                <div className="sgrid2">
+                                    <div className="field">
+                                        <label>Numele bisericii</label>
+                                        <input
+                                            type="text"
+                                            className="timer-text-input"
+                                            placeholder="ex: Biserica Adventistă Speranța"
+                                            value={settings.churchName ?? ''}
+                                            onChange={e => saveSettings({ churchName: e.target.value })}
+                                            onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
+                                        />
+                                    </div>
+                                    <div className="field">
+                                        <label>Localitatea</label>
+                                        <input
+                                            type="text"
+                                            className="timer-text-input"
+                                            placeholder="ex: Cluj-Napoca"
+                                            value={settings.churchCity ?? ''}
+                                            onChange={e => saveSettings({ churchCity: e.target.value })}
+                                            onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
+                                        />
+                                    </div>
+                                </div>
+                            </section>
 
-                            <div className="border-t border-white/10 w-full mb-3" />
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Actualizări</h4>
+                                    <p>Pe „beta" primești versiunile noi cu câteva zile înaintea celorlalți.
+                                        Dacă te întorci la „stabil", următoarea actualizare te readuce pe
+                                        versiunea stabilă curentă.</p>
+                                </div>
+                                <div className="field" style={{ maxWidth: 380 }}>
+                                    <select
+                                        className="timer-text-input"
+                                        value={updateChannelValue}
+                                        onChange={async e => {
+                                            const ch = e.target.value as 'stable' | 'beta';
+                                            setUpdateChannelValue(ch);
+                                            await window.electron.update.setChannel(ch);
+                                            showToast(ch === 'beta'
+                                                ? 'Vei primi versiunile de test, înaintea celorlalți'
+                                                : 'Vei primi doar versiunile stabile');
+                                        }}
+                                    >
+                                        <option value="stable">Stabil — recomandat</option>
+                                        <option value="beta">Beta — versiuni de test</option>
+                                    </select>
+                                </div>
+                            </section>
 
-                            <div className="field">
-                                <label>Trimite-ne un mesaj</label>
-                                <p className="text-white/40 text-xs mb-2">
-                                    Ajunge direct la autori, împreună cu versiunea și platforma.
-                                    {pendingFeedback > 0 && (
-                                        <> {pendingFeedback} {pendingFeedback === 1 ? 'mesaj așteaptă' : 'mesaje așteaptă'} să
-                                        plece (nu era internet) — se trimit automat.</>
-                                    )}
-                                </p>
-                                <div className="flex gap-2">
-                                    <button className="btn-action" onClick={() => setFeedbackKind('bug')}>
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Legătura cu autorii</h4>
+                                    <p>Corecturile tale la imnuri pleacă singure, după o săptămână de la
+                                        ultima modificare. Aici vezi ce s-a hotărât cu ele.</p>
+                                </div>
+                                <div className="row" style={{ flexWrap: 'wrap' }}>
+                                    <button className="btn-action" onClick={() => setDecisionsOpen(true)}>
+                                        Răspunsuri la ce ai trimis
+                                        {pendingDecisions > 0 && <span className="pill-count">{pendingDecisions}</span>}
+                                    </button>
+                                    <button className="btn-clear" onClick={() => setFeedbackKind('bug')}>
                                         Raportează o problemă
                                     </button>
                                     <button className="btn-clear" onClick={() => setFeedbackKind('suggestion')}>
                                         Sugerează o îmbunătățire
                                     </button>
                                 </div>
-                            </div>
+                                {pendingFeedback > 0 && (
+                                    <p className="text-white/40 text-xs mt-2">
+                                        {pendingFeedback} {pendingFeedback === 1 ? 'mesaj așteaptă' : 'mesaje așteaptă'} să
+                                        plece — nu era internet când le-ai scris. Se trimit automat.
+                                    </p>
+                                )}
+                            </section>
 
-                            <div className="border-t border-white/10 w-full mb-3" />
-                            <div className="field">
-                                <label>Parola de administrare</label>
-                                <p className="text-white/40 text-xs mb-2">
-                                    Protejează modificarea imnurilor, importurile și ștergerea șabloanelor.
-                                </p>
-                                <div className="flex gap-2">
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Parola de administrare</h4>
+                                    <p>Protejează modificarea imnurilor, importurile și ștergerea șabloanelor.</p>
+                                </div>
+                                <div className="row">
                                     <button className="btn-action" onClick={onChangePassword}>
                                         <Lock className="icon-xs" /> Schimbă parola
                                     </button>
                                     <button className="btn-clear" onClick={onForgotPassword}>
-                                        Am uitat parola...
+                                        Am uitat parola…
                                     </button>
                                 </div>
-                            </div>
+                            </section>
+
                         </div>
                     )}
 
@@ -4409,6 +4534,17 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                 </div>
             </div>
+
+            {decisionsOpen && (
+                <DecisionsModal
+                    onClose={() => setDecisionsOpen(false)}
+                    onChanged={() => {
+                        window.electron.contrib.decisions()
+                            .then(d => setPendingDecisions(d.length)).catch(() => { });
+                        onHymnsChanged();
+                    }}
+                />
+            )}
 
             {feedbackKind && (
                 <FeedbackModal

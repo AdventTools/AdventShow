@@ -83,6 +83,15 @@ contextBridge.exposeInMainWorld('electron', {
 
   contrib: {
     status: () => ipcRenderer.invoke('contrib:status'),
+    // ce s-a hotărât cu propunerile trimise și ce alege omul mai departe
+    decisions: () => ipcRenderer.invoke('contrib:decisions'),
+    refreshDecisions: () => ipcRenderer.invoke('contrib:refresh-decisions') as Promise<number>,
+    resolveDecision: (hash: string, alegere: 'pastrat' | 'revenit' | 'sters') =>
+      ipcRenderer.invoke('contrib:resolve-decision', hash, alegere) as
+        Promise<{ ok: boolean; error?: string }>,
+    onDecisions: (cb: (n: number) => void) =>
+      ipcRenderer.on('contrib:decisions', (_e, n) => cb(n)),
+    offDecisions: () => ipcRenderer.removeAllListeners('contrib:decisions'),
   },
 
   registry: {

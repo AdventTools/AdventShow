@@ -3410,3 +3410,91 @@
 }
 .forced-update-bar strong { font-weight: 700; }
 .forced-update-reason { opacity: 0.75; }
+
+/* ── Setări: grupuri ──────────────────────────────────────────────────────────
+   Ecranul de setări creștea prin adăugare, într-o singură coloană lungă. Fiecare
+   subiect stă acum într-un bloc cu titlu și o explicație scurtă, ca ochiul să
+   găsească ce caută fără să citească tot. */
+.sgroup {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.sgroup-head { margin-bottom: 12px; }
+.sgroup-head h4 {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 0 0 4px;
+}
+.sgroup-head p {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0;
+  max-width: 62ch;
+}
+.sgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 720px) { .sgrid2 { grid-template-columns: 1fr; } }
+
+/* Contorul de lângă „Răspunsuri la ce ai trimis". */
+.pill-count {
+  display: inline-block;
+  margin-left: 8px;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #b45309;
+  color: #fff7ed;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ── Răspunsurile autorilor la ce a trimis utilizatorul ──────────────────────── */
+.decision-card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.decision-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.decision-text {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0 0 10px;
+}
+.badge-decision {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge-decision.ok { background: #14532d; color: #bbf7d0; }
+.badge-decision.no { background: #422006; color: #fed7aa; }
+
+/* Explicația de deasupra colecției proprii a utilizatorului. */
+.mine-notice {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-left: 3px solid #6366f1;
+  border-radius: 0 8px 8px 0;
+  background: rgba(99, 102, 241, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  line-height: 1.55;
+}
