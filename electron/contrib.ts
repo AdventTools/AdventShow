@@ -160,6 +160,11 @@ interface CorrectionEntry {
   sections: SectionRow[];
   force?: boolean;            // true = suprascrie indiferent de modificările userului
   ts?: string;                // ISO — momentul publicării
+  // Imn NOU, nu corectură la unul de-al nostru: se pune doar dacă numărul e liber.
+  // La o corectură știm ce înlocuim; la o intrare nouă, numărul poate ține la ei
+  // orice — inclusiv un imn propriu. Bate `force`.
+  only_if_absent?: boolean;
+  onlyIfAbsent?: boolean;
 }
 
 export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
@@ -209,8 +214,18 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
   const seedHashes = seedTextHashes(deps.seedDbPath);
   const tx = db.transaction(() => {
     for (const entry of fresh) {
-      const cat = db.prepare('SELECT id FROM categories WHERE name = ?').get(entry.category) as { id: number } | undefined;
-      if (!cat) { skipped++; continue; }
+      // Colecția lipsește? O facem. Până acum intrarea era sărită în tăcere, iar
+      // seq-ul mergea înainte — deci o colecție nouă publicată de autori s-ar fi
+      // pierdut pentru totdeauna la oricine n-o avea deja.
+      let cat = db.prepare('SELECT id FROM categories WHERE name = ?').get(entry.category) as { id: number } | undefined;
+      if (!cat) {
+        const nume = String(entry.category).trim();
+        if (!nume || nume.length > 60) { skipped++; continue; }
+        db.prepare('INSERT OR IGNORE INTO categories (name, is_builtin) VALUES (?, 1)').run(nume);
+        cat = db.prepare('SELECT id FROM categories WHERE name = ?').get(nume) as { id: number } | undefined;
+        if (!cat) { skipped++; continue; }
+        deps.log(`[OTA] colecție nouă creată: „${nume}"`);
+      }
       const number = normalizeHymnNumber(String(entry.number));
       const key = `${entry.category}|${number}`;
       const ts = entry.ts || new Date().toISOString();
@@ -243,6 +258,15 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
         continue;
       }
 
+      // Intrare nouă pe un număr deja ocupat: nu atingem nimic, nici măcar cu
+      // `force`. Ce e acolo e un ALT imn, nu o versiune mai veche a aceluiași —
+      // îl reținem deoparte, ca omul să vadă despre ce e vorba și să aleagă el.
+      if ((entry.only_if_absent || entry.onlyIfAbsent) === true) {
+        official[key] = { seq: entry.seq, title: entry.title, sections, ts };
+        skipped++;
+        continue;
+      }
+
       // A umblat biserica la imnul ăsta?
       //
       // NU după data ultimei atingeri — aia era o loterie: cine își adaptase imnul
@@ -250,9 +274,15 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
       // păstra, fără ca cineva să fi hotărât ceva. Ci după TEXT: comparăm ce are cu
       // ce i-am dat noi ultima oară (corectura precedentă, dacă a fost, altfel baza
       // livrată cu aplicația).
+      //
+      // Dacă nu avem NICIO referință pentru numărul ăsta — nici în baza livrată, nici
+      // dintr-o corectură de-a noastră — atunci ce e acolo nu vine de la noi, deci e
+      // al lui. Înainte îl socoteam „neatins" și îl suprascriam: exact așa ar fi
+      // dispărut imnul propriu al unei biserici la prima intrare nouă publicată
+      // într-o colecție pe care noi n-o livrasem încă.
       const localHash = textHash({ title: user.title, sections: userSections });
       const referinta = officialNow[key] ?? seedHashes.get(key);
-      const alLui = referinta !== undefined && localHash !== referinta;
+      const alLui = referinta === undefined || localHash !== referinta;
 
       if (alLui && !entry.force) {
         // Varianta lui rămâne. Dar nu o îngropăm: reținem textul oficial, ca să-l
