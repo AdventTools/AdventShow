@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Corecturi al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-08-08T20:17:27+00:00",
+    "generated": "2026-08-08T21:09:43+00:00",
     "entries": [
         {
             "seq": 1,
@@ -47,7 +47,7 @@
             ],
             "force": true,
             "ts": "2026-06-13T05:33:28.000Z",
-            "text_hash": ""
+            "text_hash": "7596d13d48cdb4c1910fd6e773848f46d9640a7ff0efd437f6327643bd4fbb57"
         },
         {
             "seq": 2,
@@ -62,7 +62,7 @@
             ],
             "force": false,
             "ts": "2026-07-12T20:36:41.000Z",
-            "text_hash": ""
+            "text_hash": "083b3e68f2613574e47082ea9809fc7250cc973475073bd52076aed1397fc93c"
         },
         {
             "seq": 3,
@@ -89,7 +89,7 @@
             ],
             "force": false,
             "ts": "2026-07-12T20:36:41.000Z",
-            "text_hash": ""
+            "text_hash": "f7ddc24f5139f873ded2e5b9ff41ab1ef07a18bfe80bc6d5e393b708b0409d8c"
         },
         {
             "seq": 4,
@@ -128,7 +128,7 @@
             ],
             "force": false,
             "ts": "2026-07-12T20:36:41.000Z",
-            "text_hash": ""
+            "text_hash": "02dc8e10d1102ff2d2365245a701f18db25cd29831b732bf78493465e1aaca79"
         },
         {
             "seq": 5,
@@ -167,7 +167,7 @@
             ],
             "force": false,
             "ts": "2026-07-12T21:07:09.000Z",
-            "text_hash": ""
+            "text_hash": "6b2cd5905286145906b29fd46c4d462e56364da6f8601fcfd7c99070bcee4d8e"
         },
         {
             "seq": 6,
