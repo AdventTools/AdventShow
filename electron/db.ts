@@ -206,6 +206,28 @@ export function initDB() {
   migrateCedillaToCommaBelow(db);
   migrateHymn664Variants(db);
   migrateOwnHymnsOutOfSpecial(db);
+  recoverHymnsWithoutCategory(db);
+}
+
+/**
+ * Importul din Setări chema `importPresentations` fără categorie, așa că imnul intra
+ * în baza de date cu `category_id NULL`: exista, dar nu apărea în nicio listă și nici
+ * la „Toate". Importul s-a mutat lângă butonul „+" și trimite mereu o categorie, dar
+ * imnurile deja rătăcite trebuie scoase la lumină. Le aducem în „Imnurile mele".
+ *
+ * Rulează la fiecare pornire — nu are stare de reținut: dacă nu e nimic orfan, nu face
+ * nimic. Așa prinde și un import făcut cu o versiune veche instalată în paralel.
+ */
+function recoverHymnsWithoutCategory(db: ReturnType<typeof getDb>) {
+  const orfane = db.prepare('SELECT COUNT(*) AS n FROM hymns WHERE category_id IS NULL').get() as { n: number };
+  if (!orfane.n) return;
+
+  const mine = db.prepare('SELECT id FROM categories WHERE name = ?').get(MY_HYMNS_CATEGORY) as
+    { id: number } | undefined;
+  if (!mine) return;
+
+  db.prepare('UPDATE hymns SET category_id = ? WHERE category_id IS NULL').run(mine.id);
+  console.log(`[migrare] ${orfane.n} imnuri fără categorie mutate în „${MY_HYMNS_CATEGORY}"`);
 }
 
 /**

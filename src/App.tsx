@@ -351,6 +351,9 @@ function App() {
     // ── Modal state ──
     const [modalOpen, setModalOpen] = useState<string | null>(null);
 
+    // meniul butonului „+" — imn scris de mână sau adus din PowerPoint
+    const [addMenuOpen, setAddMenuOpen] = useState(false);
+
     // ── Video filter state ──
     const [videoFilter, setVideoFilter] = useState<VideoFilter>('all');
 
@@ -1077,6 +1080,35 @@ function App() {
         });
     }, [categories, activeCategoryId]);
 
+    // ── Adu imnuri din PowerPoint ──
+    // Tot aici, lângă „+", nu în Setări: importul din Setări nu punea nicio
+    // categorie, iar imnul intra în baza de date fără să apară în vreo listă.
+    const importaDinPowerPoint = useCallback((deUnde: 'fisiere' | 'folder') => {
+        const mine = categories.find(c => c.name === 'Imnurile mele');
+        if (!mine) { showToast('Nu găsesc colecția «Imnurile mele»'); return; }
+        requirePassword(async () => {
+            let rezultat: { success: number; failed: number; errors: string[] } | null = null;
+            if (deUnde === 'folder') {
+                const folder = await window.electron.dialog.selectFolder();
+                if (!folder) return;
+                showToast('Se importă imnurile…');
+                rezultat = await window.electron.db.importPresentations(folder, mine.id);
+            } else {
+                const fisiere = await window.electron.dialog.selectPresentationFiles();
+                if (!fisiere?.length) return;
+                showToast('Se importă imnurile…');
+                rezultat = await window.electron.db.importPresentationFiles(fisiere, mine.id);
+            }
+            await loadCategories();
+            await loadHymns();
+            setActiveCategoryId(mine.id);
+            const r = rezultat;
+            showToast(r.failed
+                ? `${r.success} imnuri adăugate în «Imnurile mele», ${r.failed} eșuate`
+                : `${r.success} ${r.success === 1 ? 'imn adăugat' : 'imnuri adăugate'} în «Imnurile mele»`);
+        }, deUnde === 'folder' ? 'Import imnuri din folder' : 'Import imnuri din PowerPoint');
+    }, [categories, requirePassword, loadCategories, loadHymns]);
+
     // ── Global keyboard ──
     useEffect(() => {
         const handler = (e: KeyboardEvent) => {
@@ -1503,15 +1535,34 @@ function App() {
                     </>)}
                 </div>
 
-                {/* Add hymn button — permanent pe tabul Imnuri (adaugă la „Imnuri Speciale") */}
+                {/* Adaugă imn — scris de mână sau adus din PowerPoint. Tot ce intră pe
+                    aici ajunge în „Imnurile mele". */}
                 {tab === 'imnuri' && (
-                    <button
-                        className="header-btn add-btn"
-                        onClick={openAddHymn}
-                        title="Adaugă imn"
-                    >
-                        <Plus className="icon-sm" />
-                    </button>
+                    <div className="add-wrap">
+                        <button
+                            className="header-btn add-btn"
+                            onClick={() => setAddMenuOpen(o => !o)}
+                            title="Adaugă imnuri"
+                        >
+                            <Plus className="icon-sm" />
+                        </button>
+                        {addMenuOpen && (
+                            <>
+                                <div className="add-menu-backdrop" onClick={() => setAddMenuOpen(false)} />
+                                <div className="add-menu">
+                                    <button onClick={() => { setAddMenuOpen(false); openAddHymn(); }}>
+                                        Scriu eu un imn nou
+                                    </button>
+                                    <button onClick={() => { setAddMenuOpen(false); importaDinPowerPoint('fisiere'); }}>
+                                        Din fișiere PowerPoint…
+                                    </button>
+                                    <button onClick={() => { setAddMenuOpen(false); importaDinPowerPoint('folder'); }}>
+                                        Dintr-un folder întreg…
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 )}
 
                 {/* Răspunsuri de la autori — apare doar când chiar așteaptă ceva */}
@@ -4156,9 +4207,9 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     onHymnsChanged: () => void;
     onChangePassword: () => void;
     onForgotPassword: () => void;
-    initialTab?: 'projection' | 'import' | 'admin' | 'about' | 'help';
+    initialTab?: 'projection' | 'admin' | 'about' | 'help';
 }) {
-    const [activeTab, setActiveTab] = useState<'projection' | 'import' | 'admin' | 'about' | 'help'>(initialTab ?? 'projection');
+    const [activeTab, setActiveTab] = useState<'projection' | 'admin' | 'about' | 'help'>(initialTab ?? 'projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
     const [updateChannelValue, setUpdateChannelValue] = useState<'stable' | 'beta'>('stable');
@@ -4199,224 +4250,223 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                 </div>
                 <div className="modal-body">
                     <div className="settings-tabs">
-                        {(['projection', 'import', 'admin', 'about', 'help'] as const).map(t => (
+                        {(['projection', 'admin', 'about', 'help'] as const).map(t => (
                             <button
                                 key={t}
                                 className={`stab ${activeTab === t ? 'active' : ''}`}
                                 onClick={() => setActiveTab(t)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'import' ? 'Imnuri — Import / Export' : t === 'admin' ? 'Administrare' : t === 'about' ? 'Despre' : 'Ajutor'}
+                                {t === 'projection' ? 'Proiecție' : t === 'admin' ? 'Administrare' : t === 'about' ? 'Despre' : 'Ajutor'}
                             </button>
                         ))}
                     </div>
 
                     {activeTab === 'projection' && (
                         <div className="settings-content">
-                            <div className="field">
-                                <label>Mărime text interfață (fereastra principală)</label>
-                                <select
-                                    value={String(settings.uiZoom ?? 1)}
-                                    onChange={e => {
-                                        const f = parseFloat(e.target.value);
-                                        saveSettings({ uiZoom: f });
-                                        window.electron.settings.setUiZoom(f);
-                                    }}
-                                >
-                                    <option value="1">100%</option>
-                                    <option value="1.15">115%</option>
-                                    <option value="1.3">130%</option>
-                                    <option value="1.5">150%</option>
-                                </select>
-                                <p className="text-white/40 text-xs mt-1">
-                                    Mărește tot textul și butoanele din fereastra principală. Nu afectează ecranul de proiecție.
-                                </p>
-                            </div>
-                            <div className="field">
-                                <label>Fundal Proiecție</label>
-                                <select
-                                    value={settings.bgType ?? 'color'}
-                                    onChange={e => saveSettings({ bgType: e.target.value as AppSettings['bgType'] })}
-                                >
-                                    <option value="color">Culoare</option>
-                                    <option value="image">Imagine</option>
-                                    <option value="video">Video</option>
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label>Culoare Fundal</label>
-                                <input
-                                    type="color"
-                                    value={settings.bgColor ?? '#000000'}
-                                    onChange={e => saveSettings({ bgColor: e.target.value })}
-                                />
-                            </div>
-                            <div className="field">
-                                <label>Imagine Fundal</label>
-                                <div className="field-row">
-                                    <span className="field-value">{settings.bgImagePath || 'Niciuna'}</span>
-                                    <button className="btn-sm" onClick={async () => {
-                                        const p = await window.electron.dialog.pickMedia('image');
-                                        if (p) saveSettings({ bgImagePath: p });
-                                    }}>Alege...</button>
-                                </div>
-                            </div>
-                            <div className="field">
-                                <label>Video Fundal</label>
-                                <div className="field-row">
-                                    <span className="field-value">{settings.bgVideoPath || 'Niciunul'}</span>
-                                    <button className="btn-sm" onClick={async () => {
-                                        const p = await window.electron.dialog.pickMedia('video');
-                                        if (p) saveSettings({ bgVideoPath: p });
-                                    }}>Alege...</button>
-                                </div>
-                            </div>
-                            <div className="field">
-                                <label>Opacitate: {((settings.bgOpacity ?? 1) * 100).toFixed(0)}%</label>
-                                <input
-                                    type="range" min="0" max="1" step="0.05"
-                                    value={settings.bgOpacity ?? 1}
-                                    onChange={e => saveSettings({ bgOpacity: parseFloat(e.target.value) })}
-                                />
-                            </div>
-                            <div className="field">
-                                <label>Culoare Număr Imn</label>
-                                <div className="field-row">
-                                    <input
-                                        type="color"
-                                        value={settings.hymnNumberColor ?? '#9fb3ff'}
-                                        onChange={e => saveSettings({ hymnNumberColor: e.target.value })}
-                                    />
-                                    <span className="color-preview" style={{ color: settings.hymnNumberColor ?? '#9fb3ff' }}>
-                                        123.
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="field">
-                                <label>Culoare Text Conținut</label>
-                                <div className="field-row">
-                                    <input
-                                        type="color"
-                                        value={settings.contentTextColor ?? '#ffffff'}
-                                        onChange={e => saveSettings({ contentTextColor: e.target.value })}
-                                    />
-                                    <span className="color-preview" style={{ color: settings.contentTextColor ?? '#ffffff' }}>
-                                        Exemplu text
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="field">
-                                <label>Ecran Proiecție</label>
-                                <DisplayPicker settings={settings} onSave={saveSettings} />
-                            </div>
-                            <div className="field">
-                                <label>Mărime Font Proiecție: {((settings.projectionFontSize ?? 1.2) * 100).toFixed(0)}%</label>
-                                <input
-                                    type="range" min="0.6" max="2.0" step="0.05"
-                                    value={settings.projectionFontSize ?? 1.2}
-                                    onChange={e => saveSettings({ projectionFontSize: parseFloat(e.target.value) })}
-                                />
-                            </div>
-                            <AudioOutputPicker settings={settings} onSave={saveSettings} />
-                            <div className="field">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={settings.debugLog ?? false}
-                                        onChange={e => saveSettings({ debugLog: e.target.checked })}
-                                    />
-                                    Jurnal detaliat pentru depanare (debug log)
-                                </label>
-                                <p className="text-white/40 text-xs mt-1">
-                                    Scrie un fișier de log detaliat în folderul aplicației. Util pentru diagnosticarea problemelor cu video și YouTube.
-                                </p>
-                                {settings.debugLog && (
-                                    <button
-                                        className="btn-sm mt-1"
-                                        onClick={() => window.electron.update.openLogFile()}
-                                    >
-                                        Deschide fișierul de log
-                                    </button>
-                                )}
-                            </div>
-                            <DownloadFolderPicker settings={settings} onSave={saveSettings} />
-                        </div>
-                    )}
 
-                    {activeTab === 'import' && (
-                        <div className="settings-content">
-                            <p className="text-white/50 text-sm mb-4">
-                                Importă imnuri din fișiere PowerPoint (.pptx) sau gestionează backup-ul bazei de date cu imnuri.
-                            </p>
-                            <div className="field">
-                                <label>Import imnuri din folder cu fișiere PPTX</label>
-                                <button className="btn-action" onClick={() => adminGate.require(async () => {
-                                    const folder = await window.electron.dialog.selectFolder();
-                                    if (!folder) return;
-                                    setImportStatus('Se importă imnurile...');
-                                    const result = await window.electron.db.importPresentations(folder);
-                                    onCategoriesChanged();
-                                    onHymnsChanged();
-                                    setImportStatus(`Import imnuri: ${result.success} reușite, ${result.failed} eșuate`);
-                                }, 'Import imnuri din folder')}>
-                                    <FolderOpen className="icon-xs" /> Alege folder cu PPTX
-                                </button>
-                            </div>
-                            <div className="field">
-                                <label>Import imnuri din fișiere PPTX individuale</label>
-                                <button className="btn-action" onClick={() => adminGate.require(async () => {
-                                    const files = await window.electron.dialog.selectPresentationFiles();
-                                    if (!files?.length) return;
-                                    setImportStatus('Se importă imnurile...');
-                                    const result = await window.electron.db.importPresentationFiles(files);
-                                    onCategoriesChanged();
-                                    onHymnsChanged();
-                                    setImportStatus(`Import imnuri: ${result.success} reușite, ${result.failed} eșuate`);
-                                }, 'Import imnuri PPT')}>
-                                    <Upload className="icon-xs" /> Alege fișiere PPTX
-                                </button>
-                            </div>
-                            <div className="border-t border-white/10 w-full my-3" />
-                            <div className="field">
-                                <label>Backup imnuri — Export / Import JSON</label>
-                                <p className="text-white/40 text-xs mb-2">
-                                    Exportă toate imnurile într-un fișier JSON pentru backup sau transfer pe alt calculator.
-                                </p>
-                                <div className="field-row">
-                                    <button className="btn-action" onClick={async () => {
-                                        const p = await window.electron.dialog.saveJsonFile('backup-imnuri.json');
-                                        if (p) {
-                                            const r = await window.electron.db.exportJsonBackup(p);
-                                            setImportStatus(`Export reușit: ${r.hymns} imnuri, ${r.sections} secțiuni`);
-                                        }
-                                    }}>
-                                        <Download className="icon-xs" /> Exportă imnuri (JSON)
-                                    </button>
-                                    <button className="btn-action" onClick={() => adminGate.require(async () => {
-                                        const p = await window.electron.dialog.selectJsonFile();
-                                        if (p) {
-                                            await window.electron.db.importJsonBackup(p);
-                                            onCategoriesChanged();
-                                            onHymnsChanged();
-                                            setImportStatus('Import imnuri din JSON reușit!');
-                                        }
-                                    }, 'Import bază de date (JSON)')}>
-                                        <Upload className="icon-xs" /> Importă imnuri (JSON)
-                                    </button>
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Ecranul de proiecție</h4>
+                                    <p>Pe ce ecran iese proiecția și cât de mare e textul pe el.</p>
                                 </div>
-                            </div>
-                            <div className="field">
-                                <label>Export baza de date completă (SQLite)</label>
-                                <button className="btn-action" onClick={async () => {
-                                    const p = await window.electron.dialog.saveFile('hymns-backup.db');
-                                    if (p) {
-                                        await window.electron.db.exportDb(p);
-                                        setImportStatus('Baza de date cu imnuri exportată!');
-                                    }
-                                }}>
-                                    <Download className="icon-xs" /> Export DB
-                                </button>
-                            </div>
-                            {importStatus && <div className="import-msg">{importStatus}</div>}
+                                <div className="sstack">
+                                    <div className="field">
+                                        <label>Ecranul folosit</label>
+                                        <DisplayPicker settings={settings} onSave={saveSettings} />
+                                    </div>
+                                    <div className="field">
+                                        <label>Mărimea textului: {((settings.projectionFontSize ?? 1.2) * 100).toFixed(0)}%</label>
+                                        <input
+                                            type="range" min="0.6" max="2.0" step="0.05"
+                                            value={settings.projectionFontSize ?? 1.2}
+                                            onChange={e => saveSettings({ projectionFontSize: parseFloat(e.target.value) })}
+                                        />
+                                        <p className="text-white/40 text-xs mt-1">
+                                            Dacă o strofă lungă nu încape pe ecran, aplicația micșorează textul
+                                            singură, ca să nu fie nevoie de derulare.
+                                        </p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Fundalul proiecției</h4>
+                                    <p>Ce se vede în spatele textului. Peste imagine sau video se pune automat
+                                        un voal întunecat, ca textul să rămână lizibil.</p>
+                                </div>
+                                <div className="sstack">
+                                    <div className="field" style={{ maxWidth: 380 }}>
+                                        <label>Tip fundal</label>
+                                        <select
+                                            value={settings.bgType ?? 'color'}
+                                            onChange={e => saveSettings({ bgType: e.target.value as AppSettings['bgType'] })}
+                                        >
+                                            <option value="color">Culoare</option>
+                                            <option value="image">Imagine</option>
+                                            <option value="video">Video</option>
+                                        </select>
+                                    </div>
+
+                                    {(settings.bgType ?? 'color') === 'color' && (
+                                        <div className="field">
+                                            <label>Culoarea fundalului</label>
+                                            <input
+                                                type="color"
+                                                value={settings.bgColor ?? '#000000'}
+                                                onChange={e => saveSettings({ bgColor: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {settings.bgType === 'image' && (
+                                        <div className="field">
+                                            <label>Imaginea de fundal</label>
+                                            <div className="field-row">
+                                                <span className="field-value" title={settings.bgImagePath || ''}>
+                                                    {settings.bgImagePath || 'Niciuna aleasă'}
+                                                </span>
+                                                <button className="btn-sm" onClick={async () => {
+                                                    const p = await window.electron.dialog.pickMedia('image');
+                                                    if (p) saveSettings({ bgImagePath: p });
+                                                }}>Alege...</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {settings.bgType === 'video' && (
+                                        <div className="field">
+                                            <label>Videoul de fundal</label>
+                                            <div className="field-row">
+                                                <span className="field-value" title={settings.bgVideoPath || ''}>
+                                                    {settings.bgVideoPath || 'Niciunul ales'}
+                                                </span>
+                                                <button className="btn-sm" onClick={async () => {
+                                                    const p = await window.electron.dialog.pickMedia('video');
+                                                    if (p) saveSettings({ bgVideoPath: p });
+                                                }}>Alege...</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {(settings.bgType === 'image' || settings.bgType === 'video') && (
+                                        <div className="field">
+                                            <label>Cât de vizibil e fundalul: {((settings.bgOpacity ?? 1) * 100).toFixed(0)}%</label>
+                                            <input
+                                                type="range" min="0" max="1" step="0.05"
+                                                value={settings.bgOpacity ?? 1}
+                                                onChange={e => saveSettings({ bgOpacity: parseFloat(e.target.value) })}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Culorile textului</h4>
+                                    <p>Exemplul de lângă fiecare culoare arată cum se va vedea pe ecran.</p>
+                                </div>
+                                <div className="sgrid2">
+                                    <div className="field">
+                                        <label>Numărul imnului</label>
+                                        <div className="field-row">
+                                            <input
+                                                type="color"
+                                                value={settings.hymnNumberColor ?? '#9fb3ff'}
+                                                onChange={e => saveSettings({ hymnNumberColor: e.target.value })}
+                                            />
+                                            <span className="color-preview" style={{ color: settings.hymnNumberColor ?? '#9fb3ff' }}>
+                                                123.
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="field">
+                                        <label>Textul imnului sau al versetului</label>
+                                        <div className="field-row">
+                                            <input
+                                                type="color"
+                                                value={settings.contentTextColor ?? '#ffffff'}
+                                                onChange={e => saveSettings({ contentTextColor: e.target.value })}
+                                            />
+                                            <span className="color-preview" style={{ color: settings.contentTextColor ?? '#ffffff' }}>
+                                                Exemplu text
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Sunetul videoclipurilor</h4>
+                                    <p>Pe ce ieșire se aude videoul proiectat — de obicei aceeași cu a
+                                        ecranului mare, dacă e legat prin HDMI.</p>
+                                </div>
+                                <AudioOutputPicker settings={settings} onSave={saveSettings} />
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Descărcări de pe YouTube</h4>
+                                    <p>Unde se salvează videoclipurile descărcate și unealta care le aduce.</p>
+                                </div>
+                                <div className="sstack">
+                                    <DownloadFolderPicker settings={settings} onSave={saveSettings} />
+                                    <YtDlpSettings />
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Fereastra aceasta</h4>
+                                    <p>Nu are nicio legătură cu ecranul de proiecție.</p>
+                                </div>
+                                <div className="field" style={{ maxWidth: 380 }}>
+                                    <label>Mărimea textului și a butoanelor</label>
+                                    <select
+                                        value={String(settings.uiZoom ?? 1)}
+                                        onChange={e => {
+                                            const f = parseFloat(e.target.value);
+                                            saveSettings({ uiZoom: f });
+                                            window.electron.settings.setUiZoom(f);
+                                        }}
+                                    >
+                                        <option value="1">100%</option>
+                                        <option value="1.15">115%</option>
+                                        <option value="1.3">130%</option>
+                                        <option value="1.5">150%</option>
+                                    </select>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Depanare</h4>
+                                    <p>Pornește jurnalul doar dacă îți cerem noi, când raportezi o problemă.
+                                        Îl poți opri după aceea.</p>
+                                </div>
+                                <div className="field">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.debugLog ?? false}
+                                            onChange={e => saveSettings({ debugLog: e.target.checked })}
+                                        />
+                                        Scrie un jurnal detaliat
+                                    </label>
+                                    {settings.debugLog && (
+                                        <button
+                                            className="btn-sm mt-1"
+                                            style={{ alignSelf: 'flex-start' }}
+                                            onClick={() => window.electron.update.openLogFile()}
+                                        >
+                                            Deschide jurnalul
+                                        </button>
+                                    )}
+                                </div>
+                            </section>
+
                         </div>
                     )}
 
@@ -4462,22 +4512,26 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                         Dacă te întorci la „stabil", următoarea actualizare te readuce pe
                                         versiunea stabilă curentă.</p>
                                 </div>
-                                <div className="field" style={{ maxWidth: 380 }}>
-                                    <select
-                                        className="timer-text-input"
-                                        value={updateChannelValue}
-                                        onChange={async e => {
-                                            const ch = e.target.value as 'stable' | 'beta';
-                                            setUpdateChannelValue(ch);
-                                            await window.electron.update.setChannel(ch);
-                                            showToast(ch === 'beta'
-                                                ? 'Vei primi versiunile de test, înaintea celorlalți'
-                                                : 'Vei primi doar versiunile stabile');
-                                        }}
-                                    >
-                                        <option value="stable">Stabil — recomandat</option>
-                                        <option value="beta">Beta — versiuni de test</option>
-                                    </select>
+                                <div className="sstack">
+                                    <div className="field" style={{ maxWidth: 380 }}>
+                                        <label>Canalul de actualizare</label>
+                                        <select
+                                            className="timer-text-input"
+                                            value={updateChannelValue}
+                                            onChange={async e => {
+                                                const ch = e.target.value as 'stable' | 'beta';
+                                                setUpdateChannelValue(ch);
+                                                await window.electron.update.setChannel(ch);
+                                                showToast(ch === 'beta'
+                                                    ? 'Vei primi versiunile de test, înaintea celorlalți'
+                                                    : 'Vei primi doar versiunile stabile');
+                                            }}
+                                        >
+                                            <option value="stable">Stabil — recomandat</option>
+                                            <option value="beta">Beta — versiuni de test</option>
+                                        </select>
+                                    </div>
+                                    <UpdateChecker />
                                 </div>
                             </section>
 
@@ -4505,6 +4559,46 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                         plece — nu era internet când le-ai scris. Se trimit automat.
                                     </p>
                                 )}
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Copie de siguranță</h4>
+                                    <p>Salvează imnurile într-un fișier, ca să le poți muta pe alt calculator
+                                        sau să le recuperezi. Încărcarea unei copii adaugă peste ce ai deja.</p>
+                                </div>
+                                <div className="row" style={{ flexWrap: 'wrap' }}>
+                                    <button className="btn-action" onClick={async () => {
+                                        const p = await window.electron.dialog.saveJsonFile('backup-imnuri.json');
+                                        if (p) {
+                                            const r = await window.electron.db.exportJsonBackup(p);
+                                            setImportStatus(`Export reușit: ${r.hymns} imnuri, ${r.sections} secțiuni`);
+                                        }
+                                    }}>
+                                        <Download className="icon-xs" /> Salvează imnurile
+                                    </button>
+                                    <button className="btn-action" onClick={() => adminGate.require(async () => {
+                                        const p = await window.electron.dialog.selectJsonFile();
+                                        if (p) {
+                                            await window.electron.db.importJsonBackup(p);
+                                            onCategoriesChanged();
+                                            onHymnsChanged();
+                                            setImportStatus('Import imnuri din JSON reușit!');
+                                        }
+                                    }, 'Import bază de date (JSON)')}>
+                                        <Upload className="icon-xs" /> Încarcă dintr-o copie
+                                    </button>
+                                    <button className="btn-clear" onClick={async () => {
+                                        const p = await window.electron.dialog.saveFile('hymns-backup.db');
+                                        if (p) {
+                                            await window.electron.db.exportDb(p);
+                                            setImportStatus('Baza de date cu imnuri exportată!');
+                                        }
+                                    }}>
+                                        <Download className="icon-xs" /> Baza de date întreagă
+                                    </button>
+                                </div>
+                                {importStatus && <div className="import-msg">{importStatus}</div>}
                             </section>
 
                             <section className="sgroup">
@@ -4586,10 +4680,11 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 </a>
 
                                 <div className="border-t border-white/10 w-full" />
-                                <UpdateChecker />
-                                <div className="border-t border-white/10 w-full" />
-                                <YtDlpSettings />
-                                <div className="border-t border-white/10 w-full" />
+
+                                <p className="text-white/40 text-xs max-w-sm">
+                                    Verificarea actualizărilor și canalul (stabil / beta) se află în
+                                    fila <strong className="text-white/60">Administrare</strong>.
+                                </p>
 
                                 <p className="text-white/25 text-xs">
                                     Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
@@ -6227,8 +6322,7 @@ function UpdateChecker() {
 
     return (
         <div className="text-sm text-white/60 leading-relaxed w-full">
-            <p className="font-semibold text-white/80 mb-3 text-center">Actualizare aplicație</p>
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-start gap-2">
                 {!result && !checking && !downloading && !ready && (
                     <button className="btn-sm" onClick={doCheck}>
                         Verifică actualizări
@@ -6244,7 +6338,7 @@ function UpdateChecker() {
                 )}
 
                 {result && result.available && !downloading && !ready && (
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-start gap-2">
                         <p className="text-yellow-400 text-xs">
                             Versiune nouă disponibilă: <strong>{result.version}</strong>
                         </p>
@@ -6255,7 +6349,7 @@ function UpdateChecker() {
                 )}
 
                 {downloading && (
-                    <div className="flex flex-col items-center gap-2 w-full max-w-xs">
+                    <div className="flex flex-col items-start gap-2 w-full max-w-xs">
                         <p className="text-white/40 text-xs">Se descarcă... {progress.toFixed(0)}%</p>
                         <div className="w-full bg-white/10 rounded-full h-2">
                             <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
@@ -6264,7 +6358,7 @@ function UpdateChecker() {
                 )}
 
                 {ready && (
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-start gap-2">
                         <p className="text-green-400 text-xs">Actualizare descărcată! Aplicația va reporni.</p>
                         <button className="btn-sm" onClick={doInstall}>
                             Instalează și repornește
@@ -6327,12 +6421,12 @@ function YtDlpSettings() {
     };
 
     return (
-        <div className="text-sm text-white/60 leading-relaxed w-full">
-            <p className="font-semibold text-white/80 mb-2">yt-dlp (YouTube)</p>
+        <div className="field">
+            <label>Unealta de descărcare (yt-dlp)</label>
             {installed === null && <p className="text-white/40 text-xs">Se verifică...</p>}
             {installed === false && (
-                <div className="flex flex-col items-center gap-2">
-                    <p className="text-white/40 text-xs">yt-dlp nu este instalat</p>
+                <div className="flex flex-col items-start gap-2">
+                    <p className="text-white/40 text-xs">Nu e instalată — fără ea nu se poate descărca de pe YouTube.</p>
                     <button
                         className="btn-sm"
                         onClick={install}
@@ -6343,8 +6437,8 @@ function YtDlpSettings() {
                 </div>
             )}
             {installed === true && (
-                <div className="flex flex-col items-center gap-2">
-                    <p className="text-white/40 text-xs">Versiune: {version || 'se verifică…'}</p>
+                <div className="flex flex-col items-start gap-2">
+                    <p className="text-white/40 text-xs">Instalată, versiunea {version || 'se verifică…'}</p>
                     <button
                         className="btn-sm"
                         onClick={update}
