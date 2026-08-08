@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.4.1 (08 August 2026)
+
+### Modificări
+- Reparație la verificarea actualizărilor: dacă aveai deja instalată o versiune mai nouă decât cea publicată, aplicația îți propunea să te „actualizezi" înapoi la cea veche. Acum se oferă doar ce e într-adevăr mai nou, iar coborârea de versiune se face doar când ieși singur din canalul beta.
+
+---
+
 ## v1.4.0 (08 August 2026)
 
 ### Modificări
