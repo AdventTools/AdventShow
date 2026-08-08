@@ -1,167 +1,196 @@
 {
- "_descriere": "Feed de corecturi OTA — aplicația îl citește la pornire (max 1/zi) și aplică intrările cu seq mai mare decât ultimul aplicat local. Publicare DOAR prin scripts/publish_correction.py, rulat manual de autori. force=true suprascrie inclusiv modificările proprii ale utilizatorului; altfel ele au prioritate.",
- "entries": [
-  {
-   "seq": 1,
-   "category": "Imnuri Creștine",
-   "number": "644",
-   "title": "Șalom, șalom!",
-   "sections": [
-    {
-     "type": "refren",
-     "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
-    },
-    {
-     "type": "strofa",
-     "text": "Să meargă înaintea ta,\nPe calea-ngustă să poți sta,\nȘi când vrăjmașul va lovi\nIsus te va păzi!"
-    },
-    {
-     "type": "refren",
-     "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
-    },
-    {
-     "type": "strofa",
-     "text": "La dreapta ta să-L ai mereu\nCa braț ocrotitor la greu\nȘi-n stânga cu nuiaua Sa\nMereu te va-ndruma!"
-    },
-    {
-     "type": "refren",
-     "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
-    },
-    {
-     "type": "strofa",
-     "text": "Cu binecuvântarea Sa\nSă fie și deasupra ta\nȘi Stâncă sub piciorul tău\nSă fie El mereu!"
-    },
-    {
-     "type": "refren",
-     "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
-    },
-    {
-     "type": "strofa",
-     "text": "Să fie în lăuntrul tău \nCu dragostea și harul Său,\nSă te-nconjoare peste tot\nEl, Domnul Savaot!"
-    },
-    {
-     "type": "refren",
-     "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
-    }
-   ],
-   "force": true,
-   "ts": "2026-06-13T05:33:28.000Z"
-  },
-  {
-   "seq": 2,
-   "category": "Imnuri Creștine",
-   "number": "002",
-   "title": "Aleluia! Amin! (canon)",
-   "sections": [
-    {
-     "type": "strofa",
-     "text": "Aleluia, Aleluia!\nAmin, Amin!"
-    }
-   ],
-   "force": false,
-   "ts": "2026-07-12T20:36:41.000Z"
-  },
-  {
-   "seq": 3,
-   "category": "Imnuri Creștine",
-   "number": "007",
-   "title": "Ți-nalț, Iehova-n veci cântare",
-   "sections": [
-    {
-     "type": "strofa",
-     "text": "Ți-nalț, Iehova-n veci cântare,\nCăci numai Tu ești veșnic Dumnezeu!\nȚi-aduc deplină închinare,\nTe rog să-mi dai și astăzi Duhul Tău,\nCa-n Numele iubitului Tău Fiu,\nÎn rugă și-n purtări pe plac să-Ți fiu!"
-    },
-    {
-     "type": "strofa",
-     "text": "La Fiul Tău condu-mă, Tată,\nCa El la Tine să m-aducă-apoi,\nIubirea Ta cea minunată\nSă pună-n mine gând și simțuri noi!\nȘi-așa să gust de-acum odihna Ta\nȘi-n veac de veac să-Ți cânt Aleluia!"
-    },
-    {
-     "type": "strofa",
-     "text": "Ah, dă-mi, Părinte-acum putere\nSă prețuiesc Cuvântul Tău divin,\nȘi totdeauna cu plăcere\nÎn Duh și-n adevăr să mă închin,\nVreau ca purtat de Spiritul Tău Sfânt,\nÎntreaga veșnicie psalmi să-Ți cânt!"
-    },
-    {
-     "type": "strofa",
-     "text": "Sunt fericit cât nu se poate:\nIsus e-al meu la dreapta Ta, în cer,\n„Da” și „Amin” în El sunt toate,\nOricâte în credință-aș vrea să-Ți cer!\nO, fericit sunt și de-acum, mereu,\nCu drag Îți cânt, puternic Dumnezeu!"
-    }
-   ],
-   "force": false,
-   "ts": "2026-07-12T20:36:41.000Z"
-  },
-  {
-   "seq": 4,
-   "category": "Imnuri Creștine",
-   "number": "014",
-   "title": "Binecuvântă pe Domnul",
-   "sections": [
-    {
-     "type": "refren",
-     "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
-    },
-    {
-     "type": "strofa",
-     "text": "El a plătit pentru-al tău păcat,\nCu sânge sfânt vina ți-a spălat,\nPune-I în cale covor de-osanale\nȘi cântecul inimii tale!"
-    },
-    {
-     "type": "refren",
-     "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
-    },
-    {
-     "type": "strofa",
-     "text": "Te-a-ncununat bunătatea Sa,\nȚi-a risipit suferința grea,\nPune-I în cale covor de petale\nDin florile dragostei tale!"
-    },
-    {
-     "type": "refren",
-     "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
-    },
-    {
-     "type": "strofa",
-     "text": "Aripi de vultur ți-a dat să zbori,\nȚi-a luminat anii trecători,\nPune-I în cale psaltiri și chimvale\nȘi cântă-ndurările Sale!"
-    },
-    {
-     "type": "refren",
-     "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
-    }
-   ],
-   "force": false,
-   "ts": "2026-07-12T20:36:41.000Z"
-  },
-  {
-   "seq": 5,
-   "category": "Imnuri Creștine",
-   "number": "099",
-   "title": "Azi avem Mântuitor",
-   "sections": [
-    {
-     "type": "refren",
-     "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
-    },
-    {
-     "type": "strofa",
-     "text": "Într-o iesle S-a născut\n Copilașul mult dorit,\n Dar puțini L-au cunoscut,\n Salvator neprețuit!"
-    },
-    {
-     "type": "refren",
-     "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
-    },
-    {
-     "type": "strofa",
-     "text": "Ceru-ntreg a părăsit\n Pentru noi, cei vinovați,\n Pentru noi S-a umilit,\n Vă uimiți și-L înălțați!"
-    },
-    {
-     "type": "refren",
-     "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
-    },
-    {
-     "type": "strofa",
-     "text": "E Isus cel așteptat,\n Dumnezeu Emanuel;\n Și păstorii au cântat,\n Să cântăm și noi la fel!"
-    },
-    {
-     "type": "refren",
-     "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
-    }
-   ],
-   "force": false,
-   "ts": "2026-07-12T21:07:09.000Z"
-  }
- ]
+    "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Corecturi al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
+    "generated": "2026-08-08T20:17:27+00:00",
+    "entries": [
+        {
+            "seq": 1,
+            "category": "Imnuri Creștine",
+            "number": "644",
+            "title": "Șalom, șalom!",
+            "sections": [
+                {
+                    "type": "refren",
+                    "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Să meargă înaintea ta,\nPe calea-ngustă să poți sta,\nȘi când vrăjmașul va lovi\nIsus te va păzi!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "La dreapta ta să-L ai mereu\nCa braț ocrotitor la greu\nȘi-n stânga cu nuiaua Sa\nMereu te va-ndruma!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cu binecuvântarea Sa\nSă fie și deasupra ta\nȘi Stâncă sub piciorul tău\nSă fie El mereu!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Să fie în lăuntrul tău \nCu dragostea și harul Său,\nSă te-nconjoare peste tot\nEl, Domnul Savaot!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Șalom, șalom, Isus, pacea Sa,\nȘalom, șalom, fie pavăza ta!"
+                }
+            ],
+            "force": true,
+            "ts": "2026-06-13T05:33:28.000Z",
+            "text_hash": ""
+        },
+        {
+            "seq": 2,
+            "category": "Imnuri Creștine",
+            "number": "002",
+            "title": "Aleluia! Amin! (canon)",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Aleluia, Aleluia!\nAmin, Amin!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-07-12T20:36:41.000Z",
+            "text_hash": ""
+        },
+        {
+            "seq": 3,
+            "category": "Imnuri Creștine",
+            "number": "007",
+            "title": "Ți-nalț, Iehova-n veci cântare",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Ți-nalț, Iehova-n veci cântare,\nCăci numai Tu ești veșnic Dumnezeu!\nȚi-aduc deplină închinare,\nTe rog să-mi dai și astăzi Duhul Tău,\nCa-n Numele iubitului Tău Fiu,\nÎn rugă și-n purtări pe plac să-Ți fiu!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "La Fiul Tău condu-mă, Tată,\nCa El la Tine să m-aducă-apoi,\nIubirea Ta cea minunată\nSă pună-n mine gând și simțuri noi!\nȘi-așa să gust de-acum odihna Ta\nȘi-n veac de veac să-Ți cânt Aleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Ah, dă-mi, Părinte-acum putere\nSă prețuiesc Cuvântul Tău divin,\nȘi totdeauna cu plăcere\nÎn Duh și-n adevăr să mă închin,\nVreau ca purtat de Spiritul Tău Sfânt,\nÎntreaga veșnicie psalmi să-Ți cânt!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Sunt fericit cât nu se poate:\nIsus e-al meu la dreapta Ta, în cer,\n„Da” și „Amin” în El sunt toate,\nOricâte în credință-aș vrea să-Ți cer!\nO, fericit sunt și de-acum, mereu,\nCu drag Îți cânt, puternic Dumnezeu!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-07-12T20:36:41.000Z",
+            "text_hash": ""
+        },
+        {
+            "seq": 4,
+            "category": "Imnuri Creștine",
+            "number": "014",
+            "title": "Binecuvântă pe Domnul",
+            "sections": [
+                {
+                    "type": "refren",
+                    "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "El a plătit pentru-al tău păcat,\nCu sânge sfânt vina ți-a spălat,\nPune-I în cale covor de-osanale\nȘi cântecul inimii tale!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Te-a-ncununat bunătatea Sa,\nȚi-a risipit suferința grea,\nPune-I în cale covor de petale\nDin florile dragostei tale!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Aripi de vultur ți-a dat să zbori,\nȚi-a luminat anii trecători,\nPune-I în cale psaltiri și chimvale\nȘi cântă-ndurările Sale!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Binecuvântă pe Domnul,\nBinecuvântă-al Său Nume\nȘi nu uita niciodată\nCum S-a jertfit pentru lume!\n\nSlavă, laudă Lui,\nLaudă suflete-ntruna,\nCântă, suflete-al meu,\nBinecuvântă-L mereu!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-07-12T20:36:41.000Z",
+            "text_hash": ""
+        },
+        {
+            "seq": 5,
+            "category": "Imnuri Creștine",
+            "number": "099",
+            "title": "Azi avem Mântuitor",
+            "sections": [
+                {
+                    "type": "refren",
+                    "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Într-o iesle S-a născut\n Copilașul mult dorit,\n Dar puțini L-au cunoscut,\n Salvator neprețuit!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Ceru-ntreg a părăsit\n Pentru noi, cei vinovați,\n Pentru noi S-a umilit,\n Vă uimiți și-L înălțați!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "E Isus cel așteptat,\n Dumnezeu Emanuel;\n Și păstorii au cântat,\n Să cântăm și noi la fel!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Azi avem Mântuitor,\n Bucurați-vă popoare!\n Să cântăm și noi în cor:\n Azi avem salvare!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-07-12T21:07:09.000Z",
+            "text_hash": ""
+        },
+        {
+            "seq": 6,
+            "category": "Imnuri Creștine",
+            "number": "075",
+            "title": "Doar Tu ne ești cale, adevăr și viață!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Doar Tu ne ești cale-adevăr și viață;\nPe Tatăl Îl vede doar cin’ Te-a privit…\nDoar Tu mântuiești prin puterea-Ți măreață,\nLa Tine alerg ca să fiu mântuit;\nCăci calea e lungă și cine să știe,\nPutea-voi rămâne chiar pân’ la sfârșit?\nDoar făgăduința, doar ea mă mângâie,\nCăci Tu mă asiguri de-un loc pregătit!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "La Tatăl din cer să ajung, pe-astă cale,\nTot Tu mă conduci prin al Tău Spirit viu;\nȘi-așa, mulțumită doar tot milei Tale,\nSfințit prin Cuvânt de-adevăr pot să fiu;\nIar când vreau și eu,\nprin puterea-Ți divină,\nSă lupt când ispita m-atrage-n păcat\nȘi firea s-o-nving printr-o moarte deplină,\nSpre Tine alerg, Tu, Cel blând și curat!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "O, Doamne-am nevoie\nde-a Ta plinătate\nCe-o dai alor Tăi ca să-i desăvârșești;\nDoar Tu mi-ești nădejdea,\ncăci Tu mi-ești de toate:\nȘi cale-adevăr, și viață Tu mi-ești!\nPrin Tine, Isuse, spălat de păcate,\nSpălat de amaruri cu-al Tău sânge sfânt,\nIntra-voi odată pe porți în cetate,\nSă gust fericirea și-n veac să-Ți tot cânt!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-08-08T20:17:27.000Z",
+            "text_hash": "0feb0bbcc8868046f93571d130ab3943f5912c4e5443dc60e7de78ff1faede93"
+        }
+    ]
 }
