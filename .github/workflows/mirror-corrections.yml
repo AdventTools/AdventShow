@@ -1,0 +1,68 @@
+name: Oglindeste corecturile pentru instalarile vechi
+
+# Instalarile de sub 1.4.0 au adresa feed-ului de corecturi scrisa in ele la
+# compilare, si aceea e fisierul din repo, nu hangar. Ele nu pot afla niciodata de
+# hangar. Asa ca tot ce publici in hangar se copiaza automat aici, o data pe zi.
+#
+# CAND SE POATE STERGE: cand in hangar, la tabul Instalari, nu mai apare nicio
+# instalare sub 1.4.0. Atunci aprobarea din interfata e singurul pas necesar.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'   # zilnic, noaptea
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ia feed-ul din hangar
+        run: |
+          curl -sfL --retry 3 \
+            https://hangar.it4all.ro/d/ba3166b608233a30/corrections.json \
+            -o /tmp/corrections.json
+
+          # Un feed gol sau nevalid ar sterge corecturile existente din repo.
+          node -e '
+            const d = JSON.parse(require("fs").readFileSync("/tmp/corrections.json", "utf8"));
+            if (!Array.isArray(d.entries) || d.entries.length === 0) {
+              console.error("feed gol sau invalid — nu suprascriu");
+              process.exit(1);
+            }
+            const seq = d.entries.map(e => e.seq);
+            if (seq.some((s, i) => i > 0 && s <= seq[i - 1])) {
+              console.error("seq nu e strict crescator — nu suprascriu");
+              process.exit(1);
+            }
+            console.log(`feed valid: ${d.entries.length} intrari, seq max ${Math.max(...seq)}`);
+          '
+
+          # Feed-ul e append-only: daca cel din hangar are mai putine intrari decat
+          # cel din repo, ceva e in neregula si oprim.
+          VECHI=$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync("content/corrections.json","utf8")).entries.length)}catch(e){console.log(0)}')
+          NOU=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/corrections.json","utf8")).entries.length)')
+          if [ "$NOU" -lt "$VECHI" ]; then
+            echo "hangar are $NOU intrari, repo are $VECHI — nu dau inapoi"
+            exit 1
+          fi
+          cp /tmp/corrections.json content/corrections.json
+
+      - name: Comite daca s-a schimbat ceva
+        run: |
+          if git diff --quiet content/corrections.json; then
+            echo "nimic nou de oglindit"
+            exit 0
+          fi
+          N=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("content/corrections.json","utf8")).entries.length)')
+          git config user.name "Samy Balasa"
+          git config user.email "laptopstein@gmail.com"
+          git add content/corrections.json
+          git commit -m "content: oglindesc corecturile din hangar ($N intrari)
+
+          Pentru instalarile de sub 1.4.0, care citesc feed-ul de aici."
+          git push
