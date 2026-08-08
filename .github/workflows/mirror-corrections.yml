@@ -28,6 +28,10 @@ jobs:
             https://hangar.it4all.ro/d/ba3166b608233a30/corrections.json \
             -o /tmp/corrections.json)
           echo "raspuns HTTP: $COD"
+          if grep -qi "just a moment" /tmp/corrections.json 2>/dev/null; then
+            echo "::warning::Cloudflare a oprit runnerul cu o provocare de bot, deci feed-ul nu poate fi oglindit automat. Pana se adauga o regula care lasa /d/* sa treaca, oglindirea se face manual: npm run mirror:corrections"
+            exit 0
+          fi
           if [ "$COD" != "200" ]; then
             echo "--- primele randuri din raspuns ---"
             head -c 400 /tmp/corrections.json
