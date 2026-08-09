@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.5.0 (09 August 2026)
+
+### Modificări
+- Imnurile aduse dintr-un PowerPoint nu mai intră nevăzute în bază: la un singur fișier se deschide direct editorul, iar la mai multe rămân marcate cu un punct portocaliu și le citești pe rând, dintr-o listă. Butonul din capul ferestrei adună acum tot ce te așteaptă — răspunsurile autorilor, imnurile de citit și unealta de YouTube rămasă în urmă — și nu mai rămâne aprins degeaba când nu mai e nimic de rezolvat. Ajutorul e scris de la capăt, ca ghid adevărat: pașii proiecției, tastele pe situații, colecțiile, importul și ce faci când ceva nu merge. La numărătoarea inversă, opțiunea a doua spune acum ce face cu adevărat — pornește imediat și se oprește la ora pe care o ceri. Dacă restaurezi o copie de siguranță mai veche, imnurile tale nu mai ajung în colecțiile oficiale, iar când o cântare de-a ta e acceptată și publicată identic, copia ta dispare singură, cu o vorbă.
+
+---
+
 ## v1.4.3 (09 August 2026)
 
 ### Modificări
