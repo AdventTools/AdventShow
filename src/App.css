@@ -2730,6 +2730,13 @@
     gap: 8px;
 }
 
+/* Când numărătoarea se oprește la o oră de pe ceas, durata o calculează aplicația:
+   câmpurile rămân la vedere, ca omul să vadă că există, dar nu se mai ating. */
+.timer-duration.is-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
 .timer-duration input {
     width: 72px;
     padding: 8px 10px;
@@ -3497,6 +3504,67 @@
   font-size: 11px;
   font-weight: 700;
   text-align: center;
+}
+
+/* ── Imnuri aduse din PowerPoint, de citit una câte una ─────────────────────── */
+.review-block {
+  border: 1px solid rgba(180, 83, 9, 0.35);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: rgba(180, 83, 9, 0.07);
+}
+.review-head { margin-bottom: 10px; }
+.review-head strong { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
+.review-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+}
+.review-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.review-nr {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--accent);
+  min-width: 38px;
+}
+.review-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.review-title {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
+/* Bulina de pe rândul unui imn încă necitit, în lista principală. */
+.needs-review-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #b45309;
+  vertical-align: middle;
 }
 
 /* ── Răspunsurile autorilor la ce a trimis utilizatorul ──────────────────────── */

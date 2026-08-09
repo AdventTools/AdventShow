@@ -229,7 +229,15 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
       const number = normalizeHymnNumber(String(entry.number));
       const key = `${entry.category}|${number}`;
       const ts = entry.ts || new Date().toISOString();
-      const sections = entry.sections.filter(s => s && (s.type === 'strofa' || s.type === 'refren') && s.text);
+      // Sfârșiturile de rând vin uneori în stil Windows, pentru că așa le-a scris
+      // biserica de la care a plecat propunerea. Le aducem la forma din baza noastră
+      // ÎNAINTE de orice: și textul salvat, și amprenta se calculează pe același
+      // șir. Altfel imnul intra cu „\r\n", amprenta se reținea pe „\r\n", iar la
+      // următoarea corectură textul din bază n-ar mai fi semănat cu ce reținuserăm
+      // — l-am fi luat drept modificare a bisericii și n-am mai fi trimis nimic.
+      const sections = entry.sections
+        .filter(s => s && (s.type === 'strofa' || s.type === 'refren') && s.text)
+        .map(s => ({ type: s.type, text: s.text.replace(/\r\n?/g, '\n') }));
       if (sections.length === 0) { skipped++; continue; }
       const searchText = normalizeSearchText(`${number} ${entry.title} ${sections.map(s => s.text).join(' ')}`);
 
@@ -492,10 +500,25 @@ export interface PendingDecision {
   publishedAs?: { category: string; number: string };
   /** `corectura` = modificare la un imn oficial; `imn` = imn din „Imnurile mele". */
   fel: 'corectura' | 'imn';
+  /** Copia lui era identică cu textul oficial, așa că am șters-o singuri. Nu mai e
+   *  nimic de ales — doar de citit. */
+  autoCleaned?: boolean;
 }
 
 interface StoredDecision extends PendingDecision {
   resolved?: 'pastrat' | 'revenit' | 'sters';
+}
+
+/** Imnul dintr-o colecție, cu textul lui, gata de comparat. */
+function hymnByKey(db: ReturnType<typeof getDb>, category: string, number: string):
+  { id: number; continut: HymnContent } | null {
+  const h = db.prepare(`SELECT h.id, h.title FROM hymns h JOIN categories c ON c.id = h.category_id
+    WHERE c.name = ? AND h.number = ? LIMIT 1`).get(category, number) as
+    { id: number; title: string } | undefined;
+  if (!h) return null;
+  const sections = db.prepare('SELECT type, text FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index')
+    .all(h.id) as SectionRow[];
+  return { id: h.id, continut: { title: h.title, sections } };
 }
 
 /** Aduce verdictele pentru tot ce am trimis și nu e încă rezolvat de utilizator. */
@@ -533,6 +556,24 @@ export async function refreshProposalDecisions(deps: ContribDeps): Promise<numbe
       fel: category === MY_HYMNS_CATEGORY ? 'imn' : 'corectura',
       ...(v.category && v.number ? { publishedAs: { category: v.category, number: v.number } } : {}),
     };
+
+    // Imnul lui a intrat oficial. Dacă textul oficial ajuns la el e IDENTIC cu ce are
+    // în „Imnurile mele", întrebarea „ștergi copia?" e degeaba — sunt același lucru.
+    // Ștergem copia și doar îl anunțăm. Când textele diferă, întrebarea rămâne: între
+    // trimitere și publicare noi umblăm des la text, iar o ștergere tăcută i-ar
+    // schimba imnul fără să vadă cu ce.
+    const publicat = known[v.hash].publishedAs;
+    if (v.status === 'accepted' && publicat && category === MY_HYMNS_CATEGORY) {
+      const lui = hymnByKey(db, category, number);
+      const oficial = hymnByKey(db, publicat.category, normalizeHymnNumber(publicat.number));
+      if (lui && oficial && lui.id !== oficial.id
+        && textHash(lui.continut) === textHash(oficial.continut)) {
+        db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(lui.id);
+        db.prepare('DELETE FROM hymns WHERE id = ?').run(lui.id);
+        known[v.hash].autoCleaned = true;
+        deps.log(`[Contrib] copia din „${MY_HYMNS_CATEGORY}" era identică cu ${publicat.category} ${publicat.number} — am șters-o`);
+      }
+    }
     if (!inainte) noi++;
   }
 

@@ -705,9 +705,10 @@ export async function parsePresentationToHymn(filePath: string): Promise<HymnImp
 export async function importPresentationFiles(
   filePaths: string[],
   categoryId?: number
-): Promise<{ success: number; failed: number; errors: string[] }> {
+): Promise<{ success: number; failed: number; errors: string[]; ids: number[] }> {
   let success = 0;
   let failed = 0;
+  let ids: number[] = [];
   const errors: string[] = [];
   const batch: HymnImportData[] = [];
   const presentationFiles = getPowerPointFiles(filePaths);
@@ -717,6 +718,7 @@ export async function importPresentationFiles(
       success: 0,
       failed: 0,
       errors: ['Nu au fost găsite fișiere PowerPoint compatibile. Folosește .ppt sau .pptx.'],
+      ids: [],
     };
   }
 
@@ -739,20 +741,20 @@ export async function importPresentationFiles(
     }
 
     if (batch.length > 0) {
-      bulkInsertHymns(batch);
+      ids = bulkInsertHymns(batch);
     }
   } catch (err: any) {
     console.error('Error importing PowerPoint files:', err);
     throw err;
   }
 
-  return { success, failed, errors };
+  return { success, failed, errors, ids };
 }
 
 export async function importPresentationDirectory(
   dirPath: string,
   categoryId?: number
-): Promise<{ success: number; failed: number; errors: string[] }> {
+): Promise<{ success: number; failed: number; errors: string[]; ids: number[] }> {
   try {
     const files = await fs.readdir(dirPath);
     const filePaths = files

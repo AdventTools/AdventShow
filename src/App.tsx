@@ -65,6 +65,8 @@ import type {
     Hymn,
     HymnSection,
     HymnState,
+    HymnToReview,
+    ImportResult,
     PendingDecision,
     Presentation,
     PresShape,
@@ -322,6 +324,8 @@ function App() {
     // în colecția oficială). Se vede în antet, ca omul să nu trebuiască să intre în Setări.
     const [decisionsCount, setDecisionsCount] = useState(0);
     const [decisionsOpen, setDecisionsOpen] = useState(false);
+    // Recalcularea contorului, ca s-o poată cere și fereastra de avertismente.
+    const numaraRaspunsuriRef = useRef<(() => void) | null>(null);
     // Update OBLIGATORIU (decis în hangar). Nu se poate refuza, dar nici nu întrerupe
     // o proiecție în curs — instalarea așteaptă închiderea ecranului.
     const [forcedUpdate, setForcedUpdate] = useState<{
@@ -510,7 +514,13 @@ function App() {
         const numaraRaspunsuri = () => Promise.all([
             window.electron.contrib.decisions(),
             window.electron.contrib.hymnStates(),
-        ]).then(([d, st]) => setDecisionsCount(d.length + st.length)).catch(() => { });
+            window.electron.db.countToReview(),
+            window.electron.ytdlp.health().catch(() => null),
+        ]).then(([d, st, rev, yt]) => setDecisionsCount(
+            (d as PendingDecision[]).length + (st as HymnState[]).length + (rev as number)
+            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0),
+        )).catch(() => { });
+        numaraRaspunsuriRef.current = numaraRaspunsuri;
         numaraRaspunsuri();
         window.electron.contrib.onDecisions(() => { numaraRaspunsuri(); });
         window.electron.update.forcedState()
@@ -1018,6 +1028,22 @@ function App() {
         adminGate.require = requirePassword;
     }, [requirePassword]);
 
+    // Deschide editorul fără să mai ceară parola. Se folosește imediat după un
+    // import — care a cerut-o deja — și din lista de imnuri de verificat.
+    const deschideEditorul = useCallback(async (hymnId: number) => {
+        const data = await window.electron.db.getHymnWithSections(hymnId);
+        if (!data) return;
+        setActiveCategoryId(data.category_id ?? undefined);
+        setHymnEditor({
+            mode: 'edit',
+            hymnId: data.id,
+            number: data.number,
+            title: data.title,
+            sections: data.sections.map(s => ({ type: s.type, text: s.text })),
+            categoryId: data.category_id ?? undefined,
+        });
+    }, []);
+
     // ── Context menu actions ──
     const openEditHymn = useCallback(async (hymnId: number) => {
         const data = await window.electron.db.getHymnWithSections(hymnId);
@@ -1087,7 +1113,7 @@ function App() {
         const mine = categories.find(c => c.name === 'Imnurile mele');
         if (!mine) { showToast('Nu găsesc colecția «Imnurile mele»'); return; }
         requirePassword(async () => {
-            let rezultat: { success: number; failed: number; errors: string[] } | null = null;
+            let rezultat: ImportResult | null = null;
             if (deUnde === 'folder') {
                 const folder = await window.electron.dialog.selectFolder();
                 if (!folder) return;
@@ -1103,11 +1129,24 @@ function App() {
             await loadHymns();
             setActiveCategoryId(mine.id);
             const r = rezultat;
-            showToast(r.failed
-                ? `${r.success} imnuri adăugate în «Imnurile mele», ${r.failed} eșuate`
-                : `${r.success} ${r.success === 1 ? 'imn adăugat' : 'imnuri adăugate'} în «Imnurile mele»`);
+            if (r.failed) showToast(`${r.success} imnuri adăugate, ${r.failed} eșuate`);
+
+            // Un singur imn: îl deschidem pe loc, ca să poată fi îndreptat imediat —
+            // conversia din slide-uri rareori nimerește totul din prima.
+            if (r.success === 1 && r.ids.length === 1) {
+                await deschideEditorul(r.ids[0]);
+                return;
+            }
+            // Mai multe: rămân marcate «de verificat» și se citesc pe rând, din
+            // fereastra de răspunsuri. Nimeni nu se uită peste 200 de imnuri pe loc.
+            if (r.success > 0) {
+                showToast(`${r.success} imnuri adăugate în «Imnurile mele» — te așteaptă la verificat`);
+                window.electron.db.countToReview()
+                    .then(n => setDecisionsCount(c => Math.max(c, n)))
+                    .catch(() => { });
+            }
         }, deUnde === 'folder' ? 'Import imnuri din folder' : 'Import imnuri din PowerPoint');
-    }, [categories, requirePassword, loadCategories, loadHymns]);
+    }, [categories, requirePassword, loadCategories, loadHymns, deschideEditorul]);
 
     // ── Global keyboard ──
     useEffect(() => {
@@ -1449,9 +1488,15 @@ function App() {
                         Promise.all([
                             window.electron.contrib.decisions(),
                             window.electron.contrib.hymnStates(),
-                        ]).then(([d, st]) => setDecisionsCount(d.length + st.length)).catch(() => { });
+                            window.electron.db.countToReview(),
+                            window.electron.ytdlp.health().catch(() => null),
+                        ]).then(([d, st, rev, yt]) => setDecisionsCount(
+                            (d as PendingDecision[]).length + (st as HymnState[]).length + (rev as number)
+                            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0),
+                        )).catch(() => { });
                     }}
-                    onChanged={() => { loadHymns(); }}
+                    onChanged={() => { loadHymns(); numaraRaspunsuriRef.current?.(); }}
+                    onReviewHymn={id => { setDecisionsOpen(false); deschideEditorul(id); }}
                 />
             )}
 
@@ -1570,11 +1615,11 @@ function App() {
                     <button
                         className="header-btn header-btn-answers"
                         onClick={() => setDecisionsOpen(true)}
-                        title="Autorii au răspuns la ce ai trimis"
+                        title="Lucruri care te așteaptă: răspunsuri, imnuri de citit, unelte de actualizat"
                     >
                         <Mail className="icon-sm" />
                         <span className="header-btn-label">
-                            {decisionsCount} {decisionsCount === 1 ? 'răspuns' : 'răspunsuri'}
+                            {decisionsCount} {decisionsCount === 1 ? 'de rezolvat' : 'de rezolvat'}
                         </span>
                     </button>
                 )}
@@ -1877,6 +1922,7 @@ function App() {
                     onHymnsChanged={loadHymns}
                     onChangePassword={() => { setModalOpen(null); setSetPwOpen('change'); }}
                     onForgotPassword={() => { setModalOpen(null); setForgotPwOpen(true); }}
+                    onReviewHymn={deschideEditorul}
                 />
             )}
 
@@ -2177,7 +2223,13 @@ function HymnList({
                             >
                                 <span className="hymn-num">{hymn.number}</span>
                                 <div className="hymn-info">
-                                    <span className="hymn-title">{hymn.title}</span>
+                                    <span className="hymn-title">
+                                        {hymn.title}
+                                        {hymn.needs_review === 1 && (
+                                            <span className="needs-review-dot"
+                                                title="Adus dintr-un PowerPoint — încă necitit" />
+                                        )}
+                                    </span>
                                     {collectionName && <span className="hymn-collection">{collectionName}</span>}
                                     {snippetLine && <span className="hymn-snippet">— {snippetLine}</span>}
                                 </div>
@@ -3706,16 +3758,43 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
 // totdeauna, fără să știe. Aici își vede răspunsul și alege ce se întâmplă.
 // ═════════════════════════════════════════════════════════════════════════════
 
-function DecisionsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+/** Peste atât, unealta de descărcare e destul de veche cât să pice pe YouTube. */
+const YTDLP_ZILE_VECHIME = 90;
+
+type YtDlpHealth = { installed: boolean; version: string; staleDays: number };
+
+/** Lipsă sau prea veche — merită pomenită în avertismente. Nu și când e proaspătă. */
+function ytCereAtentie(h: YtDlpHealth | null): boolean {
+  if (!h) return false;
+  return !h.installed || h.staleDays > YTDLP_ZILE_VECHIME;
+}
+
+function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
+    onClose: () => void;
+    onChanged: () => void;
+    onReviewHymn: (hymnId: number) => void;
+}) {
     const [items, setItems] = useState<PendingDecision[]>([]);
     const [states, setStates] = useState<HymnState[]>([]);
+    const [deVerificat, setDeVerificat] = useState<HymnToReview[]>([]);
+    const [yt, setYt] = useState<YtDlpHealth | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState('');
 
     const load = useCallback(() => {
         window.electron.contrib.decisions().then(setItems).catch(() => setItems([]));
         window.electron.contrib.hymnStates().then(setStates).catch(() => setStates([]));
+        window.electron.db.hymnsToReview().then(setDeVerificat).catch(() => setDeVerificat([]));
+        window.electron.ytdlp.health().then(setYt).catch(() => setYt(null));
     }, []);
+
+    // Dacă fereastra s-a deschis și nu are nimic de arătat, butonul din antet e
+    // aprins degeaba: îi cerem părintelui să recalculeze, ca să se stingă pe loc.
+    useEffect(() => {
+        if (items.length === 0 && states.length === 0 && deVerificat.length === 0 && !ytCereAtentie(yt)) {
+            onChanged();
+        }
+    }, [items, states, deVerificat, yt, onChanged]);
     useEffect(() => { load(); }, [load]);
 
     const alegeImn = async (key: string,
@@ -3743,16 +3822,83 @@ function DecisionsModal({ onClose, onChanged }: { onClose: () => void; onChanged
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="modal-dialog">
                 <div className="modal-header">
-                    <h3>Răspunsuri la ce ai trimis</h3>
+                    <h3>Ce te așteaptă</h3>
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
-                    {items.length === 0 && states.length === 0 && (
+                    {items.length === 0 && states.length === 0 && deVerificat.length === 0
+                        && !ytCereAtentie(yt) && (
                         <div className="text-white/50 text-sm py-6 text-center">
-                            Nu așteaptă nimic un răspuns din partea ta.
+                            Nu te așteaptă nimic. Tot ce era de rezolvat e rezolvat.
                         </div>
                     )}
                     {error && <div className="editor-error">{error}</div>}
+
+                    {ytCereAtentie(yt) && (
+                        <div className="review-block">
+                            <div className="review-head">
+                                <strong>{yt?.installed
+                                    ? 'Unealta de descărcare de pe YouTube e veche'
+                                    : 'Unealta de descărcare de pe YouTube lipsește'}</strong>
+                                <p>{yt?.installed
+                                    ? `Ai versiunea ${yt.version}, veche de ${yt.staleDays} de zile. YouTube schimbă des felul în care servește filmele, iar o unealtă veche se oprește exact când ai nevoie de ea.`
+                                    : 'Fără ea nu se pot descărca filme de pe YouTube. Se ia o singură dată și rămâne.'}</p>
+                            </div>
+                            <div className="row">
+                                <button className="btn-action" disabled={busy === 'ytdlp'}
+                                    onClick={async () => {
+                                        setBusy('ytdlp');
+                                        setError('');
+                                        const r = yt?.installed
+                                            ? await window.electron.ytdlp.update()
+                                            : await window.electron.ytdlp.install();
+                                        setBusy(null);
+                                        if (!r.success) { setError(r.error ?? 'Nu am putut aduce unealta.'); return; }
+                                        window.electron.ytdlp.health().then(setYt).catch(() => { });
+                                        onChanged();
+                                    }}>
+                                    {busy === 'ytdlp'
+                                        ? 'Se aduce…'
+                                        : yt?.installed ? 'Actualizează acum' : 'Instalează acum'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {deVerificat.length > 0 && (
+                        <div className="review-block">
+                            <div className="review-head">
+                                <strong>{deVerificat.length} {deVerificat.length === 1
+                                    ? 'imn adus din PowerPoint așteaptă să fie citit'
+                                    : 'imnuri aduse din PowerPoint așteaptă să fie citite'}</strong>
+                                <p>Conversia din slide-uri greșește des — strofe lipite, titlu luat din
+                                    alt loc. Deschide fiecare imn, uită-te peste el și salvează; marcajul
+                                    dispare de la sine.</p>
+                            </div>
+                            {deVerificat.map(h => (
+                                <div key={h.id} className="review-row">
+                                    <span className="review-nr">{h.number}</span>
+                                    <div className="review-text">
+                                        <span className="review-title" title={h.title}>{h.title}</span>
+                                        <span className="review-meta">{h.category} · {h.sectionCount} {h.sectionCount === 1 ? 'secțiune' : 'secțiuni'}</span>
+                                    </div>
+                                    <button className="btn-action" onClick={() => onReviewHymn(h.id)}>
+                                        Deschide
+                                    </button>
+                                    <button className="btn-clear" disabled={busy === `rev${h.id}`}
+                                        onClick={async () => {
+                                            setBusy(`rev${h.id}`);
+                                            await window.electron.db.markReviewed(h.id);
+                                            setBusy(null);
+                                            load();
+                                            onChanged();
+                                        }}>
+                                        E bun așa
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {states.map(st => (
                         <div key={st.key} className="decision-card">
@@ -3809,12 +3955,27 @@ function DecisionsModal({ onClose, onChanged }: { onClose: () => void; onChanged
                                 </span>
                             </div>
 
-                            {d.status === 'accepted' && d.publishedAs ? (
+                            {d.autoCleaned && d.publishedAs ? (
                                 <>
                                     <p className="decision-text">
                                         Imnul tău a intrat în colecția oficială, la <strong>
-                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>. Îl ai acum de
-                                        două ori: o dată acolo și o dată în „{d.category}".
+                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>, cu exact
+                                        textul pe care l-ai trimis. Copia din „{d.category}" era identică,
+                                        așa că am șters-o — ca să nu-l ai de două ori.
+                                    </p>
+                                    <div className="row">
+                                        <button className="btn-action" disabled={busy === d.hash}
+                                            onClick={() => alege(d.hash, 'pastrat')}>
+                                            Am înțeles
+                                        </button>
+                                    </div>
+                                </>
+                            ) : d.status === 'accepted' && d.publishedAs ? (
+                                <>
+                                    <p className="decision-text">
+                                        Imnul tău a intrat în colecția oficială, la <strong>
+                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>. Textul de
+                                        acolo diferă puțin de al tău, așa că nu am atins nimic — alegi tu.
                                     </p>
                                     <div className="row">
                                         <button className="btn-action" disabled={busy === d.hash}
@@ -4201,12 +4362,13 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
 // Settings Modal
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword, initialTab }: {
+function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword, onReviewHymn, initialTab }: {
     onClose: () => void;
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
     onChangePassword: () => void;
     onForgotPassword: () => void;
+    onReviewHymn: (hymnId: number) => void;
     initialTab?: 'projection' | 'admin' | 'about' | 'help';
 }) {
     const [activeTab, setActiveTab] = useState<'projection' | 'admin' | 'about' | 'help'>(initialTab ?? 'projection');
@@ -4655,11 +4817,20 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     <div className="flex flex-col gap-2">
                                         <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
                                             <p className="text-white/90 font-semibold text-sm">Ovidius Zanfir</p>
-                                            <p className="text-white/40 text-xs mt-0.5">Concept, design interfață, baza de date imnuri</p>
+                                            <p className="text-white/40 text-xs mt-0.5">
+                                                Autor original, interfață, structura aplicației
+                                            </p>
                                         </div>
                                         <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
                                             <p className="text-white/90 font-semibold text-sm">Samy Balasa</p>
-                                            <p className="text-white/40 text-xs mt-0.5">Video, YouTube, Biblie, auto-update, release pipeline</p>
+                                            <p className="text-white/40 text-xs mt-0.5">
+                                                Dezvoltarea versiunilor recente: colecțiile noi de cântări,
+                                                video &amp; YouTube, căutarea în Biblie, Ceas, Realtime cu
+                                                prezentări și șabloane, sistemul de contribuții și corecturi,
+                                                parola și recuperarea ei, actualizarea automată; și hangar,
+                                                serverul prin care se distribuie versiunile și prin care ajung
+                                                corecturile la imnuri
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -4695,35 +4866,199 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                     {activeTab === 'help' && (
                         <div className="settings-content">
-                            <p className="text-white/60 text-sm mb-3">
-                                Scurtături de tastatură pentru operare rapidă în timpul programului.
-                            </p>
-                            <div className="help-shortcuts">
-                                <div className="help-row">
-                                    <kbd>Enter</kbd>
-                                    <span>În listă: prima apăsare deschide previzualizarea, a doua trimite pe ecran (proiectează).</span>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Cum ajunge textul pe ecranul mare</h4>
+                                    <p>Doi pași, mereu aceiași: întâi pregătești, apoi trimiți.</p>
                                 </div>
-                                <div className="help-row">
-                                    <kbd>Esc</kbd>
-                                    <span>Oprește proiecția / oprește videoul / golește previzualizarea. În Anunțuri primul Esc închide editorul mare, al doilea oprește proiecția.</span>
+                                <div className="help-shortcuts">
+                                    <div className="help-row">
+                                        <kbd>1</kbd>
+                                        <span>Alegi imnul sau versetul din listă. Apare în panoul de
+                                            previzualizare, din dreapta. Congregația NU vede încă nimic.</span>
+                                    </div>
+                                    <div className="help-row">
+                                        <kbd>2</kbd>
+                                        <span>Apeși <kbd>Enter</kbd> sau „Proiectează". Abia acum apare pe
+                                            ecranul mare.</span>
+                                    </div>
+                                    <div className="help-row">
+                                        <kbd>3</kbd>
+                                        <span>Treci prin strofe cu <kbd>→</kbd> și <kbd>←</kbd>. Poți pregăti
+                                            următorul imn în timp ce unul e pe ecran: alege-l din listă și
+                                            apasă <kbd>Enter</kbd> când vrei să-l schimbi.</span>
+                                    </div>
+                                    <div className="help-row">
+                                        <kbd>4</kbd>
+                                        <span><kbd>Esc</kbd> stinge ecranul mare.</span>
+                                    </div>
                                 </div>
-                                <div className="help-row">
-                                    <kbd>↑</kbd><kbd>↓</kbd>
-                                    <span>Navighează prin lista de imnuri sau prin versete (când NU proiectezi).</span>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Taste — când NU proiectezi</h4>
+                                    <p>Pentru pregătit repede, fără mouse.</p>
                                 </div>
-                                <div className="help-row">
-                                    <kbd>←</kbd><kbd>→</kbd>
-                                    <span>În timpul proiecției: strofa anterioară / următoare (funcționează și PageUp / PageDown / Spațiu pentru înainte).</span>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>/</kbd>
+                                        <span>Sare în câmpul de căutare și selectează ce era scris — poți tasta direct numărul.</span></div>
+                                    <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd>
+                                        <span>Treci prin lista de imnuri sau prin versete; fiecare apăsare le arată în previzualizare.</span></div>
+                                    <div className="help-row"><kbd>Enter</kbd>
+                                        <span>Trimite pe ecran ce e în previzualizare.</span></div>
+                                    <div className="help-row"><kbd>Esc</kbd>
+                                        <span>Golește previzualizarea și câmpurile de căutare.</span></div>
                                 </div>
-                                <div className="help-row">
-                                    <kbd>↑</kbd><kbd>↓</kbd>
-                                    <span>În timpul proiecției: mărește / micșorează textul de pe ecran (zoom).</span>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Taste — în timpul proiecției</h4>
+                                    <p>Merg și din fereastra principală, și din fereastra de control.</p>
                                 </div>
-                                <div className="help-row">
-                                    <kbd>/</kbd>
-                                    <span>Sare direct în câmpul de căutare.</span>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>→</kbd><kbd>PgDn</kbd><kbd>Spațiu</kbd>
+                                        <span>Strofa următoare.</span></div>
+                                    <div className="help-row"><kbd>←</kbd><kbd>PgUp</kbd>
+                                        <span>Strofa anterioară.</span></div>
+                                    <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd>
+                                        <span>Mărește sau micșorează textul de pe ecranul mare. Dacă o strofă
+                                            lungă nu încape, aplicația o micșorează oricum singură.</span></div>
+                                    <div className="help-row"><kbd>Enter</kbd>
+                                        <span>Trece pe ecran imnul pregătit între timp.</span></div>
+                                    <div className="help-row"><kbd>Esc</kbd>
+                                        <span>Stinge ecranul mare.</span></div>
                                 </div>
-                            </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Taste — la video</h4>
+                                    <p>În fila Video, cu un film încărcat.</p>
+                                </div>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>Spațiu</kbd><span>Pornește sau oprește filmul.</span></div>
+                                    <div className="help-row"><kbd>←</kbd><kbd>→</kbd>
+                                        <span>Înapoi / înainte 5 secunde. Cu <kbd>Shift</kbd> apăsat, 30 de secunde.</span></div>
+                                    <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd><span>Sunetul mai tare sau mai încet.</span></div>
+                                    <div className="help-row"><kbd>M</kbd><span>Taie sau repune sunetul.</span></div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Anunțuri și prezentări</h4>
+                                    <p>Filele Anunțuri și Ceas ocupă singure ecranul mare.</p>
+                                </div>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>←</kbd><kbd>→</kbd>
+                                        <span>Trec prin slide-urile prezentării proiectate.</span></div>
+                                    <div className="help-row"><kbd>Esc</kbd>
+                                        <span>Prima apăsare închide editorul mare, a doua stinge ecranul.</span></div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Colecțiile de imnuri</h4>
+                                    <p>Două dintre ele au reguli aparte, și e bine să le știi.</p>
+                                </div>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>1</kbd>
+                                        <span><strong>Cărțile</strong> — Imnuri Creștine, Licurici, Exploratori,
+                                            Companioni, Tineret, Amicus. Le ținem noi la zi. Dacă schimbi ceva
+                                            într-un imn de aici, varianta ta rămâne a ta: o corectură venită de
+                                            la noi nu ți-o mai suprascrie, ci te întreabă.</span></div>
+                                    <div className="help-row"><kbd>2</kbd>
+                                        <span><strong>Imnuri Speciale</strong> — colecția oficială de cântări
+                                            care nu sunt în cărți. Numerele le dăm noi.</span></div>
+                                    <div className="help-row"><kbd>3</kbd>
+                                        <span><strong>Imnurile mele</strong> — a ta. Tot ce adaugi ajunge aici
+                                            și noi nu scriem niciodată în ea. În schimb, ce pui aici pleacă
+                                            spre noi ca propunere, după o săptămână de la ultima modificare;
+                                            dacă o acceptăm, imnul intră în colecția oficială și ești anunțat.</span></div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Adăugarea imnurilor</h4>
+                                    <p>Butonul <strong>+</strong> din capul ferestrei, la Imnuri.</p>
+                                </div>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Scriu eu un imn nou</strong> — editorul gol, cu strofe și refrene.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Din fișiere PowerPoint</strong> — un fișier sau mai multe.
+                                            La un singur fișier, imnul se deschide pe loc în editor, ca să-l
+                                            îndrepți imediat.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Dintr-un folder întreg</strong> — pentru zeci sau sute
+                                            deodată. Toate rămân marcate cu un punct portocaliu: conversia din
+                                            slide-uri greșește des. Le găsești adunate în butonul de
+                                            avertismente din antet și le citești pe rând.</span></div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Butonul de avertismente din antet</h4>
+                                    <p>Apare doar când chiar te așteaptă ceva. Adună trei lucruri:</p>
+                                </div>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span>Ce au hotărât autorii cu imnurile și corecturile pe care le-ai trimis.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span>Imnurile aduse din PowerPoint și încă necitite.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span>Unealta de descărcare de pe YouTube, dacă lipsește sau a rămas
+                                            în urmă.</span></div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Actualizări</h4>
+                                    <p>Setări → Administrare.</p>
+                                </div>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Stabil</strong> e canalul recomandat. <strong>Beta</strong>
+                                            îți dă versiunile cu câteva zile mai devreme.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span>O actualizare marcată obligatorie se descarcă singură, dar
+                                            <strong> nu se instalează peste o proiecție în curs</strong> —
+                                            așteaptă să stingi ecranul.</span></div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>Când ceva nu merge</h4>
+                                </div>
+                                <div className="help-shortcuts">
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Nu apare nimic pe ecranul mare</strong> — Setări →
+                                            Proiecție → „Detectează ecrane" și alege ecranul corect.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Filmul merge fără sunet</strong> — Setări → Proiecție →
+                                            Sunetul videoclipurilor → „Detectează dispozitive" și alege ieșirea
+                                            pe care e legat ecranul.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Nu se descarcă de pe YouTube</strong> — vezi butonul de
+                                            avertismente; unealta e probabil veche.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Ai pierdut un imn adăugat</strong> — caută-l în
+                                            „Imnurile mele"; tot ce adaugi ajunge acolo.</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span><strong>Altceva</strong> — Setări → Administrare → „Raportează o
+                                            problemă". Mesajul ajunge la noi chiar dacă în clipa aceea nu e
+                                            internet; pleacă mai târziu, singur.</span></div>
+                                </div>
+                            </section>
+
                         </div>
                     )}
 
@@ -4734,10 +5069,14 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                 <DecisionsModal
                     onClose={() => setDecisionsOpen(false)}
                     onChanged={() => {
-                        Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates()])
-                            .then(([d, st]) => setPendingDecisions(d.length + st.length)).catch(() => { });
+                        Promise.all([
+                            window.electron.contrib.decisions(),
+                            window.electron.contrib.hymnStates(),
+                            window.electron.db.countToReview(),
+                        ]).then(([d, st, rev]) => setPendingDecisions(d.length + st.length + rev)).catch(() => { });
                         onHymnsChanged();
                     }}
+                    onReviewHymn={id => { onClose(); onReviewHymn(id); }}
                 />
             )}
 
@@ -5072,25 +5411,31 @@ function TimerPanel() {
                             </button>
                         ))}
                     </div>
-                    <label className="timer-label">Durată</label>
-                    <div className="timer-duration">
-                        <input type="number" min={0} max={599} value={minutes}
+                    <label className="timer-label">Cât ține</label>
+                    <div className={`timer-duration ${startMode === 'until' ? 'is-disabled' : ''}`}>
+                        <input type="number" min={0} max={599} value={minutes} disabled={startMode === 'until'}
                             onChange={e => setMinutes(Math.max(0, Math.min(599, parseInt(e.target.value) || 0)))} />
                         <span>min</span>
-                        <input type="number" min={0} max={59} value={seconds}
+                        <input type="number" min={0} max={59} value={seconds} disabled={startMode === 'until'}
                             onChange={e => setSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
                         <span>sec</span>
                     </div>
+                    {startMode === 'until' && (
+                        <div className="timer-hint-sm">
+                            Nu o mai stabilești tu: ai ales să se termine la o oră anume, deci durata iese din
+                            calcul singură.
+                        </div>
+                    )}
 
-                    <label className="timer-label">Pornire</label>
+                    <label className="timer-label">Când pornește</label>
                     <div className="timer-start-modes">
                         <label className="timer-radio">
                             <input type="radio" name="startMode" checked={startMode === 'now'} onChange={() => setStartMode('now')} />
-                            <span>Acum, la apăsarea „Proiectează”</span>
+                            <span>Acum — pornește când apeși „Proiectează”</span>
                         </label>
                         <label className="timer-radio">
                             <input type="radio" name="startMode" checked={startMode === 'until'} onChange={() => setStartMode('until')} />
-                            <span>Numără până la ora</span>
+                            <span>Acum, dar se oprește fix la ora</span>
                             <input className="timer-time-input" type="number" min={0} max={23} value={untilHH}
                                 onFocus={() => setStartMode('until')}
                                 onChange={e => setUntilHH(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))} />
@@ -5100,11 +5445,15 @@ function TimerPanel() {
                                 onChange={e => setUntilMM(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
                         </label>
                         {startMode === 'until' && (
-                            <div className="timer-hint-sm">≈ {untilEquivMin} min din acest moment{nextClockOccurrence(untilHH, untilMM).tomorrow ? ' (mâine)' : ''} — durata se calculează singură.</div>
+                            <div className="timer-hint-sm">
+                                Pentru „mai avem X minute până începe programul": pui ora de început, iar
+                                aplicația socotește cât mai e. Acum ar fi ≈ {untilEquivMin} min
+                                {nextClockOccurrence(untilHH, untilMM).tomorrow ? ' (mâine)' : ''}.
+                            </div>
                         )}
                         <label className="timer-radio">
                             <input type="radio" name="startMode" checked={startMode === 'at'} onChange={() => setStartMode('at')} />
-                            <span>Pornește automat la ora</span>
+                            <span>Mai târziu, singură, la ora</span>
                             <input className="timer-time-input" type="number" min={0} max={23} value={atHH}
                                 onFocus={() => setStartMode('at')}
                                 onChange={e => setAtHH(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))} />

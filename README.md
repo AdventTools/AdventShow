@@ -22,8 +22,9 @@
 - 💬 **Realtime** — scrii și apare instant pe ecran; sau deschizi un **PowerPoint** și îl editezi live, în timpul proiecției
 - 📋 **Șabloane** — ecrane gata făcute (Bun venit, Anunțuri, Pauză…) plus ale tale, păstrate la actualizări
 - 🔐 **Parolă de administrare** — protejează imnurile de modificări accidentale; se recuperează telefonic, direct din aplicație
-- 🤝 **Corecturi care circulă** — corecturile tale ajung la autori, corecturile oficiale ajung automat la toată lumea
-- 🔄 **Actualizare automată** — aplicația se ține singură la zi
+- 🤝 **Corecturi care circulă** — corecturile tale ajung la autori, corecturile oficiale ajung automat la toată lumea, iar varianta ta nu se pierde niciodată fără să fii întrebat
+- 🔄 **Actualizare automată**, pe canal **stabil** sau **beta** — și niciodată peste o proiecție în curs
+- 🔔 **Un singur loc pentru ce te așteaptă** — răspunsurile autorilor, imnurile aduse din PowerPoint și încă necitite, unealta de YouTube rămasă în urmă
 - 🔎 **Căutare fără diacritice** — scrii „rugaciune", găsește „rugăciune"
 
 ---
@@ -86,8 +87,11 @@ La prima pornire îți setezi o **parolă de administrare** și completezi **bis
 - Caută rapid după **număr**, **titlu** sau **cuvânt din text** — rezultatele apar pe măsură ce scrii; la „Toate", fiecare rezultat arată și din ce colecție vine
 - **Nu trebuie să scrii cu diacritice** — „inchinare" găsește „închinare"
 - Vezi prima linie a fiecărui imn direct în listă, fără să-l deschizi
-- **Adaugi imnuri noi dintr-un PowerPoint** (`.ppt` / `.pptx`): deschizi fișierul, textul apare gata împărțit pe strofe în editor, îl verifici și îl salvezi; sau imporți un folder întreg deodată
+- **Adaugi imnuri de la butonul `+`** din capul ferestrei: le scrii tu, le aduci dintr-unul sau mai multe fișiere **PowerPoint** (`.ppt` / `.pptx`), ori dintr-un folder întreg
+  - la **un singur fișier**, imnul se deschide pe loc în editor, ca să-l îndrepți imediat
+  - la **mai multe**, rămân marcate cu un punct portocaliu și le citești pe rând — conversia din slide-uri greșește des, iar nimeni nu verifică sute de imnuri dintr-o dată
 - **Editor integrat** — schimbi versurile, adaugi sau ștergi strofe, reordonezi cu mouse-ul
+- **Două colecții cu reguli aparte**: **Imnuri Speciale** e colecția oficială de cântări din afara cărților, numerotată de autori; **Imnurile mele** e a ta — tot ce adaugi ajunge acolo și nimic de la noi nu se scrie peste
 
 ### 📖 Biblia Cornilescu
 
@@ -171,11 +175,16 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 
 - Dacă **corectezi un imn** sau **adaugi unul propriu**, aplicația trimite modificarea autorilor, ca să o verifice și — dacă e corectă — să o includă în baza oficială, pentru toată lumea. Trimiterea se face automat și abia după ce modificarea a rămas neschimbată 7 zile: pleacă doar forma finală, nu și încercările intermediare.
 - În sens invers, **corecturile oficiale** publicate de autori ajung automat la toate instalațiile, la pornirea aplicației — fără să aștepți o versiune nouă.
+- **Dacă ți-ai adaptat un imn, varianta ta rămâne a ta.** O corectură oficială nu ți-o mai suprascrie: ești întrebat, cu ambele texte în față, și alegi. Singura excepție e când textul oficial chiar era greșit — atunci îl înlocuim, dar îți păstrăm varianta și îți dăm butonul de pus la loc.
+- Un **imn nou** publicat de autori nu poate lua locul unuia de-al tău, chiar dacă nimerește același număr.
+- **Vezi ce s-a hotărât** cu fiecare imn sau corectură pe care ai trimis-o, din butonul de avertismente din antet.
 - La actualizare, **baza ta de imnuri se aduce singură la zi** cu colecțiile și corecturile noi, fără să-ți atingă modificările proprii.
 
 ### 🔄 Actualizare automată
 
 - Aplicația verifică singură dacă există o versiune nouă și se actualizează **în fundal**, fără pași complicați
+- **Două canale**, din Setări → Administrare: **Stabil** (recomandat) și **Beta**, dacă vrei versiunile cu câteva zile mai devreme
+- O actualizare marcată **obligatorie** se descarcă singură, dar **nu se instalează peste o proiecție în curs** — așteaptă să stingi ecranul
 - Pe Windows actualizarea e **silențioasă** — fără ferestre de comandă, fără întrebări; pornește direct versiunea nouă
 - Aplicația și instalerul sunt **semnate digital**
 
@@ -188,6 +197,8 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 - **Calculatorul nu intră în sleep** cât timp aplicația rulează (nu pierzi proiecția în mijlocul slujbei)
 - **Backup** — exporți toate imnurile editate într-un fișier și le poți importa pe alt calculator
 - **Meniu cu clic dreapta** pe un imn → editare, ștergere, mutare în altă categorie
+- **Raportezi o problemă sau o idee** direct din Setări → Administrare; dacă în clipa aceea nu e internet, mesajul pleacă singur mai târziu
+- **Ajutor cuprinzător** în Setări → Ajutor: pașii proiecției, toate tastele, colecțiile, importul și ce faci când ceva nu merge
 
 ---
 
@@ -195,11 +206,14 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 
 | Tasta | Ce face |
 |-------|---------|
-| `Enter` | Încarcă în previzualizare / Pornește proiecția |
-| `Escape` | Oprește proiecția / Curăță previzualizarea (în Realtime: întâi închide editorul mare, apoi oprește proiecția) |
-| `↑` `↓` | Navighează prin listă |
-| `←` `→` | Treci între strofe în timpul proiecției |
 | `/` | Pune cursorul în câmpul de căutare |
+| `↑` `↓` | Prin lista de imnuri sau prin versete (când nu proiectezi) |
+| `Enter` | Trimite pe ecran ce e în previzualizare |
+| `←` `→` | Strofa anterioară / următoare, în timpul proiecției (merg și `PgUp` / `PgDn`, iar `Spațiu` înainte) |
+| `↑` `↓` | Mărește / micșorează textul de pe ecran, în timpul proiecției |
+| `Escape` | Oprește proiecția, oprește filmul sau golește previzualizarea (în Anunțuri: întâi închide editorul mare) |
+
+La video: `Spațiu` pornește și oprește, `←` `→` sar 5 secunde (30 cu `Shift`), `↑` `↓` schimbă sunetul, `M` îl taie.
 
 ---
 
@@ -220,7 +234,7 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 **AdventShow** este dezvoltat și distribuit **gratuit** de:
 
 - **Ovidius Zanfir** — autor original, interfață, structura aplicației
-- **Samy Balasa** — dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, sistemul de contribuții și corecturi, parola și recuperarea ei, actualizarea automată
+- **Samy Balasa** — dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, sistemul de contribuții și corecturi, parola și recuperarea ei, actualizarea automată; și **hangar**, serverul prin care se distribuie versiunile (canal stabil și beta, actualizare obligatorie când e cazul) și prin care ajung corecturile la imnuri
 
 Organizație: **[AdventTools](https://github.com/AdventTools)**
 

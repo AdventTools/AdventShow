@@ -149,6 +149,25 @@ DMG="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
 ZIP="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip"
 EXE="${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe"
 
+# ── Baza livrată preia ce s-a publicat în hangar ──────────────────────────────
+#
+# Sursa de adevăr pentru conținut e hangar. Ce accepți și publici acolo trebuie să
+# ajungă și în baza din installer, altfel cine instalează mâine primește textul
+# vechi. Se face automat, la fiecare release, înainte de orice build — nu depinde
+# de memoria nimănui. Dacă feed-ul nu poate fi luat sau o intrare e stricată,
+# scriptul se oprește și oprește release-ul: mai bine tăiat aici decât livrat greșit.
+if [ ! -f "$STATE/bump.done" ]; then
+    step "1b/11 Baza livrată preia corecturile din hangar"
+    npm run --silent sync:seed || fail "sincronizarea bazei livrate a eșuat — vezi mesajul de mai sus"
+    if ! git diff --quiet public/hymns.db; then
+        git add public/hymns.db
+        git commit -q -m "content: baza livrată preia corecturile publicate în hangar"
+        ok "baza livrată actualizată și comisă"
+    else
+        ok "baza livrată era deja la zi"
+    fi
+fi
+
 # working tree curat — doar la început de release nou (la reluare e deja bumped)
 if [ ! -f "$STATE/bump.done" ]; then
     [ -z "$(git status --porcelain)" ] || fail "Working tree dirty — comite featurile înainte de release"
