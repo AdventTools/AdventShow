@@ -21,7 +21,8 @@
     "release:signed": "./scripts/release.sh",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "mirror:corrections": "curl -sfL https://hangar.it4all.ro/d/ba3166b608233a30/corrections.json -o content/corrections.json && echo 'corecturi oglindite din hangar in content/corrections.json'"
+    "mirror:corrections": "curl -sfL https://hangar.it4all.ro/d/ba3166b608233a30/corrections.json -o content/corrections.json && echo 'corecturi oglindite din hangar in content/corrections.json'",
+    "sync:seed": "ELECTRON_RUN_AS_NODE=1 electron scripts/sync-seed-from-hangar.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",

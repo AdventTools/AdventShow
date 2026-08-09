@@ -24,6 +24,8 @@ export interface Hymn {
   section_count?: number;
   snippet?: string;
   created_at?: string;
+  /** 1 = adus dintr-un PowerPoint și încă necitit de om. */
+  needs_review?: number;
 }
 
 export interface BibleBook {
@@ -52,6 +54,17 @@ export interface ImportResult {
   success: number;
   failed: number;
   errors: string[];
+  /** Id-urile imnurilor scrise — la un singur fișier, editorul se deschide pe el. */
+  ids: number[];
+}
+
+/** Imn adus dintr-un PowerPoint și încă necitit de om. */
+export interface HymnToReview {
+  id: number;
+  number: string;
+  title: string;
+  category: string;
+  sectionCount: number;
 }
 
 export interface HymnSectionInput {
@@ -221,6 +234,9 @@ export interface IElectronAPI {
     updateHymnWithSections: (id: number, payload: { number: string; title: string; sections: { type: 'strofa' | 'refren'; text: string }[] }) => Promise<void>;
     importPresentations: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
     importPresentationFiles: (filePaths: string[], categoryId?: number) => Promise<ImportResult>;
+    hymnsToReview: () => Promise<HymnToReview[]>;
+    countToReview: () => Promise<number>;
+    markReviewed: (id: number) => Promise<void>;
     clearAll: () => Promise<void>;
     getCategories: () => Promise<Category[]>;
     createCategory: (name: string) => Promise<Category>;
@@ -395,6 +411,7 @@ export interface IElectronAPI {
     isInstalled: () => Promise<boolean>;
     install: () => Promise<{ success: boolean; error?: string }>;
     version: () => Promise<string>;
+    health: () => Promise<{ installed: boolean; version: string; staleDays: number }>;
     update: () => Promise<{ success: boolean; version?: string; error?: string }>;
     getStreamUrl: (videoUrl: string) => Promise<{ url: string; error?: string }>;
   };
@@ -442,6 +459,8 @@ export interface PendingDecision {
   note: string;
   publishedAs?: { category: string; number: string };
   fel: 'corectura' | 'imn';
+  /** Copia din „Imnurile mele" era identică cu textul oficial și a fost ștearsă. */
+  autoCleaned?: boolean;
 }
 
 /**

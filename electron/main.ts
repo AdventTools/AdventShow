@@ -19,6 +19,10 @@ import {
   getHymnByNumber,
   getHymnWithSections,
   importJsonBackup,
+  tidyCollectionsAfterRestore,
+  listHymnsToReview,
+  countHymnsToReview,
+  markHymnReviewed,
   initDB,
   reorderSections,
   searchHymns,
@@ -207,10 +211,18 @@ function registryDeps(): RegistryDeps {
  */
 let contentRoutine: (() => Promise<void>) | null = null
 
-/** Îi spunem interfeței câte decizii îl așteaptă, ca să apară pastila în Setări. */
+/**
+ * Îi spunem interfeței câte lucruri îl așteaptă, ca să apară butonul din antet.
+ *
+ * Se trimite ȘI când numărul a ajuns la zero. Cât timp trimiteam doar `n > 0`,
+ * scăderea la zero nu ajungea niciodată în interfață: rutina de conținut putea
+ * consuma singură ultima intrare — de pildă când varianta oficială ținută deoparte
+ * chiar ajunge la om — iar butonul rămânea aprins până la următoarea pornire. Omul
+ * îl apăsa și găsea fereastra goală.
+ */
 function notifyDecisions(deps: ContribDeps) {
   const n = listPendingDecisions(deps).length + listHymnStates(deps).length
-  if (n > 0 && isWinAlive(win)) win.webContents.send('contrib:decisions', n)
+  if (isWinAlive(win)) win.webContents.send('contrib:decisions', n)
 }
 
 let crashHandlersWired = false
@@ -422,6 +434,15 @@ function performQuitAndInstall() {
  * Verifică la hub dacă versiunea curentă mai e acceptată. Tot aici pleacă și
  * ping-ul de telemetrie — o singură cerere face ambele treburi.
  */
+/** Baza livrată cu aplicația: în installer stă în resources, în dev în public/. */
+function seedDbPathOrNull(): string | null {
+  const cai = [
+    path.join(process.resourcesPath ?? '', 'hymns.db'),
+    path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
+  ]
+  return cai.find(p => fs.existsSync(p)) ?? null
+}
+
 async function checkForcedUpdate(event: 'launch' | 'heartbeat' = 'launch') {
   const reply = await track(hangarDeps(), event)
   if (!reply) return
@@ -1425,11 +1446,7 @@ app.whenReady().then(() => {
 
   // status contribuții pentru panoul Setări (câte modificări așteaptă / trimise)
   ipcMain.handle('contrib:status', () => {
-    const seedPaths = [
-      path.join(process.resourcesPath ?? '', 'hymns.db'),
-      path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
-    ]
-    const sp = seedPaths.find(p => fs.existsSync(p))
+    const sp = seedDbPathOrNull()
     if (!sp) return { pending: 0, sent: 0 }
     return getContributionStatus(contribDeps(sp))
   })
@@ -1508,7 +1525,17 @@ app.whenReady().then(() => {
     } catch {
       throw new Error('Fișier JSON invalid.')
     }
-    return importJsonBackup(parsed)
+    const rezumat = importJsonBackup(parsed)
+    // Backup-urile vechi au imnurile proprii puse în colecții devenite oficiale, iar
+    // colecțiile livrate de noi pot lipsi cu totul. Le așezăm la loc imediat.
+    const seed = seedDbPathOrNull()
+    if (seed) {
+      const curatat = tidyCollectionsAfterRestore(seed)
+      if (curatat.mutate > 0 || curatat.colectii > 0) {
+        debugLog(`[restaurare] ${curatat.colectii} colecții refăcute, ${curatat.mutate} imnuri proprii mutate`)
+      }
+    }
+    return rezumat
   })
 
   // ── Section CRUD ──────────────────────────────────────────────────────────
@@ -1521,6 +1548,11 @@ app.whenReady().then(() => {
     (_e, sections: { id: number; order_index: number }[]) => reorderSections(sections))
 
   // ── Import ────────────────────────────────────────────────────────────────
+  // Imnuri aduse din PowerPoint și încă necitite de om
+  ipcMain.handle('db:hymns-to-review', () => listHymnsToReview())
+  ipcMain.handle('db:count-to-review', () => countHymnsToReview())
+  ipcMain.handle('db:mark-reviewed', (_e, id: number) => markHymnReviewed(id))
+
   ipcMain.handle('db:import-presentations', async (_e, dirPath: string, categoryId?: number) => {
     try { return await importPresentationDirectory(dirPath, categoryId) }
     catch (err: any) {
@@ -1945,6 +1977,21 @@ app.whenReady().then(() => {
     return result
   })
   ipcMain.handle('ytdlp:version', () => getYtDlpVersion())
+
+  // Starea uneltei de descărcare, ca să apară în avertismente lângă restul.
+  //
+  // Vechimea se judecă după data din versiune — yt-dlp se numerotează „2026.07.14" —
+  // nu întrebând GitHub la fiecare pornire. YouTube schimbă des felul în care servește
+  // filmele, iar o unealtă veche de câteva luni pică exact în timpul programului.
+  ipcMain.handle('ytdlp:health', async () => {
+    if (!isYtDlpInstalled()) return { installed: false, version: '', staleDays: 0 }
+    const version = await getYtDlpVersion()
+    const m = /^(\d{4})\.(\d{2})\.(\d{2})/.exec(version.trim())
+    if (!m) return { installed: true, version, staleDays: 0 }
+    const lansat = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    const zile = Math.floor((Date.now() - lansat) / 86400000)
+    return { installed: true, version: version.trim(), staleDays: Math.max(0, zile) }
+  })
   ipcMain.handle('ytdlp:update', () => updateYtDlp())
   ipcMain.handle('ytdlp:get-stream-url', async (_e, videoUrl: string) => {
     debugLog('[ytdlp:get-stream-url] URL:', videoUrl)

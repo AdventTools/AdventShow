@@ -183,6 +183,19 @@ export function initDB() {
   // We allow duplicate numbers across categories, so only enforce uniqueness per category.
   migrateLegacyHymnsNumberConstraint(db);
 
+  // Imn adus dintr-un PowerPoint și încă nevăzut de om. Importul în grup poate aduce
+  // sute deodată, iar conversia din slide-uri greșește des — strofe lipite, titlu luat
+  // din alt loc. Marcajul ține evidența celor de recitit; se stinge când omul deschide
+  // imnul în editor și îl salvează.
+  //
+  // DUPĂ rescrierea de mai sus, nu înainte: aceea reface tabela cu o listă fixă de
+  // coloane, deci o coloană adăugată înainte s-ar pierde exact pe bazele vechi.
+  try {
+    db.exec('ALTER TABLE hymns ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    // Coloana există deja — în regulă
+  }
+
   // Seed built-in categories
   const insertBuiltin = db.prepare(
     'INSERT OR IGNORE INTO categories (name, is_builtin) VALUES (?, 1)'
@@ -383,7 +396,7 @@ export function getAllHymns(categoryId?: number) {
   if (categoryId !== undefined) {
     return getDb()
       .prepare(`
-        SELECT h.id, h.number, h.title, h.category_id,
+        SELECT h.id, h.number, h.title, h.category_id, h.needs_review,
                COUNT(s.id) AS section_count
         FROM hymns h
         LEFT JOIN hymn_sections s ON s.hymn_id = h.id
@@ -395,7 +408,7 @@ export function getAllHymns(categoryId?: number) {
   }
   return getDb()
     .prepare(`
-      SELECT h.id, h.number, h.title, h.category_id,
+      SELECT h.id, h.number, h.title, h.category_id, h.needs_review,
              COUNT(s.id) AS section_count
       FROM hymns h
       LEFT JOIN hymn_sections s ON s.hymn_id = h.id
@@ -418,7 +431,7 @@ export function searchHymns(query: string, categoryId?: number) {
   if (categoryId !== undefined) {
     return getDb()
       .prepare(`
-        SELECT h.id, h.number, h.title, h.category_id,
+        SELECT h.id, h.number, h.title, h.category_id, h.needs_review,
                COUNT(s.id) AS section_count
         FROM hymns h
         LEFT JOIN hymn_sections s ON s.hymn_id = h.id
@@ -431,7 +444,7 @@ export function searchHymns(query: string, categoryId?: number) {
   }
   return getDb()
     .prepare(`
-      SELECT h.id, h.number, h.title, h.category_id,
+      SELECT h.id, h.number, h.title, h.category_id, h.needs_review,
              COUNT(s.id) AS section_count
       FROM hymns h
       LEFT JOIN hymn_sections s ON s.hymn_id = h.id
@@ -452,7 +465,7 @@ export function getAllHymnsWithSnippets(categoryId?: number) {
   if (categoryId !== undefined) {
     return getDb()
       .prepare(`
-        SELECT h.id, h.number, h.title, h.category_id,
+        SELECT h.id, h.number, h.title, h.category_id, h.needs_review,
                COUNT(sec.id) AS section_count,
                ${snippetSubquery}
         FROM hymns h
@@ -465,7 +478,7 @@ export function getAllHymnsWithSnippets(categoryId?: number) {
   }
   return getDb()
     .prepare(`
-      SELECT h.id, h.number, h.title, h.category_id,
+      SELECT h.id, h.number, h.title, h.category_id, h.needs_review,
              COUNT(sec.id) AS section_count,
              ${snippetSubquery}
       FROM hymns h
@@ -667,7 +680,9 @@ export function updateHymnWithSections(id: number, input: { number: string; titl
     const searchText = normalizeSearchText(`${number} ${title} ${sections.map(s => s.text).join(' ')}`);
     // updated_at protejează modificările utilizatorului de suprascrieri la syncSeedContent()
     const now = new Date().toISOString();
-    db.prepare('UPDATE hymns SET number = ?, title = ?, search_text = ?, updated_at = ? WHERE id = ?')
+    // Salvarea din editor înseamnă că omul s-a uitat peste imn: dacă era marcat
+    // „de verificat" după un import, marcajul se stinge aici.
+    db.prepare('UPDATE hymns SET number = ?, title = ?, search_text = ?, updated_at = ?, needs_review = 0 WHERE id = ?')
       .run(number, title, searchText, now, id);
 
     db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(id);
@@ -854,6 +869,71 @@ export function importJsonBackup(data: unknown): BackupSummary {
   };
 }
 
+/**
+ * De curățat DUPĂ o restaurare din backup.
+ *
+ * Restaurarea reface baza exact cum era în fișier. Un backup făcut pe o versiune
+ * veche are imnurile proprii ale bisericii puse în „Imnuri Speciale" — colecție care
+ * între timp a devenit oficială și numerotată de autori. Restaurat așa, imnul lor
+ * stă pe un număr pe care îl putem publica oricând, iar colecțiile pe care le
+ * livrăm noi pot lipsi cu totul, pentru că backup-ul nu le avea.
+ *
+ * Deci: refacem colecțiile livrate și mutăm în „Imnurile mele" orice imn dintr-o
+ * colecție oficială care nu se află în baza livrată. Nimic nu se pierde — doar se
+ * așază unde nu-l calcă nimeni.
+ *
+ * Compromisul, spus pe față: un imn ajuns oficial prin corectură dar care nu e încă
+ * în baza livrată e mutat și el. Rămâne vizibil, iar următoarea actualizare a bazei
+ * livrate îl aduce la locul lui.
+ */
+export function tidyCollectionsAfterRestore(seedDbPath: string): { mutate: number; colectii: number } {
+  const db = getDb();
+
+  const insertBuiltin = db.prepare('INSERT OR IGNORE INTO categories (name, is_builtin) VALUES (?, 1)');
+  let colectii = 0;
+  for (const name of BUILTIN_CATEGORIES) {
+    colectii += insertBuiltin.run(name).changes as number;
+  }
+
+  if (!fs.existsSync(seedDbPath)) return { mutate: 0, colectii };
+
+  const mine = db.prepare('SELECT id FROM categories WHERE name = ?').get(MY_HYMNS_CATEGORY) as
+    { id: number } | undefined;
+  if (!mine) return { mutate: 0, colectii };
+
+  const seedDb = new Database(seedDbPath, { readonly: true });
+  const oficiale = new Set<string>();
+  try {
+    const cat = new Map((seedDb.prepare('SELECT id, name FROM categories').all() as
+      { id: number; name: string }[]).map(c => [c.id, c.name]));
+    for (const h of seedDb.prepare('SELECT number, category_id FROM hymns WHERE category_id IS NOT NULL').all() as
+      { number: string; category_id: number }[]) {
+      oficiale.add(`${cat.get(h.category_id)}|${normalizeHymnNumber(h.number)}`);
+    }
+  } finally {
+    seedDb.close();
+  }
+  if (oficiale.size === 0) return { mutate: 0, colectii };
+
+  const alLui = db.prepare(`SELECT h.id, h.number, c.name AS cat FROM hymns h
+    JOIN categories c ON c.id = h.category_id
+    WHERE c.name <> ?`).all(MY_HYMNS_CATEGORY) as { id: number; number: string; cat: string }[];
+
+  const muta = db.prepare('UPDATE hymns SET category_id = ? WHERE id = ?');
+  let mutate = 0;
+  const tx = db.transaction(() => {
+    for (const h of alLui) {
+      if (oficiale.has(`${h.cat}|${normalizeHymnNumber(h.number)}`)) continue;
+      muta.run(mine.id, h.id);
+      mutate++;
+    }
+  });
+  tx();
+
+  if (mutate > 0) console.log(`[restaurare] ${mutate} imnuri proprii mutate în „${MY_HYMNS_CATEGORY}"`);
+  return { mutate, colectii };
+}
+
 // ── Section queries ───────────────────────────────────────────────────────────
 
 export function addSection(hymnId: number, type: 'strofa' | 'refren', text: string) {
@@ -898,12 +978,18 @@ export interface HymnImportData {
   sections: { type: 'strofa' | 'refren'; text: string }[];
 }
 
-export function bulkInsertHymns(hymns: HymnImportData[]) {
+/** Întoarce id-urile imnurilor scrise, în ordinea din listă — importul unui singur
+ *  fișier deschide editorul direct pe imnul adus. */
+export function bulkInsertHymns(hymns: HymnImportData[]): number[] {
   const db = getDb();
+  const idsScrise: number[] = [];
 
+  // Tot ce vine dintr-un PowerPoint intră marcat „de verificat": conversia din
+  // slide-uri ghicește unde se termină o strofă și de unde începe titlul, iar la un
+  // import în grup nimeni nu se uită peste sute de imnuri pe loc.
   const insertHymn = db.prepare(`
-    INSERT OR REPLACE INTO hymns (number, title, search_text, category_id)
-    VALUES (@number, @title, @searchText, @categoryId)
+    INSERT OR REPLACE INTO hymns (number, title, search_text, category_id, needs_review)
+    VALUES (@number, @title, @searchText, @categoryId, 1)
   `);
 
   const insertSection = db.prepare(`
@@ -924,6 +1010,7 @@ export function bulkInsertHymns(hymns: HymnImportData[]) {
         categoryId: hymn.categoryId ?? null,
       });
       const hymnId = result.lastInsertRowid;
+      idsScrise.push(Number(hymnId));
       deleteOldSections.run(hymnId);
       hymn.sections.forEach((section, i) => {
         insertSection.run({
@@ -937,6 +1024,38 @@ export function bulkInsertHymns(hymns: HymnImportData[]) {
   });
 
   tx(hymns);
+  return idsScrise;
+}
+
+// ── Imnuri aduse din PowerPoint și încă neverificate ─────────────────────────
+
+export interface HymnToReview {
+  id: number;
+  number: string;
+  title: string;
+  category: string;
+  sectionCount: number;
+}
+
+/** Imnurile pe care omul nu le-a citit încă, în ordinea în care le-ar deschide. */
+export function listHymnsToReview(): HymnToReview[] {
+  return getDb().prepare(`
+    SELECT h.id, h.number, h.title, COALESCE(c.name, '—') AS category,
+           (SELECT COUNT(*) FROM hymn_sections s WHERE s.hymn_id = h.id) AS sectionCount
+    FROM hymns h LEFT JOIN categories c ON c.id = h.category_id
+    WHERE h.needs_review = 1
+    ORDER BY c.name, h.number
+  `).all() as HymnToReview[];
+}
+
+export function countHymnsToReview(): number {
+  const r = getDb().prepare('SELECT COUNT(*) AS n FROM hymns WHERE needs_review = 1').get() as { n: number };
+  return r.n;
+}
+
+/** „L-am citit, e bun așa" — fără să treacă prin editor. */
+export function markHymnReviewed(id: number) {
+  getDb().prepare('UPDATE hymns SET needs_review = 0 WHERE id = ?').run(id);
 }
 
 // ── Bible tables ──────────────────────────────────────────────────────────────
