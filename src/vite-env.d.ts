@@ -170,6 +170,25 @@ export interface DisplayInfo {
 
 export type BgType = 'color' | 'image' | 'video';
 
+/** Cât s-a descărcat din acompaniamente și cât ar fi în total. */
+export interface AccompanimentStats {
+  have: number;
+  total: number;
+  bytes: number;
+  totalBytes: number;
+  folder: string;
+  revision: number | null;
+}
+
+export interface AccompanimentInfo {
+  n: number;
+  /** Durata, în milisecunde. */
+  ms: number;
+  bytes: number;
+  local: boolean;
+  path: string | null;
+}
+
 export interface AppSettings {
   projectionDisplayId?: number;
   bgType?: BgType;
@@ -181,7 +200,10 @@ export interface AppSettings {
   contentTextColor?: string; // hex, e.g. '#ffffff'
   adminPasswordHash?: string; // bcrypt-like hash or empty
   projectionFontSize?: number; // font size multiplier, default 1.2
-  audioOutputDeviceId?: string; // audio output device id for video playback
+  audioOutputDeviceId?: string; // unde iese sunetul: video proiectat + acompaniament
+  // ── Acompaniament instrumental ──
+  accompanimentFolder?: string; // unde se salvează MP3-urile; implicit userData/acompaniament
+  accompanimentVolume?: number; // 0..1, reținut între sesiuni
   debugLog?: boolean; // enable detailed debug logging to file
   windowBounds?: { x: number; y: number; width: number; height: number };
   windowMaximized?: boolean; // true = fereastra era maximizată la ultima închidere
@@ -277,6 +299,30 @@ export interface IElectronAPI {
     get: () => Promise<AppSettings>;
     set: (patch: Partial<AppSettings>) => Promise<void>;
     setUiZoom: (factor: number) => Promise<void>;
+  };
+  accompaniment: {
+    stats: () => Promise<AccompanimentStats>;
+    refresh: () => Promise<AccompanimentStats>;
+    /** Numerele de imn care au fișierul pe disc. */
+    present: () => Promise<number[]>;
+    info: (numar: number) => Promise<AccompanimentInfo | null>;
+    /** Descarcă dacă lipsește; null când nu există fișier sau nu e internet. */
+    ensure: (numar: number) => Promise<{ path: string; ms: number; bytes: number } | null>;
+    downloadAll: () => Promise<{ ok: number; esuate: number; oprit: boolean }>;
+    stopAll: () => Promise<void>;
+    removeAll: () => Promise<{ sterse: number; stats: AccompanimentStats }>;
+    folder: () => Promise<string>;
+    /** Octetii fisierului, pentru un Blob in renderer. null daca lipseste. */
+    bytes: (numar: number) => Promise<Uint8Array | null>;
+    /** `[index_slide, sfarsit_ms, reintrare_ms]`; null daca imnul nu e aprobat. */
+    marks: (numar: number) => Promise<[number, number, number][] | null>;
+    refreshMarks: () => Promise<number>;
+    onProgress: (cb: (numar: number, procent: number) => void) => void;
+    offProgress: () => void;
+    onBulk: (cb: (facute: number, total: number, numar: number, procent: number) => void) => void;
+    offBulk: () => void;
+    onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean }) => void) => void;
+    offBulkDone: () => void;
   };
   registry: {
     submit: () => Promise<boolean>;

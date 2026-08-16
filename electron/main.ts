@@ -48,6 +48,12 @@ import {
 } from './contrib'
 import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
 import {
+  AccompanimentDeps, AccompanimentManifest, accompanimentDir, cachedManifest,
+  downloadMissing, downloadOne, findItem, localPath, presentNumbers, refreshManifest,
+  removeAll as removeAllAccompaniment, stats as accompanimentStats,
+  SyncFile, cachedSync, refreshSync, marksFor,
+} from './accompaniment'
+import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, compareVersions, flushReportQueue,
   hangarPlatform, pendingReportCount, sendReport, startHeartbeat, track, updateChannel,
 } from './hangar'
@@ -139,6 +145,9 @@ interface AppSettings {
   // adevărat doar între ieșirea din beta și prima actualizare reușită
   pendingDowngrade?: boolean
   uiZoom?: number             // marime text interfata fereastra principala (setZoomFactor), default 1
+  // ── Acompaniament instrumental ──
+  accompanimentFolder?: string   // unde se salvează MP3-urile; implicit userData/acompaniament
+  accompanimentVolume?: number   // 0..1, reținut între sesiuni
 }
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
@@ -1353,6 +1362,137 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:set-ui-zoom', (_e, factor: number) => {
     const f = Math.max(0.5, Math.min(3, Number(factor) || 1))
     if (isWinAlive(win)) win.webContents.setZoomFactor(f)
+  })
+
+  // ── Acompaniament instrumental ─────────────────────────────────────────────
+  // Un MP3 per imn, descărcat la cerere din hangar. Nimic de aici nu blochează
+  // proiecția: fără internet, butonul rămâne gri și atât.
+  const accDeps: AccompanimentDeps = {
+    userDataDir: app.getPath('userData'),
+    getFolder: () => readSettings().accompanimentFolder,
+    log: debugLog,
+  }
+  let accManifest: AccompanimentManifest | null = cachedManifest(accDeps)
+  let accSync: SyncFile | null = cachedSync(accDeps)
+  let accStopAll = false
+  // Marcajele se aduc o dată la pornire, în fundal. Dacă serverul tace, rămân
+  // cele din cache; dacă nu e niciunul, sincronizarea pur si simplu nu se oferă.
+  setImmediate(() => { void refreshSync(accDeps).then(s => { accSync = s ?? accSync }) })
+
+  /** Manifestul, cu o singură încercare de împrospătare dacă nu-l avem încă. */
+  const accEnsureManifest = async (): Promise<AccompanimentManifest | null> => {
+    if (accManifest) return accManifest
+    accManifest = await refreshManifest(accDeps)
+    return accManifest
+  }
+
+  ipcMain.handle('accompaniment:refresh', async () => {
+    accManifest = (await refreshManifest(accDeps)) ?? accManifest
+    return accompanimentStats(accDeps, accManifest)
+  })
+
+  ipcMain.handle('accompaniment:stats', async () => {
+    await accEnsureManifest()
+    return accompanimentStats(accDeps, accManifest)
+  })
+
+  /** Numerele de imn care au fișierul pe disc — pentru ♪ din listă. */
+  ipcMain.handle('accompaniment:present', async () => {
+    await accEnsureManifest()
+    return presentNumbers(accDeps, accManifest)
+  })
+
+  /**
+   * Calea locală a acompaniamentului unui imn, descărcându-l dacă lipsește.
+   * Întoarce null când nu există fișier pentru imnul acela sau nu e internet —
+   * apelantul afișează butonul gri, nu o eroare.
+   */
+  ipcMain.handle('accompaniment:ensure', async (_e, numar: number) => {
+    const m = await accEnsureManifest()
+    const item = findItem(m, Number(numar))
+    if (!m || !item) return null
+    const cale = await downloadOne(accDeps, m, item, (n, procent) => {
+      if (isWinAlive(win)) win.webContents.send('accompaniment:progress', n, procent)
+    })
+    return cale ? { path: cale, ms: item.ms, bytes: item.bytes } : null
+  })
+
+  /** Doar interogare, fără descărcare — ca UI-ul să știe ce arată pe buton. */
+  ipcMain.handle('accompaniment:info', async (_e, numar: number) => {
+    const m = await accEnsureManifest()
+    const item = findItem(m, Number(numar))
+    if (!m || !item) return null
+    const cale = localPath(accDeps, item)
+    let local = false
+    try {
+      local = fs.statSync(cale).size === item.bytes
+    } catch {
+      local = false
+    }
+    return { n: item.n, ms: item.ms, bytes: item.bytes, local, path: local ? cale : null }
+  })
+
+  ipcMain.handle('accompaniment:download-all', async () => {
+    const m = await accEnsureManifest()
+    if (!m) return { ok: 0, esuate: 0, oprit: true }
+    accStopAll = false
+    const rez = await downloadMissing(
+      accDeps, m,
+      (facute, total, numar, procent) => {
+        if (isWinAlive(win)) {
+          win.webContents.send('accompaniment:bulk', facute, total, numar, procent)
+        }
+      },
+      () => accStopAll,
+      // Cât e proiecția pe ecran, descărcarea așteaptă: internetul bisericii e
+      // al serviciului în desfășurare, nu al unei descărcări care poate aștepta.
+      () => isWinAlive(projectionWin),
+    )
+    if (isWinAlive(win)) win.webContents.send('accompaniment:bulk-done', rez)
+    return rez
+  })
+
+  ipcMain.handle('accompaniment:stop-all', () => {
+    accStopAll = true
+  })
+
+  ipcMain.handle('accompaniment:remove-all', async () => {
+    const sterse = removeAllAccompaniment(accDeps)
+    await accEnsureManifest()
+    return { sterse, stats: accompanimentStats(accDeps, accManifest) }
+  })
+
+  ipcMain.handle('accompaniment:folder', () => accompanimentDir(accDeps))
+
+  /** Marcajele imnului, dacă autorul le-a aprobat și publicat. */
+  ipcMain.handle('accompaniment:marks', (_e, numar: number) =>
+    marksFor(accSync, Number(numar)))
+
+  ipcMain.handle('accompaniment:refresh-marks', async () => {
+    accSync = (await refreshSync(accDeps)) ?? accSync
+    return accSync ? Object.keys(accSync.h).length : 0
+  })
+
+  /**
+   * Octeții fișierului, pentru un Blob în renderer.
+   *
+   * NU servim audio prin `localfile://`: elementele media cer cereri parțiale
+   * (Range), iar handler-ul acelui protocol trece cererea mai departe către
+   * `file://`, care le ignoră. Fundalurile merg pe acolo fiindcă imaginile se
+   * încarcă dintr-o bucată; sunetul nu. Un fișier are 1–9 MB, deci copia e
+   * ieftină și, spre deosebire de protocol, merge de fiecare dată.
+   */
+  ipcMain.handle('accompaniment:bytes', async (_e, numar: number) => {
+    const m = await accEnsureManifest()
+    const item = findItem(m, Number(numar))
+    if (!m || !item) return null
+    const cale = localPath(accDeps, item)
+    try {
+      if (fs.statSync(cale).size !== item.bytes) return null
+      return fs.readFileSync(cale)
+    } catch {
+      return null
+    }
   })
 
   // ── Prezentări (Realtime) + șabloane ───────────────────────────────────────

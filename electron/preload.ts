@@ -84,6 +84,30 @@ contextBridge.exposeInMainWorld('electron', {
     setUiZoom: (factor: number) => ipcRenderer.invoke('settings:set-ui-zoom', factor),
   },
 
+  accompaniment: {
+    stats: () => ipcRenderer.invoke('accompaniment:stats'),
+    refresh: () => ipcRenderer.invoke('accompaniment:refresh'),
+    present: () => ipcRenderer.invoke('accompaniment:present'),
+    info: (numar: number) => ipcRenderer.invoke('accompaniment:info', numar),
+    ensure: (numar: number) => ipcRenderer.invoke('accompaniment:ensure', numar),
+    downloadAll: () => ipcRenderer.invoke('accompaniment:download-all'),
+    stopAll: () => ipcRenderer.invoke('accompaniment:stop-all'),
+    removeAll: () => ipcRenderer.invoke('accompaniment:remove-all'),
+    folder: () => ipcRenderer.invoke('accompaniment:folder'),
+    bytes: (numar: number) => ipcRenderer.invoke('accompaniment:bytes', numar),
+    marks: (numar: number) => ipcRenderer.invoke('accompaniment:marks', numar),
+    refreshMarks: () => ipcRenderer.invoke('accompaniment:refresh-marks'),
+    onProgress: (cb: (numar: number, procent: number) => void) =>
+      ipcRenderer.on('accompaniment:progress', (_e, n, p) => cb(n, p)),
+    offProgress: () => ipcRenderer.removeAllListeners('accompaniment:progress'),
+    onBulk: (cb: (facute: number, total: number, numar: number, procent: number) => void) =>
+      ipcRenderer.on('accompaniment:bulk', (_e, f, t, n, p) => cb(f, t, n, p)),
+    offBulk: () => ipcRenderer.removeAllListeners('accompaniment:bulk'),
+    onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean }) => void) =>
+      ipcRenderer.on('accompaniment:bulk-done', (_e, r) => cb(r)),
+    offBulkDone: () => ipcRenderer.removeAllListeners('accompaniment:bulk-done'),
+  },
+
   contrib: {
     status: () => ipcRenderer.invoke('contrib:status'),
     // ce s-a hotărât cu propunerile trimise și ce alege omul mai departe

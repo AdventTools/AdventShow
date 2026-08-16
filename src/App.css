@@ -643,6 +643,19 @@
     line-height: 1.4;
 }
 
+/* Are acompaniament descărcat. Discret: e o însemnare, nu o comandă.
+   flex-shrink:0 + lățime fixă ca să nu miște coloanele existente. */
+.hymn-acc {
+    flex-shrink: 0;
+    width: 10px;
+    margin-left: -4px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--accent);
+    opacity: 0.5;
+    text-align: center;
+}
+
 .hymn-info {
     display: flex;
     flex-direction: row;
@@ -1908,6 +1921,69 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.15s;
+}
+
+/* Acompaniament — aceeași formă cu «Proiectează», dar discret: e un ajutor,
+   nu acțiunea principală. Verde doar cât cântă, ca să se vadă dintr-o privire. */
+.btn-acc {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim, #9aa4bf);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.btn-acc:hover:not(:disabled) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-acc.playing {
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.35);
+}
+
+/* Marca „auto": imnul are marcaje aprobate, proiecția merge singură. */
+.acc-auto {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(16, 185, 129, 0.25);
+}
+
+.btn-acc:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.btn-acc .spin {
+    animation: acc-spin 1s linear infinite;
+}
+
+@keyframes acc-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Eșecurile se spun, nu se înghit — dar fără dialog peste ecran. */
+.preview-acc-error {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.1);
+    border-top: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 .btn-project:hover {

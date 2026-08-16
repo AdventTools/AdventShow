@@ -412,9 +412,28 @@ if [ ! -f "$STATE/hangar.done" ]; then
   # --url explicit: uploaderul servit de hub are încă în el adresa de dinainte de
   # mutarea pe hangar.it4all.ro, iar apex-ul nu mai are /hub — postarea acolo se
   # întoarce cu pagina de eroare a panoului, nu cu JSON.
+  # Note de versiune pentru pagina publică de descărcare. Fără ele, omul care
+  # instalează vede doar un număr și nu știe ce primește.
+  #
+  # Text PUBLIC, citit de operatori care de multe ori nu sunt tehnici. Scrie ce se
+  # schimbă pentru ei, în cuvintele lor. Fără nume de fișiere, funcții, tabele,
+  # adrese interne sau explicații despre cum e făcut înăuntru.
+  #
+  # Implicit se folosește descrierea release-ului. Pentru un text pe mai multe
+  # rânduri, pune-l într-un fișier și dă-i calea:
+  #   HANGAR_NOTES_FILE=note-1.5.1.md npm run release:signed -- "descriere" patch
+  NOTES="$DESCRIPTION"
+  if [ -n "${HANGAR_NOTES_FILE:-}" ]; then
+    [ -f "$HANGAR_NOTES_FILE" ] || fail "HANGAR_NOTES_FILE nu există: $HANGAR_NOTES_FILE"
+    NOTES=$(cat "$HANGAR_NOTES_FILE")
+  fi
+  [ -n "$NOTES" ] || fail "note de versiune goale — oamenii trebuie să știe ce primesc"
+  ok "note de versiune: $(printf '%s' "$NOTES" | wc -c | tr -d ' ') caractere"
+
   push_hangar() {
     HUB_TOKEN="$ADVENTSHOW_HUB_TOKEN" node "$PUSHER" \
       --url https://hangar.it4all.ro/hub/upload.php \
+      --notes "$NOTES" \
       --project adventshow --version "$NEW_VERSION" "${UPLOAD[@]}"
   }
   retry "upload în hangar" 60 20 -- push_hangar || fail "upload în hangar"
