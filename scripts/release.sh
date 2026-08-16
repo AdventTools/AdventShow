@@ -323,7 +323,7 @@ if [ ! -f "$STATE/winpull.done" ]; then
   # blockmap-ul NU mai e opțional: hangar face update diferențial pe baza lui, iar
   # fără el fiecare biserică descarcă 113 MB întregi la fiecare versiune.
   retry "scp blockmap exe" 20 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/${EXE_NAME}.blockmap" "${RELEASE_DIR}/${EXE_NAME}.blockmap" \
-    || log "  (blockmap exe lipsă — update-ul diferențial nu va funcționa pe Windows)"
+    || fail "blockmap exe lipsă — fără el update-ul diferențial moare în tăcere pe Windows"
   # latest.yml nu se urcă în hangar (își generează singur feed-urile), dar puntea de
   # pe GitHub îl cere: instalările de sub 1.4.0 de acolo își iau update-urile.
   retry "scp latest.yml" 30 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/latest.yml" "${RELEASE_DIR}/latest.yml" \
@@ -388,8 +388,12 @@ if [ ! -f "$STATE/hangar.done" ]; then
   STAGING="/tmp/ashow-assets-${NEW_VERSION}"
   mkdir -p "$STAGING"
   # Feed-urile .yml NU se urcă: hangar le generează din baza lui la promovare.
-  REQUIRED=("$DMG" "$ZIP" "$EXE")
-  OPTIONAL=("${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap"
+  # Blockmap-urile sunt OBLIGATORII, nu opționale. Fără ele update-ul diferențial
+  # se dezactivează în tăcere: fiecare biserică descarcă binarul întreg la fiecare
+  # versiune, iar singurul semn e traficul. Hangar verifică asta acum automat, dar
+  # verificăm și noi aici — mai bine cade release-ul decât să treacă mut.
+  REQUIRED=("$DMG" "$ZIP" "$EXE"
+            "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap"
             "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg.blockmap"
             "${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe.blockmap")
   UPLOAD=()
@@ -397,9 +401,6 @@ if [ ! -f "$STATE/hangar.done" ]; then
     [ -f "$f" ] || fail "ASSET OBLIGATORIU LIPSĂ: $f — nu urc un release incomplet"
     cp "$f" "$STAGING/" || fail "staging a eșuat pentru $f"
     UPLOAD+=("$STAGING/$(basename "$f")")
-  done
-  for f in "${OPTIONAL[@]}"; do
-    [ -f "$f" ] && cp "$f" "$STAGING/" && UPLOAD+=("$STAGING/$(basename "$f")")
   done
   ok "staged ${#UPLOAD[@]} fișiere (toate cele obligatorii prezente)"
 
