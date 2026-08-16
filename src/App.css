@@ -3698,3 +3698,27 @@
   color: #fed7aa;
 }
 .header-btn-answers:hover { background: rgba(180, 83, 9, 0.3); }
+
+/* ── Administrare sincronizare ─────────────────────────────────────────────── */
+.modal.admin-sync {
+    max-width: 980px;
+    width: 92vw;
+}
+
+/* Forma de undă: o greșeală de marcaj se vede desenată, nu într-un tabel. */
+.admin-wave {
+    width: 100%;
+    height: 150px;
+    display: block;
+    margin: 10px 0 4px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+}
+
+.admin-marks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0;
+}

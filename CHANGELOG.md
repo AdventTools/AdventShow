@@ -1,5 +1,13 @@
 # Changelog — AdventShow
 
+## Nepublicat
+
+### Modificări
+- Momentul în care se schimbă strofa se poate potrivi acum după cum citește adunarea ta: cât mai stă titlul la începutul cântării și cu cât înainte de sfârșitul unei strofe apare următoarea. Reglajele stau într-un meniu ascuns, care se deschide cu o combinație de taste și cere parola de administrare — tot acolo poți vedea o înregistrare desenată, cu semnele care spun unde se termină fiecare strofă. Ce alegi rămâne pe calculatorul tău și după actualizări.
+- La imnul «O cântare de mărire» din Imnuri Speciale, primul rând al strofei revine la «pe Domnul la Calvar».
+
+---
+
 ## v1.5.1 (16 August 2026)
 
 ### Modificări

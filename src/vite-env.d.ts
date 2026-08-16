@@ -204,6 +204,9 @@ export interface AppSettings {
   // ── Acompaniament instrumental ──
   accompanimentFolder?: string; // unde se salvează MP3-urile; implicit userData/acompaniament
   accompanimentVolume?: number; // 0..1, reținut între sesiuni
+  /** Avansul la play sincronizat; 3000 e doar implicitul, alegerea se păstrează. */
+  syncTitleDelayMs?: number;
+  syncLeadMs?: number;
   debugLog?: boolean; // enable detailed debug logging to file
   windowBounds?: { x: number; y: number; width: number; height: number };
   windowMaximized?: boolean; // true = fereastra era maximizată la ultima închidere
