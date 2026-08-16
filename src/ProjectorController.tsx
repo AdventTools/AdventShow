@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Monitor, MonitorOff, SkipBack, SkipForward } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HymnSection } from './vite-env';
 
@@ -7,6 +7,24 @@ import { HymnSection } from './vite-env';
 // Shows in the MAIN window when a projection is active.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Starea acompaniamentului, condusă din App (elementul <audio> stă acolo). */
+export interface AccompanimentControl {
+  playing: boolean;
+  loading: boolean;
+  /** Secunde rămase din piesă. */
+  remaining: number;
+  /** Fișierul nu e încă pe disc — butonul arată mărimea, nu ♪. */
+  needsDownload: boolean;
+  sizeMb: number;
+  /** Gol când nu e nimic de spus. Se arată sub controale, fără dialog. */
+  error?: string;
+  /** Imnul are marcaje aprobate: proiecția avansează singură. */
+  sync?: boolean;
+  /** 'auto' = merge singur; 'preluat' = operatorul a navigat, s-a oprit. */
+  autoState?: 'auto' | 'preluat' | null;
+  onToggle: () => void;
+}
+
 interface ProjectorControllerProps {
   sections: HymnSection[];
   hymnTitle: string;
@@ -14,9 +32,16 @@ interface ProjectorControllerProps {
   onClose: () => void;
   onNavigate: (index: number) => void;
   videoActive: boolean;
+  /** null când imnul curent n-are acompaniament în manifest. */
+  accompaniment?: AccompanimentControl | null;
 }
 
-export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, onNavigate, videoActive }: ProjectorControllerProps) {
+function mmss(sec: number): string {
+  const s = Math.max(0, Math.round(sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, onNavigate, videoActive, accompaniment }: ProjectorControllerProps) {
   const [currentIndex, setCurrentIndex] = useState(-1);
 
   // Nivelul de zoom al textului pe proiecție, raportat înapoi din fereastra de proiecție
@@ -132,6 +157,38 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           {currentIndex === -1 ? 'Titlu' : `${currentIndex + 1} / ${sections.length}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
+          {/* Acompaniament — o singură apăsare, sau tasta A. Cât cântă, arată
+              timpul RĂMAS: operatorul vrea să știe cât mai are, nu cât a trecut. */}
+          {accompaniment && (
+            <button
+              onClick={accompaniment.onToggle}
+              disabled={accompaniment.loading}
+              className={`mr-1 flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition-all disabled:opacity-60 ${
+                accompaniment.playing
+                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-300'
+                  : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
+              }`}
+              title={
+                accompaniment.playing ? 'Oprește acompaniamentul (A)'
+                  : accompaniment.needsDownload ? 'Descarcă și pornește acompaniamentul (A)'
+                    : 'Pornește acompaniamentul (A)'
+              }
+            >
+              {accompaniment.loading ? (
+                <><Loader className="w-3 h-3 animate-spin" /> Se aduce…</>
+              ) : accompaniment.playing ? (
+                <>
+                  <Square className="w-3 h-3" />
+                  <span className="tabular-nums">{mmss(accompaniment.remaining)}</span>
+                </>
+              ) : accompaniment.needsDownload ? (
+                <><Download className="w-3 h-3" /> {accompaniment.sizeMb.toFixed(1)} MB</>
+              ) : (
+                <><Music className="w-3 h-3" /> Cântă</>
+              )}
+            </button>
+          )}
+
           {/* Zoom text proiecție — A− [nivel] A+ (click pe procent = 100%) */}
           <div className="relative flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 p-0.5 mr-1" title="Zoom text proiecție">
             <button
@@ -162,8 +219,9 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
               Text: {zoomPercent}%
             </div>
           </div>
-          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">←→ Space: navigare · ↑↓: font</kbd>
-          <span className="text-[9px] text-white/15">pentru navigare</span>
+          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">
+            ←→ Space: navigare · ↑↓: font{accompaniment ? ' · A: acompaniament' : ''}
+          </kbd>
           <button
             onClick={onClose}
             className="ml-3 flex items-center gap-1.5 px-3 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all"
@@ -173,6 +231,26 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           </button>
         </div>
       </div>
+
+      {/* Regimul, cu litere mari: cât merge singur, operatorul trebuie să știe
+          că n-are ce face. Iar în clipa în care atinge o săgeată, indicatorul
+          verde DISPARE — altfel ar minți exact când contează mai mult. */}
+      {accompaniment?.autoState === 'auto' && (
+        <div className="flex items-center gap-2.5 px-4 py-2 bg-emerald-500/15 border-b border-emerald-400/25">
+          <span className="text-xs font-black tracking-widest text-emerald-300">AUTOMAT</span>
+          <span className="text-xs text-emerald-100/85">
+            Strofele se schimbă singure. Nu atinge nimic.
+          </span>
+        </div>
+      )}
+      {accompaniment?.autoState === 'preluat' && (
+        <div className="flex items-center gap-2.5 px-4 py-2 bg-amber-500/15 border-b border-amber-400/25">
+          <span className="text-xs font-black tracking-widest text-amber-300">MANUAL</span>
+          <span className="text-xs text-amber-100/85">
+            Ai preluat — de aici schimbi tu. Acompaniamentul merge înainte.
+          </span>
+        </div>
+      )}
 
       {/* Slides preview row */}
       <div className="flex items-stretch gap-0 px-0 py-0">

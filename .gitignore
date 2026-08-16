@@ -48,3 +48,4 @@ COPILOT-INSTRUCTIONS.md
 /tmp/
 release
 scripts/.release-state/
+tsconfig.node.tsbuildinfo

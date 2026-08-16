@@ -12,6 +12,7 @@ import {
     Loader,
     Lock,
     Monitor,
+    Music,
     Pause,
     Plus,
     Play,
@@ -57,7 +58,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ProjectorController } from './ProjectorController';
+import type { AccompanimentControl } from './ProjectorController';
 import type {
+    AccompanimentInfo,
+    AccompanimentStats,
     AppSettings,
     BibleBook,
     BibleVerse,
@@ -309,6 +313,34 @@ function App() {
     // eticheta a ceea ce e LIVE pe ecran (capturată la proiectare) — ca badge-ul global
     // să arate imnul de pe proiector, nu previzualizarea „pregătită" a altui imn
     const [liveLabel, setLiveLabel] = useState('');
+
+    // ── Acompaniament instrumental ──
+    // Sunetul iese din fereastra PRINCIPALĂ, nu din cea de proiecție: proiectorul
+    // e pe HDMI, iar boxele bisericii sunt legate de laptop.
+    const accRef = useRef<HTMLAudioElement | null>(null);
+    const accFadeRef = useRef<number | null>(null);
+    // Blob-ul curent: se ține minte pentru ce imn e, ca să nu-l refacem la
+    // fiecare apăsare, și se eliberează când trecem la alt imn.
+    const accBlobUrl = useRef<string | null>(null);
+    const accBlobFor = useRef<number | null>(null);
+    /** Ceasul care mută de pe titlu pe prima strofă după pornirea introducerii. */
+    const accTitluRef = useRef<number | null>(null);
+    /** Marcajele imnului curent: [index_slide, sfârșit_ms, reintrare_ms]. */
+    const accMarks = useRef<[number, number, number][] | null>(null);
+    /** Operatorul a navigat singur → nu-i mai luăm comanda din mână la imnul ăsta. */
+    const accAutoOprit = useRef(false);
+    /** Marcajul nostru, ca navigateSlide să știe că nu e mâna operatorului. */
+    const accAutoNav = useRef(false);
+    /** Ceasul care oprește proiecția după ce s-a terminat de cântat. */
+    const accFinalRef = useRef<number | null>(null);
+    const [accPresent, setAccPresent] = useState<Set<number>>(new Set());
+    const [accPlaying, setAccPlaying] = useState(false);
+    const [accLoading, setAccLoading] = useState(false);
+    const [accRemaining, setAccRemaining] = useState(0);
+    const [accInfo, setAccInfo] = useState<AccompanimentInfo | null>(null);
+    const [accError, setAccError] = useState('');
+    const [accSync, setAccSync] = useState(false);
+    const [accPreluat, setAccPreluat] = useState(false);
 
     // ── Update state ──
     const [updateInfo, setUpdateInfo] = useState<{
@@ -725,6 +757,15 @@ function App() {
 
     const navigateSlide = useCallback(async (newIdx: number) => {
         if (!projecting) return;
+        // Orice navigare anulează ceasul titlului. Dacă vine de la operator —
+        // nu de la noi — oprim și avansul automat pentru imnul ăsta: dacă adunarea
+        // a sărit o strofă, pierdem sincronizarea, nu acompaniamentul.
+        if (accTitluRef.current !== null) {
+            window.clearTimeout(accTitluRef.current);
+            accTitluRef.current = null;
+        }
+        if (accAutoNav.current) accAutoNav.current = false;
+        else { accAutoOprit.current = true; setAccPreluat(true); }
         const n = previewSections.length;
         const minIdx = previewType === 'bible' ? 0 : -1;
         if (newIdx < minIdx || newIdx >= n) return;
@@ -744,12 +785,251 @@ function App() {
         setPreviewLive(false);
     }, []);
 
+    // ── Acompaniament: redare ─────────────────────────────────────────────────
+    // Oprirea se face cu stingere lină (~1,2 s). O tăiere bruscă în mijlocul unui
+    // acord se aude prost în sală, iar operatorul apasă des Stop din reflex.
+    const accStop = useCallback((imediat = false) => {
+        const el = accRef.current;
+        if (accTitluRef.current !== null) {
+            window.clearTimeout(accTitluRef.current);
+            accTitluRef.current = null;
+        }
+        if (accFadeRef.current !== null) {
+            window.clearInterval(accFadeRef.current);
+            accFadeRef.current = null;
+        }
+        setAccPlaying(false);
+        setAccRemaining(0);
+        if (!el) return;
+        if (imediat) {
+            el.pause();
+            el.currentTime = 0;
+            return;
+        }
+        const start = el.volume;
+        const pasi = 24;
+        let i = 0;
+        accFadeRef.current = window.setInterval(() => {
+            i++;
+            const el2 = accRef.current;
+            if (!el2) return;
+            el2.volume = Math.max(0, start * (1 - i / pasi));
+            if (i >= pasi) {
+                if (accFadeRef.current !== null) window.clearInterval(accFadeRef.current);
+                accFadeRef.current = null;
+                el2.pause();
+                el2.currentTime = 0;
+                el2.volume = start;   // pregătit pentru următoarea pornire
+            }
+        }, 50);
+    }, []);
+
+    /** Navigare venită de la noi, nu de la operator. */
+    const accNavigheaza = useCallback((idx: number) => {
+        accAutoNav.current = true;
+        void navigateSlide(idx);
+    }, [navigateSlide]);
+
+    /**
+     * Avansul automat pe marcaje.
+     *
+     * Se urmărește `audio.currentTime`, nu un ceas de perete: dacă redarea se
+     * bâlbâie, marcajele rămân lipite de muzică, nu de secundele scurse.
+     *
+     * Slide-ul următor apare cu 3 secunde ÎNAINTE de sfârșitul celui de acum —
+     * oamenii au citit deja și știu finalul. La secțiuni scurte avansul scade la
+     * un sfert din durata lor, ca textul să nu dispară cu o treime nescântată.
+     * Ultima secțiune nu se schimbă niciodată înainte: curge până la capăt.
+     */
+    useEffect(() => {
+        if (!accPlaying || !accSync) return;
+        const t = window.setInterval(() => {
+            const el = accRef.current;
+            const marks = accMarks.current;
+            if (!el || !marks || accAutoOprit.current) return;
+            if (!projecting || !previewLive) return;
+            const acum = el.currentTime * 1000;
+            let tinta = -1;
+            for (let i = 0; i < marks.length - 1; i++) {
+                const sfarsit = marks[i][1];
+                const inceput = i === 0 ? 0 : marks[i - 1][2];
+                const avans = Math.min(3000, (sfarsit - inceput) * 0.25);
+                if (acum < sfarsit - avans) break;
+                tinta = marks[i + 1][0];
+            }
+            // Numai înainte. Dacă operatorul a pornit muzica stând pe o strofă mai
+            // departe, nu-l tragem înapoi la ce zice înregistrarea.
+            if (tinta > projSlideIndexRef.current) accNavigheaza(tinta);
+        }, 120);
+        return () => window.clearInterval(t);
+    }, [accPlaying, accSync, projecting, previewLive, accNavigheaza]);
+
+    /** Descarcă acompaniamentul imnului dat, fără să-l pornească. */
+    const accDownload = useCallback(async (numar: number) => {
+        setAccError('');
+        setAccLoading(true);
+        try {
+            const rez = await window.electron.accompaniment.ensure(numar);
+            if (!rez) {
+                setAccError('Nu s-a putut aduce. Verifică internetul.');
+                return null;
+            }
+            setAccPresent(prev => new Set(prev).add(numar));
+            setAccInfo(prev => (prev && prev.n === numar
+                ? { ...prev, local: true, path: rez.path }
+                : prev));
+            return rez;
+        } finally {
+            setAccLoading(false);
+        }
+    }, []);
+
+    /** Pornește sau oprește acompaniamentul imnului pregătit. */
+    const accToggle = useCallback(async () => {
+        if (accPlaying) { accStop(); return; }
+        if (previewType !== 'hymn') return;
+        const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
+        if (!Number.isFinite(numar)) return;
+
+        const rez = await accDownload(numar);
+        if (!rez) return;
+        const el = accRef.current;
+        if (!el) return;
+        try {
+            // Setările se citesc la fiecare pornire, nu se țin în stare: așa o
+            // schimbare de dispozitiv sau de volum se aplică din prima apăsare.
+            const s = await window.electron.settings.get().catch(() => ({} as AppSettings));
+            if (accBlobFor.current !== numar) {
+                const octeti = await window.electron.accompaniment.bytes(numar);
+                if (!octeti) throw new Error('fișierul nu s-a putut citi de pe disc');
+                if (accBlobUrl.current) URL.revokeObjectURL(accBlobUrl.current);
+                accBlobUrl.current = URL.createObjectURL(
+                    new Blob([new Uint8Array(octeti).slice().buffer], { type: 'audio/mpeg' }));
+                accBlobFor.current = numar;
+                el.src = accBlobUrl.current;
+                // Așteptăm să fie gata de redat. Fără asta, play() pe un src
+                // proaspăt setat se respinge cu AbortError și pare că „nu face nimic".
+                await new Promise<void>((resolve, reject) => {
+                    const curat = () => {
+                        el.removeEventListener('canplay', gata);
+                        el.removeEventListener('error', rau);
+                    };
+                    const gata = () => { curat(); resolve(); };
+                    const rau = () => {
+                        curat();
+                        reject(new Error(`nu s-a putut încărca (cod ${el.error?.code ?? '?'})`));
+                    };
+                    el.addEventListener('canplay', gata, { once: true });
+                    el.addEventListener('error', rau, { once: true });
+                    el.load();
+                });
+            }
+            el.volume = s.accompanimentVolume ?? 0.85;
+            if (s.audioOutputDeviceId && 'setSinkId' in el) {
+                try {
+                    await (el as HTMLAudioElement & {
+                        setSinkId: (id: string) => Promise<void>;
+                    }).setSinkId(s.audioOutputDeviceId);
+                } catch { /* dispozitivul a dispărut — merge pe cel implicit */ }
+            }
+            el.currentTime = 0;
+            await el.play();
+            setAccPlaying(true);
+            setAccError('');
+
+            // Titlul nu are ce căuta pe ecran în timpul introducerii: adunarea
+            // trebuie să apuce să citească prima strofă înainte s-o cânte. Trecem
+            // singuri, la 3 secunde după ce pornește muzica. Orice apăsare a
+            // operatorului între timp anulează — el rămâne stăpân pe proiecție.
+            if (accTitluRef.current !== null) window.clearTimeout(accTitluRef.current);
+            if (projecting && previewLive && projSlideIndexRef.current === -1) {
+                accTitluRef.current = window.setTimeout(() => {
+                    accTitluRef.current = null;
+                    if (projSlideIndexRef.current === -1) accNavigheaza(0);
+                }, 3000);
+            }
+
+            // Marcajele imnului, dacă autorul le-a aprobat. Fără ele, redarea merge
+            // exact ca până acum: operatorul schimbă strofele, sunetul curge.
+            accMarks.current = await window.electron.accompaniment.marks(numar)
+                .catch(() => null);
+            accAutoOprit.current = false;
+            setAccPreluat(false);
+            setAccSync(!!accMarks.current);
+        } catch (e) {
+            // Nu deschidem dialog, dar NICI nu tăcem: o funcție care „nu face
+            // nimic" e mai rea decât una care spune de ce.
+            console.error('[Acompaniament]', e);
+            setAccError('Nu pornește sunetul. Verifică ieșirea audio din Setări.');
+            setAccPlaying(false);
+        }
+    }, [accPlaying, accStop, accDownload, previewType, previewNumber,
+        projecting, previewLive, accNavigheaza]);
+
+    // Un singur obiect de control, folosit și în previzualizare, și în bara de
+    // proiecție — ca butonul să arate identic în amândouă și să nu apuce nimeni
+    // să le lase să se despartă.
+    const accControl: AccompanimentControl | null = useMemo(() => (
+        previewType === 'hymn' && accInfo
+            ? {
+                playing: accPlaying,
+                loading: accLoading,
+                remaining: accRemaining,
+                needsDownload: !accInfo.local,
+                sizeMb: accInfo.bytes / 1_000_000,
+                error: accError,
+                sync: accSync,
+                autoState: (accSync && accPlaying)
+                    ? (accPreluat ? 'preluat' : 'auto')
+                    : null,
+                onToggle: accToggle,
+            }
+            : null
+    ), [previewType, accInfo, accPlaying, accLoading, accRemaining, accError, accSync,
+        accPreluat, accToggle]);
+
+    // Ce imnuri au deja fișierul pe disc — pentru ♪ din listă.
+    useEffect(() => {
+        window.electron.accompaniment.present()
+            .then(list => setAccPresent(new Set(list)))
+            .catch(() => { /* fără manifest încă */ });
+    }, []);
+
+    // Informația despre imnul pregătit: durată și dacă e local.
+    useEffect(() => {
+        if (previewType !== 'hymn') { setAccInfo(null); return; }
+        const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
+        if (!Number.isFinite(numar)) { setAccInfo(null); return; }
+        let anulat = false;
+        window.electron.accompaniment.info(numar)
+            .then(i => { if (!anulat) setAccInfo(i); })
+            .catch(() => { if (!anulat) setAccInfo(null); });
+        return () => { anulat = true; };
+    }, [previewType, previewNumber]);
+
+    // Schimbarea imnului oprește acompaniamentul precedent — altfel ar cânta
+    // peste imnul nou, iar operatorul n-ar ști de unde vine sunetul.
+    useEffect(() => {
+        accStop(true);
+        setAccError('');
+        accMarks.current = null;
+        accAutoOprit.current = false;
+        setAccPreluat(false);
+        setAccSync(false);
+        if (accBlobUrl.current) {
+            URL.revokeObjectURL(accBlobUrl.current);
+            accBlobUrl.current = null;
+            accBlobFor.current = null;
+        }
+    }, [previewNumber, previewType, accStop]);
+
     // Listen for projection closed
     useEffect(() => {
         window.electron.projection.onClosed(() => {
             setProjecting(false);
             setProjSlideIndex(0);
             setPreviewLive(false);
+            accStop(true);
             realtimeCtl.notifyClosed();
         });
         window.electron.projection.onControllerSync(({ currentIndex }) => {
@@ -759,7 +1039,7 @@ function App() {
             window.electron.projection.offClosed();
             window.electron.projection.offControllerSync();
         };
-    }, []);
+    }, [accStop]);
 
     // ── Tab switch ──
     const switchTab = useCallback((newTab: Tab) => {
@@ -1209,6 +1489,17 @@ function App() {
                 }
             }
 
+            // ── A: acompaniament ──
+            // Space e ocupat de două ori (avans strofă și play/pause video), iar
+            // mâna dreaptă stă pe săgeți — A cade sub stânga și nu se bate cu nimic.
+            if ((e.key === 'a' || e.key === 'A') && !inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                if (previewType === 'hymn' && accInfo) {
+                    e.preventDefault();
+                    void accToggle();
+                    return;
+                }
+            }
+
             if (e.key === 'Enter' && !inInput) {
                 e.preventDefault();
                 if (projecting) {
@@ -1272,7 +1563,8 @@ function App() {
         previewLive, goLivePreview,
         videoStatus, videoStop, videoUrl, videoVolume, videoMuted,
         videoPlay, videoPause, videoSeek, videoSetVolume, videoToggleMute,
-        verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
+        verses, selectedVerseIdx, books, selectedBookId, selectedChapter,
+        accToggle, accInfo, previewType]);
 
     // ── Resizable column drag handlers ──
     const onResizeMouseDown = useCallback((which: 'sidebar' | 'preview') => {
@@ -1776,6 +2068,7 @@ function App() {
                                 setContextMenu({ x: e.clientX, y: e.clientY, hymn });
                             }}
                             listRef={hymnListRef}
+                            accPresent={accPresent}
                         />
                     ) : tab === 'video' ? (
                         <VideoController
@@ -1862,6 +2155,7 @@ function App() {
                         videoStatus={videoStatus}
                         videoName={videoName}
                         floatingActive={(tab === 'timer' || tab === 'mesaj') && !!videoUrl && !floatingMonitorHidden}
+                        accompaniment={accControl}
                     />
                 </div>
             </div>
@@ -1880,6 +2174,34 @@ function App() {
                 />
             )}
 
+            {/* ── Acompaniament: sunetul iese din fereastra principală, spre mixer ── */}
+            <audio
+                ref={accRef}
+                preload="none"
+                onTimeUpdate={e => {
+                    const el = e.currentTarget;
+                    if (el.duration && Number.isFinite(el.duration)) {
+                        setAccRemaining(Math.max(0, el.duration - el.currentTime));
+                    }
+                }}
+                onEnded={() => {
+                    setAccPlaying(false);
+                    setAccRemaining(0);
+                    // S-a terminat de cântat: nu are rost să rămână ultima strofă
+                    // pe ecran. Oprim proiecția, dar numai dacă tot noi o conduceam —
+                    // dacă operatorul a luat comanda pe parcurs, ecranul e al lui.
+                    // Scurta întârziere lasă ultimul acord să se stingă.
+                    if (accSync && !accAutoOprit.current && projecting && previewLive) {
+                        if (accFinalRef.current !== null) window.clearTimeout(accFinalRef.current);
+                        accFinalRef.current = window.setTimeout(() => {
+                            accFinalRef.current = null;
+                            void stopProjection();
+                        }, 1500);
+                    }
+                }}
+                style={{ display: 'none' }}
+            />
+
             {/* ── Controller (bottom bar when projecting) ── */}
             {projecting && previewLive && previewSections.length > 0 && (
                 <ProjectorController
@@ -1889,6 +2211,7 @@ function App() {
                     onClose={stopProjection}
                     onNavigate={navigateSlide}
                     videoActive={!!videoStatus}
+                    accompaniment={accControl}
                 />
             )}
 
@@ -2173,6 +2496,7 @@ function SidebarVideoFilter({
 
 function HymnList({
     hymns, categories, activeCategoryId, selectedHymnId, onSelect, onContextMenu, listRef,
+    accPresent,
 }: {
     hymns: Hymn[];
     categories: Category[];
@@ -2181,6 +2505,8 @@ function HymnList({
     onSelect: (id: number) => void;
     onContextMenu: (e: React.MouseEvent, hymn: Hymn) => void;
     listRef: React.RefObject<HTMLDivElement>;
+    /** Numerele de imn care au acompaniamentul descărcat — pentru ♪. */
+    accPresent: Set<number>;
 }) {
     const catName = activeCategoryId
         ? categories.find(c => c.id === activeCategoryId)?.name ?? 'Toate'
@@ -2222,6 +2548,9 @@ function HymnList({
                                 onContextMenu={e => onContextMenu(e, hymn)}
                             >
                                 <span className="hymn-num">{hymn.number}</span>
+                                {accPresent.has(parseInt(String(hymn.number).replace(/\D/g, ''), 10)) && (
+                                    <span className="hymn-acc" title="Are acompaniament descărcat">♪</span>
+                                )}
                                 <div className="hymn-info">
                                     <span className="hymn-title">
                                         {hymn.title}
@@ -2984,7 +3313,7 @@ function PreviewPanel({
     previewType, previewSections, previewTitle, previewNumber,
     projecting, projSlideIndex, previewLive,
     onStartProjection, onGoLive, onStopProjection, onClearPreview, onNavigateSlide, onSelectSlide,
-    videoUrl, videoStatus, videoName, floatingActive = false,
+    videoUrl, videoStatus, videoName, floatingActive = false, accompaniment,
 }: {
     previewType: 'hymn' | 'bible' | null;
     previewSections: { text: string; type: string; label: string }[];
@@ -3003,6 +3332,8 @@ function PreviewPanel({
     videoStatus: { currentTime: number; duration: number; paused: boolean } | null;
     videoName: string;
     floatingActive?: boolean;
+    /** null cand imnul curent n-are acompaniament in manifest. */
+    accompaniment?: AccompanimentControl | null;
 }) {
     const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -3146,9 +3477,9 @@ function PreviewPanel({
             <div className="preview-actions">
                 {projecting && previewLive ? (
                     <>
-                        <button className="btn-stop" onClick={onStopProjection}>
-                            <Square className="icon-xs" /> Oprește
-                        </button>
+                        {/* Cât e proiecția live, bara de jos e suprafața de comandă:
+                            «Oprește» și «Cântă» stau acolo, o singură dată. Aici ar fi
+                            doar duplicate cu exact același efect. */}
                         <div className="nav-btns">
                             <button className="btn-nav" onClick={() => onNavigateSlide(projSlideIndex - 1)} disabled={projSlideIndex <= -1}>
                                 <ChevronLeft className="icon-xs" />
@@ -3164,6 +3495,7 @@ function PreviewPanel({
                             <Play className="icon-xs" /> Proiectează
                         </button>
                         <span className="staged-hint">pregătit — Enter</span>
+                        {accompaniment && <AccompanimentButton acc={accompaniment} />}
                         <button className="btn-clear" onClick={onStopProjection}>
                             <Square className="icon-xs" /> Oprește
                         </button>
@@ -3173,14 +3505,54 @@ function PreviewPanel({
                         <button className="btn-project" onClick={() => onStartProjection(projSlideIndex)}>
                             <Play className="icon-xs" /> Proiectează
                         </button>
+                        {/* Acompaniamentul se aduce ÎNAINTE de proiecție, nu în timpul ei:
+                            când s-a anunțat imnul, e prea târziu să aștepți o descărcare. */}
+                        {accompaniment && <AccompanimentButton acc={accompaniment} />}
                         <button className="btn-clear" onClick={onClearPreview}>
                             <X className="icon-xs" /> Curăță
                         </button>
                     </>
                 )}
             </div>
+            {accompaniment?.error && (
+                <div className="preview-acc-error">{accompaniment.error}</div>
+            )}
         </div>
     );
+}
+
+/** Butonul de acompaniament, același în previzualizare și în bara de proiecție. */
+function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
+    return (
+        <button
+            className={`btn-acc ${acc.playing ? 'playing' : ''}`}
+            onClick={acc.onToggle}
+            disabled={acc.loading}
+            title={
+                acc.playing ? 'Oprește acompaniamentul (A)'
+                    : acc.needsDownload ? 'Descarcă și pornește acompaniamentul (A)'
+                        : 'Pornește acompaniamentul (A)'
+            }
+        >
+            {acc.loading ? (
+                <><Loader className="icon-xs spin" /> Se aduce…</>
+            ) : acc.playing ? (
+                <>
+                    <Square className="icon-xs" /> {mmss(acc.remaining)}
+                    {acc.sync && <span className="acc-auto" title="Proiecția avansează singură">auto</span>}
+                </>
+            ) : acc.needsDownload ? (
+                <><Download className="icon-xs" /> {acc.sizeMb.toFixed(1)} MB</>
+            ) : (
+                <><Music className="icon-xs" /> Cântă</>
+            )}
+        </button>
+    );
+}
+
+function mmss(sec: number): string {
+    const s = Math.max(0, Math.round(sec));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -4570,6 +4942,18 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
+                                    <h4>Acompaniament</h4>
+                                    <p>
+                                        Fiecare imn are o înregistrare instrumentală. Se descarcă
+                                        singură când apeși „Cântă" și rămâne pe calculator. Dacă în
+                                        sală n-ai internet, descarcă-le pe toate din vreme.
+                                    </p>
+                                </div>
+                                <AccompanimentSettings settings={settings} onSave={saveSettings} />
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
                                     <h4>Descărcări de pe YouTube</h4>
                                     <p>Unde se salvează videoclipurile descărcate și unealta care le aduce.</p>
                                 </div>
@@ -4851,11 +5235,6 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 </a>
 
                                 <div className="border-t border-white/10 w-full" />
-
-                                <p className="text-white/40 text-xs max-w-sm">
-                                    Verificarea actualizărilor și canalul (stabil / beta) se află în
-                                    fila <strong className="text-white/60">Administrare</strong>.
-                                </p>
 
                                 <p className="text-white/25 text-xs">
                                     Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
@@ -6825,7 +7204,7 @@ function AudioOutputPicker({ settings, onSave }: {
 
     return (
         <div className="field">
-            <label>Ieșire Audio (Video)</label>
+            <label>Unde iese sunetul (video și acompaniament)</label>
             <div className="display-picker">
                 <button className="btn-sm" onClick={loadDevices}>Detectează dispozitive</button>
                 {loaded && (
@@ -6847,6 +7226,119 @@ function AudioOutputPicker({ settings, onSave }: {
                         ))}
                     </div>
                 )}
+            </div>
+        </div>
+    );
+}
+
+function AccompanimentSettings({ settings, onSave }: {
+    settings: AppSettings;
+    onSave: (p: Partial<AppSettings>) => void;
+}) {
+    const [stats, setStats] = useState<AccompanimentStats | null>(null);
+    const [bulk, setBulk] = useState<{ facute: number; total: number } | null>(null);
+    const [mesaj, setMesaj] = useState('');
+
+    const reincarca = useCallback(() => {
+        window.electron.accompaniment.stats().then(setStats).catch(() => setStats(null));
+    }, []);
+
+    useEffect(() => {
+        reincarca();
+        window.electron.accompaniment.onBulk((facute, total) => setBulk({ facute, total }));
+        window.electron.accompaniment.onBulkDone(r => {
+            setBulk(null);
+            reincarca();
+            setMesaj(r.oprit
+                ? `Oprit. ${r.ok} descărcate până acum.`
+                : r.esuate
+                    ? `${r.ok} descărcate, ${r.esuate} n-au putut fi aduse. Încearcă din nou mai târziu.`
+                    : 'Gata — toate acompaniamentele sunt pe calculator.');
+        });
+        return () => {
+            window.electron.accompaniment.offBulk();
+            window.electron.accompaniment.offBulkDone();
+        };
+    }, [reincarca]);
+
+    const gb = (o: number) => (o / 1_000_000_000).toFixed(2).replace('.', ',');
+    const lipsa = stats ? stats.total - stats.have : 0;
+
+    return (
+        <div className="sstack">
+            <div className="field">
+                <label>Ce ai pe calculator</label>
+                {!stats || stats.total === 0 ? (
+                    <p className="field-hint">
+                        Lista de acompaniamente n-a putut fi adusă. Verifică internetul —
+                        se reîncearcă singură mai târziu.
+                    </p>
+                ) : (
+                    <p className="field-hint">
+                        <strong>{stats.have}</strong> din {stats.total} descărcate
+                        {stats.have > 0 && <> ({gb(stats.bytes)} GB)</>}.
+                        {lipsa > 0 && <> Restul ocupă încă {gb(stats.totalBytes - stats.bytes)} GB.</>}
+                    </p>
+                )}
+            </div>
+
+            <div className="field">
+                <label>Volum</label>
+                <div className="field-row">
+                    <input
+                        type="range" min="0" max="100" step="5"
+                        value={Math.round((settings.accompanimentVolume ?? 0.85) * 100)}
+                        onChange={e => onSave({ accompanimentVolume: parseInt(e.target.value, 10) / 100 })}
+                    />
+                    <span className="color-preview">
+                        {Math.round((settings.accompanimentVolume ?? 0.85) * 100)}%
+                    </span>
+                </div>
+            </div>
+
+            <div className="field">
+                <label>Descarcă tot dinainte</label>
+                <div className="field-row">
+                    {bulk ? (
+                        <>
+                            <button className="btn-sm" onClick={() => window.electron.accompaniment.stopAll()}>
+                                Oprește
+                            </button>
+                            <span className="field-hint">
+                                Se descarcă… {bulk.facute} din {bulk.total}
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <button
+                                className="btn-sm"
+                                disabled={!stats || lipsa === 0}
+                                onClick={() => { setMesaj(''); window.electron.accompaniment.downloadAll(); }}
+                            >
+                                {stats && lipsa > 0
+                                    ? `Descarcă cele ${lipsa} rămase (${gb(stats.totalBytes - stats.bytes)} GB)`
+                                    : 'Toate sunt descărcate'}
+                            </button>
+                            {stats && stats.have > 0 && (
+                                <button
+                                    className="btn-sm"
+                                    onClick={async () => {
+                                        const r = await window.electron.accompaniment.removeAll();
+                                        setStats(r.stats);
+                                        setMesaj(`Șterse ${r.sterse} fișiere.`);
+                                    }}
+                                >
+                                    Șterge tot
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
+                {mesaj && <p className="field-hint">{mesaj}</p>}
+                <p className="field-hint">
+                    Descărcarea se oprește singură cât timp proiecția e pe ecran, ca să nu-ți
+                    încarce internetul în timpul serviciului.
+                </p>
             </div>
         </div>
     );
