@@ -148,6 +148,10 @@ interface AppSettings {
   // ── Acompaniament instrumental ──
   accompanimentFolder?: string   // unde se salvează MP3-urile; implicit userData/acompaniament
   accompanimentVolume?: number   // 0..1, reținut între sesiuni
+  // Avansul proiecției la play sincronizat. 3000 e DOAR implicitul: ce alege
+  // administratorul se păstrează aici și nu se resetează niciodată singur.
+  syncTitleDelayMs?: number      // cât mai stă titlul după ce pornește introducerea
+  syncLeadMs?: number            // cu cât înainte de sfârșitul secțiunii apare următoarea
 }
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────

@@ -333,12 +333,16 @@ function App() {
     const accAutoNav = useRef(false);
     /** Ceasul care oprește proiecția după ce s-a terminat de cântat. */
     const accFinalRef = useRef<number | null>(null);
+    /** Reglajele de avans, citite din setări la fiecare pornire. 3000 = implicit. */
+    const accTitleDelay = useRef(3000);
+    const accLead = useRef(3000);
     const [accPresent, setAccPresent] = useState<Set<number>>(new Set());
     const [accPlaying, setAccPlaying] = useState(false);
     const [accLoading, setAccLoading] = useState(false);
     const [accRemaining, setAccRemaining] = useState(0);
     const [accInfo, setAccInfo] = useState<AccompanimentInfo | null>(null);
     const [accError, setAccError] = useState('');
+    const [adminOpen, setAdminOpen] = useState(false);
     const [accSync, setAccSync] = useState(false);
     const [accPreluat, setAccPreluat] = useState(false);
 
@@ -853,7 +857,10 @@ function App() {
             for (let i = 0; i < marks.length - 1; i++) {
                 const sfarsit = marks[i][1];
                 const inceput = i === 0 ? 0 : marks[i - 1][2];
-                const avans = Math.min(3000, (sfarsit - inceput) * 0.25);
+                // Protecția de 25% NU e configurabilă: e plasă de siguranță, nu
+                // preferință. La o secțiune de 10s, 3s ar șterge textul cu o treime
+                // nescântată, oricât ar fi cerut cineva în setări.
+                const avans = Math.min(accLead.current, (sfarsit - inceput) * 0.25);
                 if (acum < sfarsit - avans) break;
                 tinta = marks[i + 1][0];
             }
@@ -925,6 +932,8 @@ function App() {
                 });
             }
             el.volume = s.accompanimentVolume ?? 0.85;
+            accTitleDelay.current = Math.max(0, Math.min(15000, s.syncTitleDelayMs ?? 3000));
+            accLead.current = Math.max(0, Math.min(8000, s.syncLeadMs ?? 3000));
             if (s.audioOutputDeviceId && 'setSinkId' in el) {
                 try {
                     await (el as HTMLAudioElement & {
@@ -946,7 +955,7 @@ function App() {
                 accTitluRef.current = window.setTimeout(() => {
                     accTitluRef.current = null;
                     if (projSlideIndexRef.current === -1) accNavigheaza(0);
-                }, 3000);
+                }, accTitleDelay.current);
             }
 
             // Marcajele imnului, dacă autorul le-a aprobat. Fără ele, redarea merge
@@ -1489,6 +1498,16 @@ function App() {
                 }
             }
 
+            // ── Ctrl+Alt+Shift+M: meniul de administrare ──
+            // Trei modificatoare plus o literă: imposibil de nimerit din greșeală.
+            // Urmează parola — reglajele de aici mută proiecția pentru toată biserica.
+            if ((e.key === 'm' || e.key === 'M') && e.ctrlKey && e.altKey && e.shiftKey) {
+                e.preventDefault(); e.stopImmediatePropagation();
+                if (adminOpen) return;
+                requirePassword(() => setAdminOpen(true), 'Administrare — sincronizare');
+                return;
+            }
+
             // ── A: acompaniament ──
             // Space e ocupat de două ori (avans strofă și play/pause video), iar
             // mâna dreaptă stă pe săgeți — A cade sub stânga și nu se bate cu nimic.
@@ -1564,7 +1583,7 @@ function App() {
         videoStatus, videoStop, videoUrl, videoVolume, videoMuted,
         videoPlay, videoPause, videoSeek, videoSetVolume, videoToggleMute,
         verses, selectedVerseIdx, books, selectedBookId, selectedChapter,
-        accToggle, accInfo, previewType]);
+        accToggle, accInfo, previewType, adminOpen, requirePassword]);
 
     // ── Resizable column drag handlers ──
     const onResizeMouseDown = useCallback((which: 'sidebar' | 'preview') => {
@@ -2261,6 +2280,9 @@ function App() {
                     }}
                 />
             )}
+
+            {/* ── Administrare sincronizare (Ctrl+Alt+Shift+M) ── */}
+            {adminOpen && <AdminSyncPanel onClose={() => setAdminOpen(false)} />}
 
             {/* ── Password Verification Modal ── */}
             {passwordModal && (
@@ -3553,6 +3575,216 @@ function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
 function mmss(sec: number): string {
     const s = Math.max(0, Math.round(sec));
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Administrare — sincronizare (ascuns: Ctrl+Alt+Shift+M, apoi parola)
+//
+// Două lucruri: reglajele de avans, și o privire peste marcajele unui imn.
+// Forma de undă e aici pentru că o greșeală de marcaj se vede într-o secundă
+// desenată, dar e invizibilă într-un tabel de cifre — exact ce s-a întâmplat
+// cu imnul 255, unde tăietura căzuse la jumătatea strofei.
+// ═════════════════════════════════════════════════════════════════════════════
+
+function AdminSyncPanel({ onClose }: { onClose: () => void }) {
+    const [settings, setSettings] = useState<AppSettings>({});
+    const [numar, setNumar] = useState('');
+    const [marks, setMarks] = useState<[number, number, number][] | null>(null);
+    const [peaks, setPeaks] = useState<Float32Array | null>(null);
+    const [durata, setDurata] = useState(0);
+    const [stare, setStare] = useState('');
+    const [ocupat, setOcupat] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        window.electron.settings.get().then(setSettings).catch(() => { /* implicit */ });
+    }, []);
+
+    const salveaza = (patch: Partial<AppSettings>) => {
+        setSettings(prev => ({ ...prev, ...patch }));
+        window.electron.settings.set(patch);
+    };
+
+    const incarca = useCallback(async () => {
+        const n = parseInt(numar.replace(/\D/g, ''), 10);
+        if (!Number.isFinite(n)) { setStare('Scrie un număr de imn.'); return; }
+        setOcupat(true); setStare(''); setMarks(null); setPeaks(null);
+        try {
+            const m = await window.electron.accompaniment.marks(n);
+            setMarks(m);
+            const octeti = await window.electron.accompaniment.bytes(n);
+            if (!octeti) {
+                setStare('Acompaniamentul nu e descărcat. Pornește-l o dată din previzualizare.');
+                return;
+            }
+            const buf = new Uint8Array(octeti).slice().buffer;
+            const ctx = new AudioContext();
+            const audio = await ctx.decodeAudioData(buf.slice(0));
+            setDurata(audio.duration);
+            // ~1400 de coloane: destul pentru un ecran, ieftin de desenat
+            const N = 1400;
+            const dat = audio.getChannelData(0);
+            const pas = Math.max(1, Math.floor(dat.length / N));
+            const v = new Float32Array(N);
+            for (let i = 0; i < N; i++) {
+                let max = 0;
+                for (let j = i * pas; j < Math.min((i + 1) * pas, dat.length); j += 16) {
+                    const a = Math.abs(dat[j]);
+                    if (a > max) max = a;
+                }
+                v[i] = max;
+            }
+            setPeaks(v);
+            await ctx.close();
+            if (!m) setStare('Imnul nu are marcaje aprobate — vezi doar forma de undă.');
+            const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
+            if (audioRef.current) audioRef.current.src = url;
+        } catch (e) {
+            setStare('Nu s-a putut citi: ' + (e as Error).message);
+        } finally {
+            setOcupat(false);
+        }
+    }, [numar]);
+
+    // desenul
+    useEffect(() => {
+        const c = canvasRef.current;
+        if (!c || !peaks) return;
+        const w = c.width, h = c.height;
+        const g = c.getContext('2d');
+        if (!g) return;
+        g.clearRect(0, 0, w, h);
+        g.fillStyle = 'rgba(255,255,255,0.28)';
+        for (let i = 0; i < peaks.length; i++) {
+            const x = (i / peaks.length) * w;
+            const a = peaks[i] * (h / 2) * 0.95;
+            g.fillRect(x, h / 2 - a, Math.max(1, w / peaks.length), a * 2);
+        }
+        if (marks && durata > 0) {
+            marks.forEach(([slide, sfarsit], i) => {
+                const x = (sfarsit / 1000 / durata) * w;
+                const ultim = i === marks.length - 1;
+                g.strokeStyle = ultim ? 'rgba(148,163,184,0.9)' : 'rgba(16,185,129,0.95)';
+                g.lineWidth = 2;
+                g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
+                g.fillStyle = ultim ? 'rgba(148,163,184,0.95)' : 'rgba(16,185,129,0.95)';
+                g.font = 'bold 10px sans-serif';
+                g.fillText(String(slide), x + 3, 12);
+            });
+        }
+    }, [peaks, marks, durata]);
+
+    const asculta = (ms: number) => {
+        const a = audioRef.current;
+        if (!a) return;
+        a.currentTime = Math.max(0, ms / 1000 - 3);
+        void a.play();
+        window.setTimeout(() => { a.pause(); }, 4500);
+    };
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal admin-sync" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                    <h3>Administrare — sincronizare</h3>
+                    <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
+                </div>
+                <div className="modal-body">
+                    <section className="sgroup">
+                        <div className="sgroup-head">
+                            <h4>Când se schimbă slide-ul</h4>
+                            <p>
+                                Valorile de mai jos se păstrează pe acest calculator și nu se
+                                resetează la actualizări. 3 secunde e doar punctul de plecare.
+                            </p>
+                        </div>
+                        <div className="sstack">
+                            <div className="field">
+                                <label>Cât mai stă titlul după ce pornește introducerea</label>
+                                <div className="field-row">
+                                    <input type="range" min="0" max="15" step="0.5"
+                                        value={(settings.syncTitleDelayMs ?? 3000) / 1000}
+                                        onChange={e => salveaza({
+                                            syncTitleDelayMs: Math.round(parseFloat(e.target.value) * 1000),
+                                        })} />
+                                    <span className="color-preview">
+                                        {((settings.syncTitleDelayMs ?? 3000) / 1000).toFixed(1)} s
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="field">
+                                <label>Cu cât înainte de sfârșitul strofei apare următoarea</label>
+                                <div className="field-row">
+                                    <input type="range" min="0" max="8" step="0.5"
+                                        value={(settings.syncLeadMs ?? 3000) / 1000}
+                                        onChange={e => salveaza({
+                                            syncLeadMs: Math.round(parseFloat(e.target.value) * 1000),
+                                        })} />
+                                    <span className="color-preview">
+                                        {((settings.syncLeadMs ?? 3000) / 1000).toFixed(1)} s
+                                    </span>
+                                </div>
+                            </div>
+                            <p className="field-hint">
+                                La secțiunile scurte avansul scade singur la un sfert din durata
+                                lor, oricât ai pune aici — altfel textul ar dispărea cu o treime
+                                nescântată.
+                            </p>
+                        </div>
+                    </section>
+
+                    <section className="sgroup">
+                        <div className="sgroup-head">
+                            <h4>Marcajele unui imn</h4>
+                            <p>
+                                Liniile verzi arată unde se termină fiecare strofă sau refren.
+                                Ar trebui să cadă în tăcerea dintre ele, sau exact la schimbarea
+                                muzicii — nu în mijlocul unui pasaj cântat.
+                            </p>
+                        </div>
+                        <div className="field">
+                            <div className="field-row">
+                                <input type="text" placeholder="număr imn, ex. 255"
+                                    value={numar} style={{ maxWidth: 140 }}
+                                    onChange={e => setNumar(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') void incarca(); }} />
+                                <button className="btn-sm" disabled={ocupat} onClick={() => void incarca()}>
+                                    {ocupat ? 'Se citește…' : 'Arată'}
+                                </button>
+                            </div>
+                            {stare && <p className="field-hint">{stare}</p>}
+                        </div>
+                        {peaks && (
+                            <>
+                                <canvas ref={canvasRef} width={1400} height={150}
+                                    className="admin-wave" />
+                                <p className="field-hint">
+                                    Durata: {durata.toFixed(1)} s · {marks ? marks.length : 0} marcaje
+                                </p>
+                            </>
+                        )}
+                        {marks && (
+                            <div className="admin-marks">
+                                {marks.map(([slide, sfarsit], i) => (
+                                    <button key={i} className="btn-sm" onClick={() => asculta(sfarsit)}>
+                                        slide {slide} · {(sfarsit / 1000).toFixed(1)} s
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        {marks && (
+                            <p className="field-hint">
+                                Apasă un marcaj ca să auzi cele 3 secunde dinaintea lui și încă
+                                una după. Acolo ar trebui să se schimbe textul.
+                            </p>
+                        )}
+                        <audio ref={audioRef} style={{ display: 'none' }} />
+                    </section>
+                </div>
+            </div>
+        </div>
+    );
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
