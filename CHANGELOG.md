@@ -1,5 +1,12 @@
 # Changelog — AdventShow
 
+## v1.5.1 (16 August 2026)
+
+### Modificări
+- Fiecare imn are acum acompaniament instrumental: alegi imnul, apeși «Cântă», și se aude, chiar dacă nu e nimeni la pian. Înregistrarea se aduce singură prima dată și rămâne pe calculator; dacă în sală nu ai internet, le descarci pe toate din vreme, din Setări. La imnurile pregătite de noi, proiecția merge singură — strofele se schimbă cu trei secunde înainte să se termine de cântat cea de dinainte, ca oamenii să apuce să citească, iar la sfârșit ecranul se oprește. Cât merge singură, aplicația ți-o spune cu litere mari; la prima săgeată apăsată, comanda e a ta, iar acompaniamentul merge mai departe.
+
+---
+
 ## v1.5.0 (09 August 2026)
 
 ### Modificări
