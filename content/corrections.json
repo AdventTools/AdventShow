@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Corecturi al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-08-21T21:31:11+00:00",
+    "generated": "2026-08-21T21:33:49+00:00",
     "entries": [
         {
             "seq": 1,
@@ -276,6 +276,49 @@
             ],
             "force": false,
             "ts": "2026-08-21T21:31:11.000Z",
+            "text_hash": "6fe999d6671e6629deaa6c76406ad1f2d5b7dc15cfb95730d9dc8c2a0bf05a49"
+        },
+        {
+            "seq": 9,
+            "category": "Imnuri Speciale",
+            "number": "001",
+            "title": "O cântare de mărire",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "O cântare de mărire am în inimă mereu\nDe când L-am găsit pe Domnul la Calvar;\nEl mi-a dat odihnă sfântă, pace sufletului meu\nȘi sunt liber, fericit prin al Său har."
+                },
+                {
+                    "type": "refren",
+                    "text": "Inima mea cântă azi cântarea\nPlină de nespuse bucurii,\nMai frumos nici îngerii nu cântă\nCa acei din valea plângerii."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cât de mult doream să aflu drumul cel adevărat,\nCineva să-mi ia păcatul dureros;\nAm aflat că El osânda la Golgota a purtat\nȘi-am venit atunci la cruce bucuros."
+                },
+                {
+                    "type": "refren",
+                    "text": "Inima mea cântă azi cântarea\nPlină de nespuse bucurii,\nMai frumos nici îngerii nu cântă\nCa acei din valea plângerii."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Câtă frică și-ntuneric pe cărarea mea era,\nCând umblam rătăcitor fără Isus;\nAm adus la El povara și de-atunci în viața mea\nBucuria și lumina au pătruns."
+                },
+                {
+                    "type": "refren",
+                    "text": "Inima mea cântă azi cântarea\nPlină de nespuse bucurii,\nMai frumos nici îngerii nu cântă\nCa acei din valea plângerii."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Merg spre casa unde veșnic fericirea voi gusta,\nÎn eternul, strălucitul meu palat;\nFață-n față în mărire pe Isus Îl voi vedea\nȘi cu sfinți-I voi da slavă ne-ncetat!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Inima mea cântă azi cântarea\nPlină de nespuse bucurii,\nMai frumos nici îngerii nu cântă\nCa acei din valea plângerii."
+                }
+            ],
+            "force": true,
+            "ts": "2026-08-21T21:33:49.000Z",
             "text_hash": "6fe999d6671e6629deaa6c76406ad1f2d5b7dc15cfb95730d9dc8c2a0bf05a49"
         }
     ]
