@@ -103,9 +103,27 @@ security find-identity -v -p codesigning | grep -q "${MACOS_SIGNING_IDENTITY}" \
     || fail "Developer ID lipsă din keychain: ${MACOS_SIGNING_IDENTITY}"
 ok "Keychain identity OK"
 
-xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 \
-    || fail "Notary profile lipsă: $NOTARY_PROFILE"
-ok "Notary profile OK"
+# Autentificarea la notarizare: profilul din keychain dacă se poate CITI, altfel
+# credențialele directe din signing.env.
+#
+# Profilul e mai curat (parola nu ajunge în linia de comandă), dar keychain-ul îl
+# poate face inaccesibil oricând: itemul stă în „Local Items", iar accesul cere o
+# aprobare care nu vine când nimeni nu e la ecran. La 1.5.2 asta a costat patru
+# submisii trimise degeaba — notarytool nu-l mai găsea, iar scriptul reîncerca.
+# Un release nu are voie să depindă de starea de spirit a keychain-ului.
+if xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
+    NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
+    ok "Notary: profil din keychain ($NOTARY_PROFILE)"
+else
+    : "${APPLE_ID:?APPLE_ID lipsă din signing.env — profilul de keychain nu e citibil}"
+    : "${APPLE_TEAM_ID:?APPLE_TEAM_ID lipsă din signing.env}"
+    : "${APPLE_APP_SPECIFIC_PASSWORD:?APPLE_APP_SPECIFIC_PASSWORD lipsă din signing.env}"
+    NOTARY_AUTH=(--apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID"
+                 --password "$APPLE_APP_SPECIFIC_PASSWORD")
+    xcrun notarytool history "${NOTARY_AUTH[@]}" >/dev/null 2>&1 \
+        || fail "Nici profilul de keychain, nici credențialele din signing.env nu merg"
+    ok "Notary: credențiale din signing.env (profilul de keychain nu e citibil)"
+fi
 
 ssh -o ConnectTimeout=10 "${WIN_SSH_OPTS[@]}" "$WIN_HOST" 'echo OK' >/dev/null 2>&1 \
     || fail "SSH la Windows VM ($WIN_HOST) a eșuat"
@@ -234,7 +252,7 @@ fi
 if [ ! -f "$STATE/notary-id.done" ]; then
   step "4/11 Notary submit (--no-wait)"
   submit_notary() {
-    xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" \
+    xcrun notarytool submit "$DMG" "${NOTARY_AUTH[@]}" \
       --no-wait --output-format plist > /tmp/adventshow-notary-submit.plist 2>/tmp/adventshow-notary-submit.err
   }
   retry "notary submit (upload DMG)" 40 20 -- submit_notary || fail "notary submit"
@@ -340,14 +358,14 @@ if [ ! -f "$STATE/staple.done" ]; then
   step "8/11 Notary status + staple"
   while true; do
     # PlistBuddy nu poate citi din pipe (cere fișier seekable) → fișier temporar
-    xcrun notarytool info "$NOTARY_ID" --keychain-profile "$NOTARY_PROFILE" --output-format plist \
+    xcrun notarytool info "$NOTARY_ID" "${NOTARY_AUTH[@]}" --output-format plist \
       > /tmp/adventshow-notary-info.plist 2>/dev/null
     NSTATUS=$(/usr/libexec/PlistBuddy -c "Print :status" /tmp/adventshow-notary-info.plist 2>/dev/null || echo "NetworkDown")
     log "  notary: $NSTATUS"
     case "$NSTATUS" in
       Accepted) break ;;
       Invalid|Rejected)
-        xcrun notarytool log "$NOTARY_ID" --keychain-profile "$NOTARY_PROFILE" || true
+        xcrun notarytool log "$NOTARY_ID" "${NOTARY_AUTH[@]}" || true
         fail "notarizare: $NSTATUS" ;;
       *) sleep 30 ;;
     esac
