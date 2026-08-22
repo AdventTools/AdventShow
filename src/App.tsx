@@ -59,6 +59,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ProjectorController } from './ProjectorController';
 import type { AccompanimentControl } from './ProjectorController';
+import { accTitle } from './accompaniment-ui';
 import type {
     AccompanimentInfo,
     AccompanimentStats,
@@ -345,6 +346,15 @@ function App() {
     const [adminOpen, setAdminOpen] = useState(false);
     const [accSync, setAccSync] = useState(false);
     const [accPreluat, setAccPreluat] = useState(false);
+    /**
+     * Imnul PREGĂTIT are marcaje — se știe înainte de apăsare, nu după.
+     * `accSync` spune altceva: că avansul automat chiar merge acum. Erau același
+     * lucru cât timp marcajele se citeau după `play()`, iar eticheta „auto" apărea
+     * când operatorul nu mai avea ce alege.
+     */
+    const [accHasMarks, setAccHasMarks] = useState(false);
+    /** Apăsarea din timpul descărcării: „am apăsat din greșeală, nu porni". */
+    const accAutoplayAnulat = useRef(false);
 
     // ── Update state ──
     const [updateInfo, setUpdateInfo] = useState<{
@@ -891,15 +901,16 @@ function App() {
         }
     }, []);
 
-    /** Pornește sau oprește acompaniamentul imnului pregătit. */
-    const accToggle = useCallback(async () => {
-        if (accPlaying) { accStop(); return; }
+    /**
+     * Pornește sunetul imnului pregătit, presupunând fișierul deja pe disc.
+     *
+     * `cuSync` false înseamnă „doar acompaniamentul": muzica merge, dar strofele
+     * rămân în mâna operatorului. Marcajele există, doar că nu le urmăm.
+     */
+    const accPlay = useCallback(async (cuSync: boolean) => {
         if (previewType !== 'hymn') return;
         const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
         if (!Number.isFinite(numar)) return;
-
-        const rez = await accDownload(numar);
-        if (!rez) return;
         const el = accRef.current;
         if (!el) return;
         try {
@@ -958,13 +969,12 @@ function App() {
                 }, accTitleDelay.current);
             }
 
-            // Marcajele imnului, dacă autorul le-a aprobat. Fără ele, redarea merge
-            // exact ca până acum: operatorul schimbă strofele, sunetul curge.
-            accMarks.current = await window.electron.accompaniment.marks(numar)
-                .catch(() => null);
+            // Marcajele sunt deja citite, la pregătirea imnului. Fără ele — sau când
+            // s-a cerut doar acompaniamentul — redarea merge exact ca până acum:
+            // operatorul schimbă strofele, sunetul curge.
             accAutoOprit.current = false;
             setAccPreluat(false);
-            setAccSync(!!accMarks.current);
+            setAccSync(cuSync && !!accMarks.current);
         } catch (e) {
             // Nu deschidem dialog, dar NICI nu tăcem: o funcție care „nu face
             // nimic" e mai rea decât una care spune de ce.
@@ -972,8 +982,58 @@ function App() {
             setAccError('Nu pornește sunetul. Verifică ieșirea audio din Setări.');
             setAccPlaying(false);
         }
-    }, [accPlaying, accStop, accDownload, previewType, previewNumber,
-        projecting, previewLive, accNavigheaza]);
+    }, [previewType, previewNumber, projecting, previewLive, accNavigheaza]);
+
+    /** Imnul e chiar acum pe ecran — de asta atârnă ce face o apăsare. */
+    const accLive = projecting && previewLive;
+
+    /**
+     * Apăsarea pe butonul principal.
+     *
+     * Cât timp fișierul e pe disc, se poartă exact ca înainte: pornește sau
+     * oprește. Ce se adaugă e traseul descărcării, care nu mai e același peste tot:
+     * cu imnul PE ECRAN, muzica pornește singură când fișierul e gata — s-a anunțat
+     * imnul, nu mai are cine apăsa a doua oară. Cu imnul doar PREGĂTIT, descărcarea
+     * se oprește acolo: sunetul pornit peste cel care încă vorbește e greșeala pe
+     * care operatorul o repară în panică.
+     */
+    const accToggle = useCallback(async () => {
+        if (accPlaying) { accStop(); return; }
+        // Apăsare în timpul descărcării = frâna: fișierul vine în continuare,
+        // dar nu mai pornește singur.
+        if (accLoading) { accAutoplayAnulat.current = true; return; }
+        if (previewType !== 'hymn') return;
+        const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
+        if (!Number.isFinite(numar)) return;
+
+        if (!accInfo?.local) {
+            accAutoplayAnulat.current = false;
+            const rez = await accDownload(numar);
+            if (!rez) return;
+            if (!accLive) return;                      // pregătire, nu pornire
+            if (accAutoplayAnulat.current) return;     // s-a apăsat frâna
+        }
+        await accPlay(true);
+    }, [accPlaying, accLoading, accStop, accDownload, accPlay, accInfo, accLive,
+        previewType, previewNumber]);
+
+    /** „Doar muzica": același sunet, dar strofele rămân ale operatorului. */
+    const accPlayOnly = useCallback(async () => {
+        if (accPlaying) { accStop(); return; }
+        if (accLoading) { accAutoplayAnulat.current = true; return; }
+        if (previewType !== 'hymn') return;
+        const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
+        if (!Number.isFinite(numar)) return;
+        if (!accInfo?.local) {
+            accAutoplayAnulat.current = false;
+            const rez = await accDownload(numar);
+            if (!rez) return;
+            if (!accLive) return;
+            if (accAutoplayAnulat.current) return;
+        }
+        await accPlay(false);
+    }, [accPlaying, accLoading, accStop, accDownload, accPlay, accInfo, accLive,
+        previewType, previewNumber]);
 
     // Un singur obiect de control, folosit și în previzualizare, și în bara de
     // proiecție — ca butonul să arate identic în amândouă și să nu apuce nimeni
@@ -988,14 +1048,18 @@ function App() {
                 sizeMb: accInfo.bytes / 1_000_000,
                 error: accError,
                 sync: accSync,
+                hasMarks: accHasMarks,
+                // Ce va face apăsarea, ca să scrie asta pe buton ÎNAINTE de apăsare.
+                willPlay: !!accInfo.local || accLive,
                 autoState: (accSync && accPlaying)
                     ? (accPreluat ? 'preluat' : 'auto')
                     : null,
                 onToggle: accToggle,
+                onPlayOnly: accPlayOnly,
             }
             : null
     ), [previewType, accInfo, accPlaying, accLoading, accRemaining, accError, accSync,
-        accPreluat, accToggle]);
+        accHasMarks, accLive, accPreluat, accToggle, accPlayOnly]);
 
     // Ce imnuri au deja fișierul pe disc — pentru ♪ din listă.
     useEffect(() => {
@@ -1004,15 +1068,30 @@ function App() {
             .catch(() => { /* fără manifest încă */ });
     }, []);
 
-    // Informația despre imnul pregătit: durată și dacă e local.
+    // Informația despre imnul pregătit: durată, dacă e local, și marcajele.
+    //
+    // Marcajele se citesc AICI, nu după `play()`: `marksFor` le ia din memoria
+    // procesului principal, fără rețea și fără disc, deci nu costă nimic să le
+    // știm devreme — iar butonul poate spune dinainte că imnul merge singur.
     useEffect(() => {
-        if (previewType !== 'hymn') { setAccInfo(null); return; }
+        if (previewType !== 'hymn') { setAccInfo(null); setAccHasMarks(false); return; }
         const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
-        if (!Number.isFinite(numar)) { setAccInfo(null); return; }
+        if (!Number.isFinite(numar)) { setAccInfo(null); setAccHasMarks(false); return; }
         let anulat = false;
         window.electron.accompaniment.info(numar)
             .then(i => { if (!anulat) setAccInfo(i); })
             .catch(() => { if (!anulat) setAccInfo(null); });
+        window.electron.accompaniment.marks(numar)
+            .then(m => {
+                if (anulat) return;
+                accMarks.current = m;
+                setAccHasMarks(!!m);
+            })
+            .catch(() => {
+                if (anulat) return;
+                accMarks.current = null;
+                setAccHasMarks(false);
+            });
         return () => { anulat = true; };
     }, [previewType, previewNumber]);
 
@@ -1021,7 +1100,12 @@ function App() {
     useEffect(() => {
         accStop(true);
         setAccError('');
+        // Ștergerea e sincronă, iar efectul de mai sus le reîncarcă din promisiune:
+        // așa nu există clipa în care butonul imnului nou ar porni pe marcajele
+        // celui vechi.
         accMarks.current = null;
+        setAccHasMarks(false);
+        accAutoplayAnulat.current = false;
         accAutoOprit.current = false;
         setAccPreluat(false);
         setAccSync(false);
@@ -1501,7 +1585,12 @@ function App() {
             // ── Ctrl+Alt+Shift+M: meniul de administrare ──
             // Trei modificatoare plus o literă: imposibil de nimerit din greșeală.
             // Urmează parola — reglajele de aici mută proiecția pentru toată biserica.
-            if ((e.key === 'm' || e.key === 'M') && e.ctrlKey && e.altKey && e.shiftKey) {
+            //
+            // `e.code`, NU `e.key`: pe macOS, Alt(Option) e tasta de caractere
+            // speciale, deci Alt+M ajunge la pagină ca „µ" și comparația cu „m"
+            // nu se potrivește niciodată. `code` spune ce tastă fizică s-a apăsat,
+            // indiferent ce literă produce ea cu modificatoarele apăsate.
+            if (e.code === 'KeyM' && e.ctrlKey && e.altKey && e.shiftKey) {
                 e.preventDefault(); e.stopImmediatePropagation();
                 if (adminOpen) return;
                 requirePassword(() => setAdminOpen(true), 'Administrare — sincronizare');
@@ -2211,6 +2300,17 @@ function App() {
                     // dacă operatorul a luat comanda pe parcurs, ecranul e al lui.
                     // Scurta întârziere lasă ultimul acord să se stingă.
                     if (accSync && !accAutoOprit.current && projecting && previewLive) {
+                        // La 14 imnuri înregistrarea are mai puține strofe decât cartea
+                        // (vezi „audio_mai_scurt" din detecție). Acolo sfârșitul muzicii
+                        // NU înseamnă sfârșitul imnului: adunarea mai are de cântat, și
+                        // ar rămâne fără text pe ecran. Predăm comanda, nu stingem.
+                        const acoperaTot =
+                            (accMarks.current?.length ?? 0) >= previewSections.length;
+                        if (!acoperaTot) {
+                            accAutoOprit.current = true;
+                            setAccPreluat(true);
+                            return;
+                        }
                         if (accFinalRef.current !== null) window.clearTimeout(accFinalRef.current);
                         accFinalRef.current = window.setTimeout(() => {
                             accFinalRef.current = null;
@@ -3546,29 +3646,43 @@ function PreviewPanel({
 /** Butonul de acompaniament, același în previzualizare și în bara de proiecție. */
 function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
     return (
-        <button
-            className={`btn-acc ${acc.playing ? 'playing' : ''}`}
-            onClick={acc.onToggle}
-            disabled={acc.loading}
-            title={
-                acc.playing ? 'Oprește acompaniamentul (A)'
-                    : acc.needsDownload ? 'Descarcă și pornește acompaniamentul (A)'
-                        : 'Pornește acompaniamentul (A)'
-            }
-        >
-            {acc.loading ? (
-                <><Loader className="icon-xs spin" /> Se aduce…</>
-            ) : acc.playing ? (
-                <>
-                    <Square className="icon-xs" /> {mmss(acc.remaining)}
-                    {acc.sync && <span className="acc-auto" title="Proiecția avansează singură">auto</span>}
-                </>
-            ) : acc.needsDownload ? (
-                <><Download className="icon-xs" /> {acc.sizeMb.toFixed(1)} MB</>
-            ) : (
-                <><Music className="icon-xs" /> Cântă</>
+        <>
+            <button
+                className={`btn-acc ${acc.playing ? 'playing' : ''}`}
+                onClick={acc.onToggle}
+                title={accTitle(acc)}
+            >
+                {acc.loading ? (
+                    <>
+                        <Loader className="icon-xs spin" />
+                        {acc.willPlay ? 'Se descarcă… · nu porni' : 'Se descarcă…'}
+                    </>
+                ) : acc.playing ? (
+                    <>
+                        <Square className="icon-xs" /> {mmss(acc.remaining)}
+                        {acc.sync && <span className="acc-auto" title="Proiecția avansează singură">auto</span>}
+                    </>
+                ) : acc.needsDownload ? (
+                    <>
+                        <Download className="icon-xs" />
+                        {acc.willPlay ? 'Descarcă și cântă' : 'Descarcă'} {acc.sizeMb.toFixed(1)} MB
+                    </>
+                ) : acc.hasMarks ? (
+                    <><Music className="icon-xs" /> Cântă singur</>
+                ) : (
+                    <><Music className="icon-xs" /> Cântă</>
+                )}
+            </button>
+            {acc.hasMarks && !acc.playing && !acc.loading && acc.onPlayOnly && (
+                <button
+                    className="btn-acc btn-acc-only"
+                    onClick={acc.onPlayOnly}
+                    title="Doar acompaniamentul — strofele le schimbi tu"
+                >
+                    <Music className="icon-xs" />
+                </button>
             )}
-        </button>
+        </>
     );
 }
 
@@ -3580,22 +3694,48 @@ function mmss(sec: number): string {
 // ═════════════════════════════════════════════════════════════════════════════
 // Administrare — sincronizare (ascuns: Ctrl+Alt+Shift+M, apoi parola)
 //
-// Două lucruri: reglajele de avans, și o privire peste marcajele unui imn.
-// Forma de undă e aici pentru că o greșeală de marcaj se vede într-o secundă
-// desenată, dar e invizibilă într-un tabel de cifre — exact ce s-a întâmplat
-// cu imnul 255, unde tăietura căzuse la jumătatea strofei.
+// Reglajele de avans, și masa de lucru la marcaje: se aud, se mută, se pun și
+// se scot. Forma de undă e aici pentru că o greșeală de marcaj se vede într-o
+// secundă desenată, dar e invizibilă într-un tabel de cifre — exact ce s-a
+// întâmplat cu imnul 255, unde tăietura căzuse la jumătatea strofei.
+//
+// Precizia nu se cere de la mâna omului, ci de la unealtă: se apasă aproximativ,
+// iar marcajul se lipește singur de cea mai adâncă tăcere din apropiere. Ce iese
+// se aude imediat, cu trei secunde înainte și una după — cum se va vedea în sală.
 // ═════════════════════════════════════════════════════════════════════════════
+
+/** Cât de departe caută lipirea o tăcere, de-o parte și de alta. */
+const SNAP_MS = 250;
+/** Pașii de mutare fină, din tastatură. */
+const PAS_FIN = 10;
+const PAS_MARE = 100;
+
+type Marcaj = [number, number, number];
 
 function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const [settings, setSettings] = useState<AppSettings>({});
     const [numar, setNumar] = useState('');
-    const [marks, setMarks] = useState<[number, number, number][] | null>(null);
+    const [marks, setMarks] = useState<Marcaj[] | null>(null);
     const [peaks, setPeaks] = useState<Float32Array | null>(null);
     const [durata, setDurata] = useState(0);
     const [stare, setStare] = useState('');
     const [ocupat, setOcupat] = useState(false);
+    /** Imnul încărcat acum — marcajele se salvează pe numărul ăsta, nu pe ce scrie în casetă. */
+    const [imnCurent, setImnCurent] = useState<number | null>(null);
+    /** Secțiunile imnului din carte: câte marcaje trebuie, și cum se numesc. */
+    const [sectiuni, setSectiuni] = useState<{ type: string; text: string }[]>([]);
+    const [selectat, setSelectat] = useState<number | null>(null);
+    const [modificat, setModificat] = useState(false);
+    const [lipeste, setLipeste] = useState(true);
+    const [modTap, setModTap] = useState(false);
+    const [reda, setReda] = useState(false);
+    const [pozitie, setPozitie] = useState(0);
+    /** Fereastra vizibilă pe undă, în secunde: [start, sfârșit]. Zoom-ul o strânge. */
+    const [vedere, setVedere] = useState<[number, number]>([0, 0]);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const trageRef = useRef<number | null>(null);
+    const opresteLaRef = useRef<number | null>(null);
 
     useEffect(() => {
         window.electron.settings.get().then(setSettings).catch(() => { /* implicit */ });
@@ -3606,13 +3746,28 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         window.electron.settings.set(patch);
     };
 
+    // ── încărcarea imnului ───────────────────────────────────────────────────
+
     const incarca = useCallback(async () => {
         const n = parseInt(numar.replace(/\D/g, ''), 10);
         if (!Number.isFinite(n)) { setStare('Scrie un număr de imn.'); return; }
         setOcupat(true); setStare(''); setMarks(null); setPeaks(null);
+        setSelectat(null); setModificat(false); setImnCurent(null); setSectiuni([]);
         try {
             const m = await window.electron.accompaniment.marks(n);
-            setMarks(m);
+            setMarks(m ? m.map(x => [...x] as Marcaj) : []);
+
+            // Câte slide-uri are imnul în carte: fără ele n-am ști câte marcaje
+            // lipsesc, nici cum se cheamă fiecare bucată.
+            try {
+                const h = await window.electron.db.getHymn(String(n).padStart(3, '0'));
+                if (h?.id) {
+                    const plin = await window.electron.db.getHymnWithSections(h.id);
+                    setSectiuni((plin?.sections ?? []).map((s: { type: string; text: string }) =>
+                        ({ type: s.type, text: s.text })));
+                }
+            } catch { /* imnul poate lipsi din carte — 921 e chiar cazul */ }
+
             const octeti = await window.electron.accompaniment.bytes(n);
             if (!octeti) {
                 setStare('Acompaniamentul nu e descărcat. Pornește-l o dată din previzualizare.');
@@ -3622,14 +3777,16 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
             const ctx = new AudioContext();
             const audio = await ctx.decodeAudioData(buf.slice(0));
             setDurata(audio.duration);
-            // ~1400 de coloane: destul pentru un ecran, ieftin de desenat
-            const N = 1400;
+            setVedere([0, audio.duration]);
+            // Anvelopă deasă: 12.000 de coloane înseamnă ~20 ms pe coloană la un
+            // imn de 4 minute. La zoom mare se citește din ea, nu se redecodează.
+            const N = 12000;
             const dat = audio.getChannelData(0);
             const pas = Math.max(1, Math.floor(dat.length / N));
             const v = new Float32Array(N);
             for (let i = 0; i < N; i++) {
                 let max = 0;
-                for (let j = i * pas; j < Math.min((i + 1) * pas, dat.length); j += 16) {
+                for (let j = i * pas; j < Math.min((i + 1) * pas, dat.length); j += 8) {
                     const a = Math.abs(dat[j]);
                     if (a > max) max = a;
                 }
@@ -3637,7 +3794,8 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
             }
             setPeaks(v);
             await ctx.close();
-            if (!m) setStare('Imnul nu are marcaje aprobate — vezi doar forma de undă.');
+            setImnCurent(n);
+            if (!m) setStare('Imnul n-are marcaje. Pune-le: dublu-clic pe undă, sau „Marchează din mers".');
             const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
             if (audioRef.current) audioRef.current.src = url;
         } catch (e) {
@@ -3647,45 +3805,315 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         }
     }, [numar]);
 
-    // desenul
-    useEffect(() => {
-        const c = canvasRef.current;
-        if (!c || !peaks) return;
-        const w = c.width, h = c.height;
-        const g = c.getContext('2d');
-        if (!g) return;
-        g.clearRect(0, 0, w, h);
-        g.fillStyle = 'rgba(255,255,255,0.28)';
-        for (let i = 0; i < peaks.length; i++) {
-            const x = (i / peaks.length) * w;
-            const a = peaks[i] * (h / 2) * 0.95;
-            g.fillRect(x, h / 2 - a, Math.max(1, w / peaks.length), a * 2);
-        }
-        if (marks && durata > 0) {
-            marks.forEach(([slide, sfarsit], i) => {
-                const x = (sfarsit / 1000 / durata) * w;
-                const ultim = i === marks.length - 1;
-                g.strokeStyle = ultim ? 'rgba(148,163,184,0.9)' : 'rgba(16,185,129,0.95)';
-                g.lineWidth = 2;
-                g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke();
-                g.fillStyle = ultim ? 'rgba(148,163,184,0.95)' : 'rgba(16,185,129,0.95)';
-                g.font = 'bold 10px sans-serif';
-                g.fillText(String(slide), x + 3, 12);
-            });
-        }
-    }, [peaks, marks, durata]);
+    // ── unelte pe timp ───────────────────────────────────────────────────────
 
-    const asculta = (ms: number) => {
+    /** Secunda din dreptul unui punct de pe canvas. */
+    const timpLaX = useCallback((clientX: number): number => {
+        const c = canvasRef.current;
+        if (!c) return 0;
+        const r = c.getBoundingClientRect();
+        const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+        return vedere[0] + p * (vedere[1] - vedere[0]);
+    }, [vedere]);
+
+    /**
+     * Cea mai liniștită clipă din apropiere.
+     *
+     * Omul apasă unde aude schimbarea, adică târziu cu o fracțiune de secundă.
+     * Tăcerea dintre secțiuni e însă un fapt măsurabil — o căutăm și ne lipim de
+     * ea. Așa marcajul iese la fel de precis ca cele calculate, fără ca nimeni
+     * să țintească pixeli.
+     */
+    const lipesteDeTacere = useCallback((ms: number): number => {
+        if (!peaks || !lipeste || durata <= 0) return ms;
+        const perCol = (durata * 1000) / peaks.length;
+        const centru = Math.round(ms / perCol);
+        const raza = Math.round(SNAP_MS / perCol);
+        let best = centru, bestV = Infinity;
+        for (let i = Math.max(0, centru - raza); i <= Math.min(peaks.length - 1, centru + raza); i++) {
+            // La energie egală câștigă ce e mai aproape de unde a apăsat omul.
+            const v = peaks[i] + Math.abs(i - centru) * 1e-6;
+            if (v < bestV) { bestV = v; best = i; }
+        }
+        return Math.round(best * perCol);
+    }, [peaks, lipeste, durata]);
+
+    /** Redă bucata din jurul unui marcaj: 3 secunde înainte, una după. */
+    const asculta = useCallback((ms: number) => {
         const a = audioRef.current;
         if (!a) return;
         a.currentTime = Math.max(0, ms / 1000 - 3);
-        void a.play();
-        window.setTimeout(() => { a.pause(); }, 4500);
+        if (opresteLaRef.current !== null) window.clearTimeout(opresteLaRef.current);
+        void a.play().then(() => setReda(true)).catch(() => { /* fișierul încă se încarcă */ });
+        opresteLaRef.current = window.setTimeout(() => {
+            opresteLaRef.current = null;
+            a.pause(); setReda(false);
+        }, 4200);
+    }, []);
+
+    // ── operații pe marcaje ──────────────────────────────────────────────────
+
+    const scrieMarcaje = useCallback((noi: Marcaj[]) => {
+        const sortate = [...noi].sort((a, b) => a[1] - b[1])
+            .map(([, s, r], i) => [i, s, Math.max(s, r)] as Marcaj);
+        setMarks(sortate);
+        setModificat(true);
+        return sortate;
+    }, []);
+
+    const adauga = useCallback((ms: number, asculta_dupa = true) => {
+        const t = lipesteDeTacere(Math.max(0, Math.min(durata * 1000, ms)));
+        const noi = scrieMarcaje([...(marks ?? []), [0, t, t]]);
+        const idx = noi.findIndex(m => m[1] === t);
+        setSelectat(idx);
+        if (asculta_dupa) asculta(t);
+    }, [marks, durata, lipesteDeTacere, scrieMarcaje, asculta]);
+
+    const sterge = useCallback((idx: number) => {
+        if (!marks || idx < 0 || idx >= marks.length) return;
+        scrieMarcaje(marks.filter((_, i) => i !== idx));
+        setSelectat(null);
+    }, [marks, scrieMarcaje]);
+
+    const mutaCu = useCallback((idx: number, delta: number) => {
+        if (!marks || idx < 0 || idx >= marks.length) return;
+        const noi = marks.map((m, i) =>
+            i === idx ? [m[0], Math.max(0, Math.min(durata * 1000, m[1] + delta)),
+                Math.max(0, Math.min(durata * 1000, m[2] + delta))] as Marcaj : m);
+        const t = noi[idx][1];
+        const dupa = scrieMarcaje(noi);
+        setSelectat(dupa.findIndex(m => m[1] === t));
+    }, [marks, durata, scrieMarcaje]);
+
+    const salveazaMarcaje = useCallback(async () => {
+        if (imnCurent == null || !marks) return;
+        try {
+            await window.electron.accompaniment.setMarks(imnCurent, marks.length ? marks : null);
+            setModificat(false);
+            setStare(marks.length
+                ? `Salvat: ${marks.length} marcaje pentru imnul ${imnCurent}. Se folosesc de acum la proiecție.`
+                : `Marcajele imnului ${imnCurent} au fost șterse.`);
+        } catch (e) {
+            setStare('Nu s-a putut salva: ' + (e as Error).message);
+        }
+    }, [imnCurent, marks]);
+
+    const exporta = useCallback(async () => {
+        const catre = await window.electron.dialog.saveJsonFile('marcaje.json');
+        if (!catre) return;
+        const n = await window.electron.accompaniment.exportMarks(catre);
+        setStare(`Scris: ${n} imnuri marcate cu mâna.`);
+    }, []);
+
+    // ── redare ───────────────────────────────────────────────────────────────
+
+    const redaPauza = useCallback(() => {
+        const a = audioRef.current;
+        if (!a) return;
+        if (opresteLaRef.current !== null) {
+            window.clearTimeout(opresteLaRef.current);
+            opresteLaRef.current = null;
+        }
+        if (a.paused) { void a.play().then(() => setReda(true)).catch(() => undefined); }
+        else { a.pause(); setReda(false); }
+    }, []);
+
+    useEffect(() => {
+        const a = audioRef.current;
+        if (!a) return;
+        const t = window.setInterval(() => setPozitie(a.currentTime), 60);
+        return () => window.clearInterval(t);
+    }, [peaks]);
+
+    // ── tastatura ────────────────────────────────────────────────────────────
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            const t = e.target as HTMLElement;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+            if (e.code === 'Space') {
+                e.preventDefault();
+                // În modul „din mers", bara e unealta de marcat: pui un marcaj la
+                // fiecare schimbare de strofă, cum ai bate ritmul. Restul timpului
+                // e ce se așteaptă oricine de la ea — pornește și oprește.
+                if (modTap && audioRef.current && !audioRef.current.paused) {
+                    adauga(audioRef.current.currentTime * 1000, false);
+                } else {
+                    redaPauza();
+                }
+                return;
+            }
+            if (selectat === null) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault(); sterge(selectat); return;
+            }
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                const pas = (e.shiftKey ? PAS_MARE : PAS_FIN) * (e.key === 'ArrowLeft' ? -1 : 1);
+                mutaCu(selectat, pas);
+            }
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [modTap, selectat, adauga, redaPauza, sterge, mutaCu]);
+
+    // ── desenul ──────────────────────────────────────────────────────────────
+
+    useEffect(() => {
+        const c = canvasRef.current;
+        if (!c || !peaks || durata <= 0) return;
+        const w = c.width, h = c.height;
+        const g = c.getContext('2d');
+        if (!g) return;
+        const [v0, v1] = vedere[1] > vedere[0] ? vedere : [0, durata];
+        const span = v1 - v0;
+        g.clearRect(0, 0, w, h);
+
+        const xLa = (sec: number) => ((sec - v0) / span) * w;
+
+        // unda
+        g.fillStyle = 'rgba(255,255,255,0.28)';
+        const col0 = Math.floor((v0 / durata) * peaks.length);
+        const col1 = Math.ceil((v1 / durata) * peaks.length);
+        const nCol = Math.max(1, col1 - col0);
+        for (let x = 0; x < w; x++) {
+            const i0 = col0 + Math.floor((x / w) * nCol);
+            const i1 = col0 + Math.floor(((x + 1) / w) * nCol);
+            let max = 0;
+            for (let i = i0; i <= Math.min(i1, peaks.length - 1); i++) if (peaks[i] > max) max = peaks[i];
+            const a = max * (h / 2) * 0.95;
+            g.fillRect(x, h / 2 - a, 1, Math.max(1, a * 2));
+        }
+
+        // secunde, ca omul să știe unde e
+        g.fillStyle = 'rgba(255,255,255,0.35)';
+        g.font = '10px sans-serif';
+        const pasSec = span > 240 ? 30 : span > 60 ? 10 : span > 20 ? 5 : 1;
+        for (let s = Math.ceil(v0 / pasSec) * pasSec; s <= v1; s += pasSec) {
+            const x = xLa(s);
+            g.fillRect(x, h - 10, 1, 10);
+            g.fillText(`${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`, x + 3, h - 2);
+        }
+
+        // marcajele
+        (marks ?? []).forEach(([slide, sfarsit], i) => {
+            const x = xLa(sfarsit / 1000);
+            if (x < -20 || x > w + 20) return;
+            const ales = i === selectat;
+            g.strokeStyle = ales ? 'rgba(250,204,21,0.95)' : 'rgba(16,185,129,0.95)';
+            g.lineWidth = ales ? 3 : 2;
+            g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h - 12); g.stroke();
+            g.fillStyle = ales ? 'rgba(250,204,21,0.95)' : 'rgba(16,185,129,0.95)';
+            const et = sectiuni[slide]
+                ? `${slide} ${sectiuni[slide].type === 'refren' ? 'R' : 'S'}`
+                : String(slide);
+            g.font = 'bold 10px sans-serif';
+            g.fillText(et, x + 3, 12);
+        });
+
+        // capul de redare
+        if (pozitie >= v0 && pozitie <= v1) {
+            g.strokeStyle = 'rgba(255,255,255,0.85)';
+            g.lineWidth = 1;
+            g.beginPath(); g.moveTo(xLa(pozitie), 0); g.lineTo(xLa(pozitie), h); g.stroke();
+        }
+    }, [peaks, marks, durata, vedere, selectat, pozitie, sectiuni]);
+
+    // ── mouse pe undă ────────────────────────────────────────────────────────
+
+    /** Marcajul de sub cursor, dacă e destul de aproape ca să fie „al lui". */
+    const marcajLaX = useCallback((clientX: number): number | null => {
+        const c = canvasRef.current;
+        if (!c || !marks) return null;
+        const r = c.getBoundingClientRect();
+        const span = vedere[1] - vedere[0];
+        let best: number | null = null, bestD = 8;   // 8 px: destul cât să nu ratezi, prea puțin cât să prinzi din greșeală
+        marks.forEach(([, sfarsit], i) => {
+            const x = r.left + ((sfarsit / 1000 - vedere[0]) / span) * r.width;
+            const d = Math.abs(clientX - x);
+            if (d < bestD) { bestD = d; best = i; }
+        });
+        return best;
+    }, [marks, vedere]);
+
+    const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (!peaks) return;
+        const idx = marcajLaX(e.clientX);
+        if (idx !== null) {
+            setSelectat(idx);
+            trageRef.current = idx;
+            return;
+        }
+        // Clic pe gol: mută ascultarea acolo. Nu adaugă nimic — un marcaj pus din
+        // greșeală la fiecare clic ar face unealta de nefolosit.
+        const a = audioRef.current;
+        if (a) { a.currentTime = Math.max(0, timpLaX(e.clientX)); setPozitie(a.currentTime); }
+        setSelectat(null);
     };
+
+    const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const idx = trageRef.current;
+        if (idx === null || !marks) return;
+        const ms = Math.max(0, Math.min(durata * 1000, timpLaX(e.clientX) * 1000));
+        setMarks(marks.map((m, i) => (i === idx ? [m[0], ms, ms] : m)));
+        setModificat(true);
+    };
+
+    const onMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const idx = trageRef.current;
+        trageRef.current = null;
+        if (idx === null || !marks) return;
+        // Lipirea se face la eliberare, nu în timpul tragerii: altfel marcajul ar
+        // sări din mână, iar omul n-ar mai ști dacă îl mișcă el sau programul.
+        const ms = lipesteDeTacere(Math.max(0, Math.min(durata * 1000, timpLaX(e.clientX) * 1000)));
+        const dupa = scrieMarcaje(marks.map((m, i) => (i === idx ? [m[0], ms, ms] : m)));
+        setSelectat(dupa.findIndex(m => m[1] === ms));
+        asculta(ms);
+    };
+
+    const onDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (!peaks) return;
+        if (marcajLaX(e.clientX) !== null) return;   // dublu-clic pe un marcaj nu face altul peste el
+        adauga(timpLaX(e.clientX) * 1000);
+    };
+
+    const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+        if (!peaks || durata <= 0) return;
+        const [v0, v1] = vedere;
+        const span = v1 - v0;
+        if (e.shiftKey) {
+            const d = (e.deltaY / 200) * span;
+            const s = Math.max(0, Math.min(durata - span, v0 + d));
+            setVedere([s, s + span]);
+            return;
+        }
+        const centru = timpLaX(e.clientX);
+        const factor = e.deltaY > 0 ? 1.25 : 0.8;
+        const nou = Math.max(1, Math.min(durata, span * factor));
+        let s = centru - (centru - v0) * (nou / span);
+        s = Math.max(0, Math.min(durata - nou, s));
+        setVedere([s, s + nou]);
+    };
+
+    const zoom = (factor: number) => {
+        const [v0, v1] = vedere;
+        const span = v1 - v0;
+        const centru = (v0 + v1) / 2;
+        const nou = Math.max(1, Math.min(durata, span * factor));
+        let s = centru - nou / 2;
+        s = Math.max(0, Math.min(Math.max(0, durata - nou), s));
+        setVedere([s, s + nou]);
+    };
+
+    const mmssms = (ms: number) =>
+        `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}` +
+        `.${String(Math.round(ms % 1000)).padStart(3, '0')}`;
+
+    const lipsesc = sectiuni.length > 0 && marks ? sectiuni.length - marks.length : 0;
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal admin-sync" onClick={e => e.stopPropagation()}>
+            <div className="modal-dialog admin-sync" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3>Administrare — sincronizare</h3>
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
@@ -3700,7 +4128,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                             </p>
                         </div>
                         <div className="sstack">
-                            <div className="field">
+                            <div className="field" style={{ maxWidth: 460 }}>
                                 <label>Cât mai stă titlul după ce pornește introducerea</label>
                                 <div className="field-row">
                                     <input type="range" min="0" max="15" step="0.5"
@@ -3708,12 +4136,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         onChange={e => salveaza({
                                             syncTitleDelayMs: Math.round(parseFloat(e.target.value) * 1000),
                                         })} />
-                                    <span className="color-preview">
+                                    <span className="badge-num">
                                         {((settings.syncTitleDelayMs ?? 3000) / 1000).toFixed(1)} s
                                     </span>
                                 </div>
                             </div>
-                            <div className="field">
+                            <div className="field" style={{ maxWidth: 460 }}>
                                 <label>Cu cât înainte de sfârșitul strofei apare următoarea</label>
                                 <div className="field-row">
                                     <input type="range" min="0" max="8" step="0.5"
@@ -3721,7 +4149,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         onChange={e => salveaza({
                                             syncLeadMs: Math.round(parseFloat(e.target.value) * 1000),
                                         })} />
-                                    <span className="color-preview">
+                                    <span className="badge-num">
                                         {((settings.syncLeadMs ?? 3000) / 1000).toFixed(1)} s
                                     </span>
                                 </div>
@@ -3738,14 +4166,19 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                         <div className="sgroup-head">
                             <h4>Marcajele unui imn</h4>
                             <p>
-                                Liniile verzi arată unde se termină fiecare strofă sau refren.
-                                Ar trebui să cadă în tăcerea dintre ele, sau exact la schimbarea
-                                muzicii — nu în mijlocul unui pasaj cântat.
+                                Marcajul se pune <strong>exact unde se TERMINĂ de cântat</strong> strofa
+                                sau refrenul — nu unde vrei să se schimbe slide-ul. Avansul de mai sus
+                                se scade singur la proiecție, deci textul apare mai devreme fără să
+                                umbli aici. Liniile verzi ar trebui să cadă în tăcerea dintre secțiuni,
+                                nu în mijlocul unui pasaj cântat. Le poți muta, scoate și adăuga.
                             </p>
                         </div>
                         <div className="field">
                             <div className="field-row">
+                                {/* Clasa nu e decorativă: fără ea inputul rămâne cu fundalul
+                                    alb al browserului, iar textul scris în el nu se vede. */}
                                 <input type="text" placeholder="număr imn, ex. 255"
+                                    className="timer-text-input"
                                     value={numar} style={{ maxWidth: 140 }}
                                     onChange={e => setNumar(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') void incarca(); }} />
@@ -3755,31 +4188,107 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                             </div>
                             {stare && <p className="field-hint">{stare}</p>}
                         </div>
+
                         {peaks && (
                             <>
-                                <canvas ref={canvasRef} width={1400} height={150}
-                                    className="admin-wave" />
+                                <div className="admin-bar">
+                                    <button className="btn-sm" onClick={redaPauza}>
+                                        {reda ? 'Pauză' : 'Redă'} <span className="kbd">Space</span>
+                                    </button>
+                                    <button
+                                        className={`btn-sm ${modTap ? 'on' : ''}`}
+                                        onClick={() => setModTap(v => !v)}
+                                        title="Cât cântă, fiecare apăsare pe Space pune un marcaj"
+                                    >
+                                        {modTap ? 'Marchez din mers' : 'Marchează din mers'}
+                                    </button>
+                                    <span className="admin-sep" />
+                                    <button className="btn-sm" onClick={() => zoom(0.5)} title="Apropie (sau rotița)">+</button>
+                                    <button className="btn-sm" onClick={() => zoom(2)} title="Depărtează (sau rotița)">−</button>
+                                    <button className="btn-sm" onClick={() => setVedere([0, durata])} title="Tot imnul">tot</button>
+                                    <span className="admin-sep" />
+                                    <label className="admin-check" title={`Marcajul mutat se așază în cea mai liniștită clipă din ±${SNAP_MS} ms`}>
+                                        <input type="checkbox" checked={lipeste}
+                                            onChange={e => setLipeste(e.target.checked)} />
+                                        lipește de tăcere
+                                    </label>
+                                    <span className="admin-spacer" />
+                                    <button className="btn-sm" onClick={() => void salveazaMarcaje()}
+                                        disabled={!modificat || imnCurent == null}>
+                                        {modificat ? 'Salvează' : 'Salvat'}
+                                    </button>
+                                    <button className="btn-sm" onClick={() => void exporta()}>Exportă tot</button>
+                                </div>
+
+                                <canvas ref={canvasRef} width={1400} height={200}
+                                    className="admin-wave"
+                                    onMouseDown={onMouseDown}
+                                    onMouseMove={onMouseMove}
+                                    onMouseUp={onMouseUp}
+                                    onMouseLeave={() => { trageRef.current = null; }}
+                                    onDoubleClick={onDoubleClick}
+                                    onWheel={onWheel} />
+
                                 <p className="field-hint">
                                     Durata: {durata.toFixed(1)} s · {marks ? marks.length : 0} marcaje
+                                    {sectiuni.length > 0 && ` · cartea are ${sectiuni.length} slide-uri`}
+                                    {lipsesc > 0 && ` · lipsesc ${lipsesc}`}
+                                    {lipsesc < 0 && ` · ${-lipsesc} în plus`}
+                                    {' · '}vezi {(vedere[1] - vedere[0]).toFixed(1)} s din {durata.toFixed(0)} s
                                 </p>
                             </>
                         )}
-                        {marks && (
+
+                        {marks && marks.length > 0 && (
                             <div className="admin-marks">
                                 {marks.map(([slide, sfarsit], i) => (
-                                    <button key={i} className="btn-sm" onClick={() => asculta(sfarsit)}>
-                                        slide {slide} · {(sfarsit / 1000).toFixed(1)} s
+                                    <button
+                                        key={i}
+                                        className={`btn-sm ${i === selectat ? 'on' : ''}`}
+                                        onClick={() => { setSelectat(i); asculta(sfarsit); }}
+                                    >
+                                        {sectiuni[slide]
+                                            ? `${sectiuni[slide].type === 'refren' ? 'refren' : 'strofa'} ${slide}`
+                                            : `slide ${slide}`} · {(sfarsit / 1000).toFixed(1)} s
                                     </button>
                                 ))}
                             </div>
                         )}
-                        {marks && (
+
+                        {marks && selectat !== null && marks[selectat] && (
+                            <div className="admin-sel">
+                                <strong>
+                                    {sectiuni[marks[selectat][0]]
+                                        ? `${sectiuni[marks[selectat][0]].type === 'refren' ? 'Refrenul' : 'Strofa'} ${marks[selectat][0]}`
+                                        : `Slide ${marks[selectat][0]}`}
+                                </strong>
+                                <span className="tabular">{mmssms(marks[selectat][1])}</span>
+                                <button className="btn-sm" onClick={() => mutaCu(selectat, -PAS_MARE)}>−0,1 s</button>
+                                <button className="btn-sm" onClick={() => mutaCu(selectat, -PAS_FIN)}>−10 ms</button>
+                                <button className="btn-sm" onClick={() => mutaCu(selectat, PAS_FIN)}>+10 ms</button>
+                                <button className="btn-sm" onClick={() => mutaCu(selectat, PAS_MARE)}>+0,1 s</button>
+                                <button className="btn-sm" onClick={() => asculta(marks[selectat][1])}>ascultă</button>
+                                <button className="btn-sm danger" onClick={() => sterge(selectat)}>
+                                    șterge <span className="kbd">Del</span>
+                                </button>
+                                {sectiuni[marks[selectat][0]] && (
+                                    <span className="admin-text">
+                                        {sectiuni[marks[selectat][0]].text.split('\n')[0].slice(0, 48)}…
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
+                        {peaks && (
                             <p className="field-hint">
-                                Apasă un marcaj ca să auzi cele 3 secunde dinaintea lui și încă
-                                una după. Acolo ar trebui să se schimbe textul.
+                                <strong>Clic</strong> pe undă mută ascultarea · <strong>dublu-clic</strong> pune
+                                un marcaj · <strong>tragere</strong> îl mută · <strong>Del</strong> îl scoate ·
+                                <strong> ←→</strong> mută cu 10 ms (cu Shift, 100 ms) · <strong>rotița</strong> apropie,
+                                cu Shift plimbă. După fiecare mutare auzi bucata din jur, ca s-o poți judeca.
                             </p>
                         )}
-                        <audio ref={audioRef} style={{ display: 'none' }} />
+                        <audio ref={audioRef} style={{ display: 'none' }}
+                            onPlay={() => setReda(true)} onPause={() => setReda(false)} />
                     </section>
                 </div>
             </div>

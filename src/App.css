@@ -1964,6 +1964,17 @@
     background: rgba(16, 185, 129, 0.25);
 }
 
+/* „Doar muzica" — a doua alegere la imnurile care merg singure. Mic și fără
+   text: cel mare spune ce se întâmplă de obicei, ăsta e ieșirea din obișnuit. */
+.btn-acc-only {
+    padding: 6px 8px;
+    opacity: 0.75;
+}
+
+.btn-acc-only:hover {
+    opacity: 1;
+}
+
 .btn-acc:disabled {
     opacity: 0.6;
     cursor: default;
@@ -3700,15 +3711,16 @@
 .header-btn-answers:hover { background: rgba(180, 83, 9, 0.3); }
 
 /* ── Administrare sincronizare ─────────────────────────────────────────────── */
-.modal.admin-sync {
+.modal-dialog.admin-sync {
     max-width: 980px;
     width: 92vw;
 }
 
-/* Forma de undă: o greșeală de marcaj se vede desenată, nu într-un tabel. */
+/* Forma de undă: o greșeală de marcaj se vede desenată, nu într-un tabel.
+   200 px, nu 150: e suprafață de lucru, se trage de marcaje în ea. */
 .admin-wave {
     width: 100%;
-    height: 150px;
+    height: 200px;
     display: block;
     margin: 10px 0 4px;
     background: rgba(0, 0, 0, 0.35);
@@ -3721,4 +3733,86 @@
     flex-wrap: wrap;
     gap: 6px;
     margin: 6px 0;
+}
+
+/* ── Masa de lucru la marcaje (panoul ascuns de administrare) ─────────────── */
+
+.admin-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 10px 0 4px;
+}
+
+.admin-bar .admin-sep {
+    width: 1px;
+    height: 18px;
+    background: rgba(255, 255, 255, 0.12);
+    margin: 0 4px;
+}
+
+.admin-bar .admin-spacer {
+    flex: 1;
+}
+
+.admin-check {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.btn-sm.on {
+    color: #6ee7b7;
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.35);
+}
+
+.btn-sm.danger:hover {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* Unda e suprafață de lucru, nu ilustrație: cursorul spune că se poate apuca. */
+.admin-wave {
+    cursor: crosshair;
+}
+
+.admin-sel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    margin: 6px 0;
+    background: rgba(250, 204, 21, 0.08);
+    border: 1px solid rgba(250, 204, 21, 0.25);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+}
+
+.admin-sel .tabular {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    min-width: 74px;
+}
+
+.admin-sel .admin-text {
+    color: var(--text-dim, #9aa4bf);
+    font-style: italic;
+}
+
+/* Tasta scrisă în buton — mică, ca să nu concureze cu cuvântul. */
+.kbd {
+    font-size: 9px;
+    padding: 1px 4px;
+    margin-left: 4px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-dim, #9aa4bf);
 }

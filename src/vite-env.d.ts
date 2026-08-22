@@ -320,6 +320,9 @@ export interface IElectronAPI {
     /** `[index_slide, sfarsit_ms, reintrare_ms]`; null daca imnul nu e aprobat. */
     marks: (numar: number) => Promise<[number, number, number][] | null>;
     refreshMarks: () => Promise<number>;
+    /** Marcaje făcute cu mâna în panoul de administrare. `null` le șterge. */
+    setMarks: (numar: number, marks: [number, number, number][] | null) => Promise<number>;
+    exportMarks: (catre: string) => Promise<number>;
     onProgress: (cb: (numar: number, procent: number) => void) => void;
     offProgress: () => void;
     onBulk: (cb: (facute: number, total: number, numar: number, procent: number) => void) => void;
