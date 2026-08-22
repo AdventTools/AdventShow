@@ -361,6 +361,7 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
       (seed.prepare('SELECT id, name FROM categories').all() as { id: number; name: string }[])
         .map(c => [c.id, c.name]));
     const seedMap = new Map<string, HymnContent>();
+    const seedTexts = new Set<string>();
     for (const h of seed.prepare('SELECT id, number, title, category_id FROM hymns WHERE category_id IS NOT NULL').all() as
       { id: number; number: string; title: string; category_id: number }[]) {
       const catName = seedCats.get(h.category_id);
@@ -369,6 +370,11 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
         'SELECT type, text FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
       ).all(h.id) as SectionRow[];
       seedMap.set(`${catName}|${normalizeHymnNumber(h.number)}`, { title: h.title, sections });
+      // Al doilea index, fără număr și fără colecție: textul, atât. Serveşte la
+      // „Imnurile mele" — vezi mai jos de ce nu ajunge comparaţia pe slot.
+      if (catName !== MY_HYMNS_CATEGORY) {
+        seedTexts.add(textHash({ title: h.title, sections }));
+      }
     }
 
     const userCats = new Map<number, string>(
@@ -403,6 +409,16 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
       if (esteAlLui) {
         // „Imnurile mele": tot ce scrie acolo e al lui și pleacă spre autori — știe asta,
         // scrie în capul colecției. Nu are corespondent oficial, deci n-are „înainte".
+        //
+        // Excepția: copia unui imn pe care îl publicăm NOI, ținută și în colecția
+        // proprie. Se compară pe TEXT, nu pe slot, fiindcă în colecția lui numărul e
+        // altul — de asta comparația obișnuită nu o prinde. Două biserici ne-au
+        // retrimis așa același imn oficial, iar propunerea nu spunea nimic nou.
+        const th = textHash(content);
+        if (seedTexts.has(th)) continue;
+        // La fel, pentru ce i-am dat prin corecturi după ce i s-a instalat versiunea:
+        // acolo textul nici nu are cum să fie în seed-ul lui.
+        if (Object.values(otaApplied).includes(th)) continue;
         action = 'adaugat';
         before = null;
       } else if (seedContent) {

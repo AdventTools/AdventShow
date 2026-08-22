@@ -25,6 +25,15 @@ export const SYNC_URL = `${HANGAR_FEED_URL}sync.json`
 
 const MANIFEST_CACHE = 'acompaniament-manifest.json'
 const SYNC_CACHE = 'acompaniament-sync.json'
+/**
+ * Marcajele făcute cu mâna, în panoul de administrare.
+ *
+ * Fișier SEPARAT de cache-ul feed-ului, nu o scriere peste el: altfel prima
+ * publicare de marcaje de pe server ar șterge munca omului care tocmai le-a
+ * marcat. Localul are prioritate — cine a marcat aici știe mai bine decât ce
+ * a ghicit detectorul.
+ */
+const SYNC_LOCAL = 'acompaniament-sync-local.json'
 const TIMEOUT_MS = 15000
 
 /** `[index_slide, sfârșit_ms, reintrare_ms]` — vezi §8 din planul de sincronizare. */
@@ -204,6 +213,40 @@ export function marksFor(sync: SyncFile | null, numar: number): SyncMark[] | nul
   if (!sync) return null
   const m = sync.h[String(numar)]
   return Array.isArray(m) && m.length ? m : null
+}
+
+// ─────────────────────────────────────────────── marcaje făcute cu mâna ──
+
+export function localMarks(deps: AccompanimentDeps): SyncFile {
+  try {
+    const s = JSON.parse(
+      fs.readFileSync(path.join(deps.userDataDir, SYNC_LOCAL), 'utf-8')) as SyncFile
+    if (s && typeof s.h === 'object') return s
+  } catch {
+    /* încă niciunul */
+  }
+  return { v: 1, h: {} }
+}
+
+/**
+ * Scrie marcajele unui imn. `null` le șterge, ca imnul să revină la ce spune
+ * feed-ul (sau la nimic).
+ *
+ * Se scriu întregi, nu incremental: fișierul e mic, iar o scriere parțială
+ * întreruptă ar lăsa un imn cu jumătate de marcaje — mai rău decât fără.
+ */
+export function setLocalMarks(
+  deps: AccompanimentDeps, numar: number, marks: SyncMark[] | null,
+): number {
+  const f = localMarks(deps)
+  if (marks && marks.length) {
+    f.h[String(numar)] = [...marks].sort((a, b) => a[1] - b[1])
+      .map(([, sfarsit, reintrare], i) => [i, Math.round(sfarsit), Math.round(reintrare)])
+  } else {
+    delete f.h[String(numar)]
+  }
+  fs.writeFileSync(path.join(deps.userDataDir, SYNC_LOCAL), JSON.stringify(f), 'utf-8')
+  return Object.keys(f.h).length
 }
 
 export function findItem(

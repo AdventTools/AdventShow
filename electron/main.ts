@@ -51,7 +51,7 @@ import {
   AccompanimentDeps, AccompanimentManifest, accompanimentDir, cachedManifest,
   downloadMissing, downloadOne, findItem, localPath, presentNumbers, refreshManifest,
   removeAll as removeAllAccompaniment, stats as accompanimentStats,
-  SyncFile, cachedSync, refreshSync, marksFor,
+  SyncFile, SyncMark, cachedSync, refreshSync, marksFor, localMarks, setLocalMarks,
 } from './accompaniment'
 import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, compareVersions, flushReportQueue,
@@ -1468,9 +1468,30 @@ app.whenReady().then(() => {
 
   ipcMain.handle('accompaniment:folder', () => accompanimentDir(accDeps))
 
-  /** Marcajele imnului, dacă autorul le-a aprobat și publicat. */
+  /**
+   * Marcajele imnului: întâi cele făcute cu mâna aici, apoi cele publicate.
+   *
+   * Localul bate feed-ul. Cine a stat să marcheze imnul în panou știe mai bine
+   * decât ce a ghicit detectorul, iar o publicare ulterioară n-are voie să-i
+   * șteargă munca sub picioare.
+   */
   ipcMain.handle('accompaniment:marks', (_e, numar: number) =>
-    marksFor(accSync, Number(numar)))
+    marksFor(localMarks(accDeps), Number(numar)) ?? marksFor(accSync, Number(numar)))
+
+  /** Scrie marcajele făcute cu mâna. `null` = șterge-le, revino la feed. */
+  ipcMain.handle('accompaniment:set-marks', (_e, numar: number, marks: SyncMark[] | null) => {
+    const n = setLocalMarks(accDeps, Number(numar), marks)
+    debugLog('[Acompaniament] marcaje locale pentru', numar, marks ? marks.length : 0,
+      '— imnuri marcate cu mâna:', n)
+    return n
+  })
+
+  /** Tot ce s-a marcat cu mâna, ca fișier de trimis mai departe. */
+  ipcMain.handle('accompaniment:export-marks', async (_e, catre: string) => {
+    const f = localMarks(accDeps)
+    fs.writeFileSync(catre, JSON.stringify(f, null, 2), 'utf-8')
+    return Object.keys(f.h).length
+  })
 
   ipcMain.handle('accompaniment:refresh-marks', async () => {
     accSync = (await refreshSync(accDeps)) ?? accSync

@@ -97,6 +97,9 @@ contextBridge.exposeInMainWorld('electron', {
     bytes: (numar: number) => ipcRenderer.invoke('accompaniment:bytes', numar),
     marks: (numar: number) => ipcRenderer.invoke('accompaniment:marks', numar),
     refreshMarks: () => ipcRenderer.invoke('accompaniment:refresh-marks'),
+    setMarks: (numar: number, marks: [number, number, number][] | null) =>
+      ipcRenderer.invoke('accompaniment:set-marks', numar, marks),
+    exportMarks: (catre: string) => ipcRenderer.invoke('accompaniment:export-marks', catre),
     onProgress: (cb: (numar: number, procent: number) => void) =>
       ipcRenderer.on('accompaniment:progress', (_e, n, p) => cb(n, p)),
     offProgress: () => ipcRenderer.removeAllListeners('accompaniment:progress'),

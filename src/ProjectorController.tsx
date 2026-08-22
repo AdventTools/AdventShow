@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Download, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HymnSection } from './vite-env';
+import { accTitle } from './accompaniment-ui';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Projector Controller
@@ -18,11 +19,21 @@ export interface AccompanimentControl {
   sizeMb: number;
   /** Gol când nu e nimic de spus. Se arată sub controale, fără dialog. */
   error?: string;
-  /** Imnul are marcaje aprobate: proiecția avansează singură. */
+  /** Avansul automat merge ACUM. */
   sync?: boolean;
+  /** Imnul pregătit ARE marcaje — se știe înainte de apăsare, nu după. */
+  hasMarks?: boolean;
+  /**
+   * Apăsarea va porni și muzica, nu doar descărca. Fișierul e pe disc, sau
+   * imnul e pe ecran și n-are cine apăsa a doua oară. Butonul își scrie
+   * eticheta din asta: ce scrie pe el e ce se întâmplă.
+   */
+  willPlay?: boolean;
   /** 'auto' = merge singur; 'preluat' = operatorul a navigat, s-a oprit. */
   autoState?: 'auto' | 'preluat' | null;
   onToggle: () => void;
+  /** Pornește sunetul fără avans automat. Doar la imnurile cu marcaje. */
+  onPlayOnly?: () => void;
 }
 
 interface ProjectorControllerProps {
@@ -160,33 +171,49 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           {/* Acompaniament — o singură apăsare, sau tasta A. Cât cântă, arată
               timpul RĂMAS: operatorul vrea să știe cât mai are, nu cât a trecut. */}
           {accompaniment && (
-            <button
-              onClick={accompaniment.onToggle}
-              disabled={accompaniment.loading}
-              className={`mr-1 flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition-all disabled:opacity-60 ${
-                accompaniment.playing
-                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-300'
-                  : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
-              }`}
-              title={
-                accompaniment.playing ? 'Oprește acompaniamentul (A)'
-                  : accompaniment.needsDownload ? 'Descarcă și pornește acompaniamentul (A)'
-                    : 'Pornește acompaniamentul (A)'
-              }
-            >
-              {accompaniment.loading ? (
-                <><Loader className="w-3 h-3 animate-spin" /> Se aduce…</>
-              ) : accompaniment.playing ? (
-                <>
-                  <Square className="w-3 h-3" />
-                  <span className="tabular-nums">{mmss(accompaniment.remaining)}</span>
-                </>
-              ) : accompaniment.needsDownload ? (
-                <><Download className="w-3 h-3" /> {accompaniment.sizeMb.toFixed(1)} MB</>
-              ) : (
-                <><Music className="w-3 h-3" /> Cântă</>
+            <>
+              <button
+                onClick={accompaniment.onToggle}
+                className={`mr-1 flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
+                  accompaniment.playing
+                    ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-300'
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
+                }`}
+                title={accTitle(accompaniment)}
+              >
+                {accompaniment.loading ? (
+                  <>
+                    <Loader className="w-3 h-3 animate-spin" />
+                    {accompaniment.willPlay ? 'Se descarcă… · nu porni' : 'Se descarcă…'}
+                  </>
+                ) : accompaniment.playing ? (
+                  <>
+                    <Square className="w-3 h-3" />
+                    <span className="tabular-nums">{mmss(accompaniment.remaining)}</span>
+                  </>
+                ) : accompaniment.needsDownload ? (
+                  <>
+                    <Download className="w-3 h-3" />
+                    {accompaniment.willPlay ? 'Descarcă și cântă' : 'Descarcă'}
+                    {' '}{accompaniment.sizeMb.toFixed(1)} MB
+                  </>
+                ) : accompaniment.hasMarks ? (
+                  <><Music className="w-3 h-3" /> Cântă singur</>
+                ) : (
+                  <><Music className="w-3 h-3" /> Cântă</>
+                )}
+              </button>
+              {accompaniment.hasMarks && !accompaniment.playing && !accompaniment.loading
+                && accompaniment.onPlayOnly && (
+                <button
+                  onClick={accompaniment.onPlayOnly}
+                  className="mr-1 flex items-center px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-white/60 hover:text-white transition-all"
+                  title="Doar acompaniamentul — strofele le schimbi tu"
+                >
+                  <Music className="w-3 h-3" />
+                </button>
               )}
-            </button>
+            </>
           )}
 
           {/* Zoom text proiecție — A− [nivel] A+ (click pe procent = 100%) */}
