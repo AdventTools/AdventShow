@@ -3816,3 +3816,138 @@
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-dim, #9aa4bf);
 }
+
+/* Rândul de lucru: ce se cere acum, și butonul cu care se face. Butoanele mari
+   există pentru că omul care marchează nu e tehnic și lucrează cu mouse-ul. */
+.admin-pas {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    margin: 10px 0 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+}
+
+.admin-pas-stanga,
+.admin-pas-dreapta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.admin-pas-dreapta {
+    flex: 1;
+    justify-content: flex-end;
+}
+
+.btn-mare {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.btn-mare:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.btn-mare.accent {
+    color: #052e1b;
+    background: #34d399;
+    border-color: #34d399;
+}
+
+.btn-mare.accent:hover {
+    background: #6ee7b7;
+}
+
+.admin-timp {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-cere {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: right;
+    max-width: 420px;
+}
+
+.admin-cere.gata {
+    color: #6ee7b7;
+}
+
+/* Bulinele: câte bucăți are imnul, câte sunt marcate, care urmează. */
+.admin-progres {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin: 0 0 8px;
+}
+
+.admin-bul {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim, #9aa4bf);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+}
+
+.admin-bul.gata {
+    color: #052e1b;
+    background: #34d399;
+    border-color: #34d399;
+}
+
+.admin-bul.acum {
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.3);
+}
+
+.admin-progres-text {
+    margin-left: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.admin-eticheta {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Harta întregului imn: dreptunghiul arată ce bucată se vede sus. */
+.admin-harta {
+    width: 100%;
+    height: 38px;
+    display: block;
+    margin: 4px 0 8px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    cursor: grab;
+}
+
+.admin-harta:active {
+    cursor: grabbing;
+}
