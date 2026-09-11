@@ -16,6 +16,7 @@
 
 - 🎵 **1.324 de imnuri și cântări** — Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus
 - 📖 **Biblia Cornilescu** cu căutare rapidă (`ioa 3 16` → Ioan 3:16)
+- 🎹 **Acompaniament instrumental** pentru fiecare imn din carte — se aude și când nu e nimeni la pian, iar la imnurile pregătite strofele se schimbă singure pe ecran
 - 🖥️ **Proiecție pe al doilea ecran** cu fundal, video și font reglabil
 - 🎬 **Redare video** din fișier sau direct de pe **YouTube**
 - 🕰️ **Ceas** — numărătoare inversă, cronometru și ceas (digital sau analogic) pe proiector
@@ -92,6 +93,13 @@ La prima pornire îți setezi o **parolă de administrare** și completezi **bis
   - la **mai multe**, rămân marcate cu un punct portocaliu și le citești pe rând — conversia din slide-uri greșește des, iar nimeni nu verifică sute de imnuri dintr-o dată
 - **Editor integrat** — schimbi versurile, adaugi sau ștergi strofe, reordonezi cu mouse-ul
 - **Două colecții cu reguli aparte**: **Imnuri Speciale** e colecția oficială de cântări din afara cărților, numerotată de autori; **Imnurile mele** e a ta — tot ce adaugi ajunge acolo și nimic de la noi nu se scrie peste
+
+### 🎹 Acompaniament instrumental
+
+- Fiecare imn din **Imnuri Creștine** are o înregistrare instrumentală: deschizi imnul, apeși **Cântă** (sau tasta `A`) și se aude — chiar dacă nu e nimeni la pian
+- Înregistrarea se descarcă o singură dată și rămâne pe calculator; butonul îți spune dinainte ce face (**Descarcă** sau **Descarcă și cântă**). Dacă în sală nu ai internet, le iei pe toate din vreme, din **Setări → Descarcă tot dinainte**
+- La imnurile pregătite de noi, **proiecția merge singură** (**Cântă singur**): strofa următoare apare cu câteva secunde înainte, ca oamenii să apuce să citească. Prima săgeată apăsată îți dă comanda înapoi, iar muzica merge mai departe; dacă preferi să schimbi tu strofele de la început, ai alături butonul pentru doar acompaniament
+- Sunetul iese din laptop, spre boxele bisericii, pe dispozitivul ales în Setări, cu volum separat
 
 ### 📖 Biblia Cornilescu
 
@@ -211,6 +219,7 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 | `Enter` | Trimite pe ecran ce e în previzualizare |
 | `←` `→` | Strofa anterioară / următoare, în timpul proiecției (merg și `PgUp` / `PgDn`, iar `Spațiu` înainte) |
 | `↑` `↓` | Mărește / micșorează textul de pe ecran, în timpul proiecției |
+| `A` | Pornește / oprește acompaniamentul imnului deschis |
 | `Escape` | Oprește proiecția, oprește filmul sau golește previzualizarea (în Anunțuri: întâi închide editorul mare) |
 
 La video: `Spațiu` pornește și oprește, `←` `→` sar 5 secunde (30 cu `Shift`), `↑` `↓` schimbă sunetul, `M` îl taie.
@@ -234,7 +243,7 @@ La video: `Spațiu` pornește și oprește, `←` `→` sar 5 secunde (30 cu `Sh
 **AdventShow** este dezvoltat și distribuit **gratuit** de:
 
 - **Ovidius Zanfir** — autor original, interfață, structura aplicației
-- **Samy Balasa** — dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, sistemul de contribuții și corecturi, parola și recuperarea ei, actualizarea automată; și **hangar**, serverul prin care se distribuie versiunile (canal stabil și beta, actualizare obligatorie când e cazul) și prin care ajung corecturile la imnuri
+- **Samy Balasa** — dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, acompaniamentul instrumental, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, sistemul de contribuții și corecturi, parola și recuperarea ei, actualizarea automată; și **hangar**, serverul prin care se distribuie versiunile (canal stabil și beta, actualizare obligatorie când e cazul) și prin care ajung corecturile la imnuri
 
 Organizație: **[AdventTools](https://github.com/AdventTools)**
 
