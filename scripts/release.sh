@@ -99,6 +99,20 @@ command -v gh >/dev/null || fail "gh CLI lipsă (brew install gh)"
 gh auth status >/dev/null 2>&1 || fail "gh nu e autentificat (gh auth login)"
 ok "gh CLI OK"
 
+# ── Câți mai atârnă de puntea GitHub ──────────────────────────────────────────
+#
+# Instalările de sub 1.4.0 nu știu de hangar: ele întreabă GitHub dacă e ceva nou,
+# și fac asta descărcând `latest.yml` din release-ul marcat „latest". Contorul ăla
+# e singurul semn de viață pe care îl avem de la ele — în hangar nu apar deloc.
+#
+# electron-updater se uită DOAR la ultimul release: dacă publicăm unul fără
+# `latest.yml`, ele nu se întorc la cel precedent, ci rămân blocate pentru
+# totdeauna. Deci puntea (GITHUB_BRIDGE=1) se stinge abia când numărul de mai jos
+# rămâne 0 pe un release întreg. Atunci, și doar atunci, pui GITHUB_BRIDGE=0.
+PUNTE_HITS=$(gh api "repos/AdventTools/AdventShow/releases/latest" \
+  --jq '[.assets[] | select(.name == "latest.yml" or .name == "latest-mac.yml") | .download_count] | add // 0' 2>/dev/null || echo "?")
+log "Punte GitHub: ${PUNTE_HITS} verificări de actualizare venite de la instalări sub 1.4.0 (0 = puntea poate fi oprită)"
+
 security find-identity -v -p codesigning | grep -q "${MACOS_SIGNING_IDENTITY}" \
     || fail "Developer ID lipsă din keychain: ${MACOS_SIGNING_IDENTITY}"
 ok "Keychain identity OK"
@@ -161,6 +175,55 @@ fi
 STATE="$STATE_ROOT/${NEW_VERSION}"
 mkdir -p "$STATE"
 
+# ── Amprenta codului din care s-a construit fiecare pas ───────────────────────
+#
+# Un marker gol spune doar „pasul ăsta e făcut", nu și DIN CE cod. Atâta timp cât
+# reluarea vine la zece minute după o cădere de rețea, e exact ce trebuie. Dar la
+# 1.5.2 starea a stat o lună: codul a mers mai departe, iar o reluare ar fi urcat
+# binarele vechi sub un tag care arată spre codul nou — bisericile ar fi primit o
+# versiune fără reparațiile din ea, iar noi n-am fi avut de unde afla.
+#
+# Deci fiecare pas care produce un binar își notează amprenta fișierelor care intră
+# în build. La reluare, dacă amprenta diferă, markerul se aruncă și pasul se reface.
+# Reluarea după o cădere de rețea rămâne gratuită (amprentă identică), reluarea
+# peste cod nou reconstruiește. Markerele vechi, fără amprentă, sunt tratate ca
+# nesigure — se reface pasul.
+#
+# Amprenta se ia din FIȘIERELE DE PE DISC, nu din commit, din două motive: bump-ul
+# și pasul 9 (commit + push) schimbă HEAD fără să schimbe conținutul build-ului,
+# iar o editare NECOMISĂ în arbore trebuie să invalideze build-ul — tarball-ul
+# pentru VM-ul de Windows se face din arbore, nu din git (pățit la v1.3.2).
+FP_PATHS=(electron src public templates build index.html vite.config.ts
+          tsconfig.json tsconfig.node.json electron-builder.json5
+          package.json package-lock.json
+          scripts/afterPack.cjs scripts/sign-windows.cjs scripts/cornilescu.json)
+
+source_fingerprint() {
+  git ls-files -z -- "${FP_PATHS[@]}" | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1
+}
+
+FP=$(source_fingerprint)
+[ ${#FP} -eq 64 ] || fail "nu pot calcula amprenta codului (am primit: '${FP}')"
+
+# stamp_done: pașii care își scriu singuri conținutul în marker (ex. notary-id)
+stamp_done() { printf '%s\n' "$FP" > "$STATE/$1.fp"; git rev-parse HEAD > "$STATE/$1.commit"; }
+mark_done()  { : > "$STATE/$1.done"; stamp_done "$1"; }
+
+# step_done <pas> — 0 doar dacă pasul e făcut ȘI din exact același cod
+step_done() {
+  [ -f "$STATE/$1.done" ] || return 1
+  local vechi=""
+  [ -f "$STATE/$1.fp" ] && vechi=$(tr -d '[:space:]' < "$STATE/$1.fp")
+  if [ "$vechi" = "$FP" ]; then return 0; fi
+  local aratare="fără amprentă"
+  [ -n "$vechi" ] && aratare="amprenta ${vechi:0:12}"
+  log "pasul '$1' a fost făcut din alt cod ($aratare, acum ${FP:0:12}) — îl refac"
+  rm -f "$STATE/$1.done" "$STATE/$1.fp" "$STATE/$1.commit"
+  return 1
+}
+
+log "Amprenta codului: ${FP:0:12}  (commit $(git rev-parse --short HEAD))"
+
 TAG="v${NEW_VERSION}"
 RELEASE_DIR="release/${NEW_VERSION}"
 DMG="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
@@ -174,16 +237,20 @@ EXE="${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe"
 # vechi. Se face automat, la fiecare release, înainte de orice build — nu depinde
 # de memoria nimănui. Dacă feed-ul nu poate fi luat sau o intrare e stricată,
 # scriptul se oprește și oprește release-ul: mai bine tăiat aici decât livrat greșit.
-if [ ! -f "$STATE/bump.done" ]; then
+if ! step_done seed; then
     step "1b/11 Baza livrată preia corecturile din hangar"
     npm run --silent sync:seed || fail "sincronizarea bazei livrate a eșuat — vezi mesajul de mai sus"
     if ! git diff --quiet public/hymns.db; then
         git add public/hymns.db
         git commit -q -m "content: baza livrată preia corecturile publicate în hangar"
-        ok "baza livrată actualizată și comisă"
+        # Baza livrată intră în installer, deci orice build de dinainte devine
+        # nevalabil. Recalculăm amprenta ÎNAINTE de a ștampila pașii următori.
+        FP=$(source_fingerprint)
+        ok "baza livrată actualizată și comisă (amprentă nouă: ${FP:0:12})"
     else
         ok "baza livrată era deja la zi"
     fi
+    mark_done seed
 fi
 
 # working tree curat — doar la început de release nou (la reluare e deja bumped)
@@ -193,6 +260,15 @@ if [ ! -f "$STATE/bump.done" ]; then
 fi
 
 # ── Bump versiune ─────────────────────────────────────────────────────────────
+
+# Markerul poate minți. Dacă starea a rămas de la un release abandonat, iar între
+# timp versiunea din arbore a fost dusă înapoi, „bump făcut" ar sări peste
+# ridicarea versiunii și am construi 1.5.2 din fișiere care scriu înăuntru 1.5.1.
+# Se verifică starea reală, nu marcajul.
+if [ -f "$STATE/bump.done" ] && [ "$(node -p "require('./package.json').version")" != "$NEW_VERSION" ]; then
+  log "marker de bump din altă rulare (package.json e la $(node -p "require('./package.json').version"), nu la ${NEW_VERSION}) — refac bump-ul"
+  rm -f "$STATE/bump.done" "$STATE/bump.fp" "$STATE/bump.commit"
+fi
 
 if [ ! -f "$STATE/bump.done" ]; then
   step "2/11 Bump versiune"
@@ -204,27 +280,53 @@ if [ ! -f "$STATE/bump.done" ]; then
   # doar badge-ul de versiune.
   sed -i '' "s/versiune-${OLD_VERSION}-green/versiune-${NEW_VERSION}-green/" README.md
   # CHANGELOG prin Node (nu sed) — descrierea e text liber; slash/ampersand au
-  # crăpat release-ul 1.2.5 pe varianta sed
+  # crăpat release-ul 1.2.5 pe varianta sed.
+  #
+  # Ce s-a lucrat între două release-uri se scrie sub „## Nepublicat". La bump,
+  # blocul ăla se MUTĂ în blocul versiunii noi. Altfel notele publicate ar conține
+  # doar descrierea din linia de comandă, iar restul ar rămâne pentru totdeauna
+  # sub un titlu pe care nu-l citește nimeni (pățit cu 1.5.2: patru rânduri de
+  # lucru rămase pe dinafară, dintre care două reparații raportate de biserici).
   CL_VERSION="$NEW_VERSION" CL_DATE="$DATE" CL_DESC="$DESCRIPTION" node -e '
     const fs = require("fs");
     const f = "CHANGELOG.md";
     const title = "# Changelog — AdventShow";
-    const entry = `## v${process.env.CL_VERSION} (${process.env.CL_DATE})\n\n### Modificări\n- ${process.env.CL_DESC}\n\n---\n`;
+    const NEPUB = "## Nepublicat";
     let s = fs.readFileSync(f, "utf8");
     const i = s.indexOf(title);
     if (i === -1) { console.error("CHANGELOG title not found"); process.exit(1); }
-    const after = i + title.length;
-    s = s.slice(0, after) + "\n\n" + entry + s.slice(after).replace(/^\n+/, "\n");
+
+    let randuri = [];
+    const ni = s.indexOf(NEPUB);
+    if (ni !== -1) {
+      const sep = s.indexOf("\n---", ni);
+      const sfarsit = sep === -1 ? s.length : sep + 5;   // „\n---\n"
+      randuri = s.slice(ni, sfarsit).split("\n").filter(l => l.startsWith("- "));
+      s = (s.slice(0, ni) + s.slice(sfarsit)).replace(/\n{3,}/g, "\n\n");
+    }
+    // Descrierea din linia de comandă e nota publică pentru hangar. În CHANGELOG
+    // intră doar dacă n-a scris nimeni nimic sub „Nepublicat" — altfel ar repeta,
+    // cu alte cuvinte, ce scrie deja mai sus.
+    if (randuri.length === 0) randuri.push("- " + process.env.CL_DESC);
+
+    const entry = `## v${process.env.CL_VERSION} (${process.env.CL_DATE})\n\n### Modificări\n${randuri.join("\n")}\n\n---\n`;
+    // Locul de scris pentru ce urmează rămâne sus, sub versiunea proaspătă, nu
+    // coboară în istoric pe măsură ce se adaugă versiuni deasupra lui.
+    const gol = `${NEPUB}\n\n_(nimic încă)_\n\n---\n`;
+    const after = s.indexOf(title) + title.length;
+    s = s.slice(0, after) + "\n\n" + entry + "\n" + gol + s.slice(after).replace(/^\n+/, "\n");
     fs.writeFileSync(f, s);
+    console.log("   CHANGELOG: " + randuri.length + " rânduri în v" + process.env.CL_VERSION);
   ' || fail "Actualizarea CHANGELOG a eșuat"
   echo "$NEW_VERSION" > "$STATE/bump.done"
+  stamp_done bump
   ok "package.json + README + CHANGELOG actualizate"
 fi
 log "Versiune release: $NEW_VERSION"
 
 # ── Build macOS semnat ────────────────────────────────────────────────────────
 
-if [ ! -f "$STATE/mac.done" ]; then
+if ! step_done mac; then
   step "3/11 Build macOS (signed)"
   # codesign cu retry — fiecare semnătură cere serverul de timestamp Apple;
   # o singură cerere picată omora tot build-ul pe rețea instabilă
@@ -232,7 +334,11 @@ if [ ! -f "$STATE/mac.done" ]; then
   built=""
   for attempt in 1 2 3 4; do
     log "build mac — încercarea $attempt"
-    rm -rf "$RELEASE_DIR"
+    # Se curăță DOAR artefactele de mac. Un `rm -rf` pe tot folderul ar mătura și
+    # EXE-ul adus de pe VM-ul de Windows, în timp ce markerul lui ar rămâne pe
+    # „adus" — a rămas așa la 1.5.2, fără blockmap și fără latest.yml.
+    rm -rf "${RELEASE_DIR}/mac-arm64" "$DMG" "$ZIP" "${DMG}.blockmap" "${ZIP}.blockmap" \
+           "${RELEASE_DIR}/latest-mac.yml" "${RELEASE_DIR}/builder-debug.yml"
     if ./scripts/build-mac.sh release; then built=1; break; fi
     log "  …build mac eșuat, reîncerc în 30s"; sleep 30
   done
@@ -243,13 +349,13 @@ if [ ! -f "$STATE/mac.done" ]; then
   # înseamnă că `publish` a dispărut din electron-builder.json5 — iar fără el
   # installerul nu mai știe de unde să-și ia update-urile.
   [ -f "${RELEASE_DIR}/latest-mac.yml" ] || fail "latest-mac.yml lipsă — verifică blocul publish din electron-builder.json5"
-  touch "$STATE/mac.done"
+  mark_done mac
   ok "DMG + ZIP + latest-mac.yml"
 fi
 
 # ── Notary submit (doar upload; polling la pasul 8) ───────────────────────────
 
-if [ ! -f "$STATE/notary-id.done" ]; then
+if ! step_done notary-id; then
   step "4/11 Notary submit (--no-wait)"
   submit_notary() {
     xcrun notarytool submit "$DMG" "${NOTARY_AUTH[@]}" \
@@ -258,13 +364,14 @@ if [ ! -f "$STATE/notary-id.done" ]; then
   retry "notary submit (upload DMG)" 40 20 -- submit_notary || fail "notary submit"
   /usr/libexec/PlistBuddy -c "Print :id" /tmp/adventshow-notary-submit.plist > "$STATE/notary-id.done" \
     || fail "nu pot citi submission id"
+  stamp_done notary-id
   ok "submission id: $(cat "$STATE/notary-id.done")"
 fi
 NOTARY_ID=$(cat "$STATE/notary-id.done")
 
 # ── Sync sursă pe VM Windows ──────────────────────────────────────────────────
 
-if [ ! -f "$STATE/winsync.done" ]; then
+if ! step_done winsync; then
   step "5/11 Sync sursă pe VM Windows"
   TAR="/tmp/_adventshow_src_${NEW_VERSION}.tar.gz"
   COPYFILE_DISABLE=1 tar --exclude=node_modules --exclude=dist --exclude=dist-electron \
@@ -278,15 +385,18 @@ if [ ! -f "$STATE/winsync.done" ]; then
   retry "scp sursă pe VM" 40 20 -- scp "${WIN_SSH_OPTS[@]}" -C "$TAR" "$WIN_HOST:${WIN_REPO//\\/\/}/_src.tar.gz" || fail "scp sursă"
   retry "extract pe VM" 40 15 -- ssh "${WIN_SSH_OPTS[@]}" "$WIN_HOST" "cd ${WIN_PROJECT} && tar -xzf ${WIN_REPO}\\_src.tar.gz && del ${WIN_REPO}\\_src.tar.gz" || fail "extract pe VM"
   rm -f "$TAR"
-  touch "$STATE/winsync.done"
+  mark_done winsync
   ok "sursa pe VM"
 fi
 
 # ── Build Windows DETAȘAT (Task Scheduler — supraviețuiește căderii SSH) ──────
 
-if [ ! -f "$STATE/winbuild.done" ]; then
+if ! step_done winbuild; then
   step "6/11 Build Windows detașat"
-  if [ ! -f "$STATE/winbuild.started" ]; then
+  # `winbuild-started` spune „taskul rulează deja pe VM, nu-l porni a doua oară".
+  # E ștampilat la fel ca restul: dacă s-a pornit din alt cod, nu-l mai așteptăm.
+  rm -f "$STATE/winbuild.started"   # marker din formatul vechi, fără amprentă
+  if ! step_done winbuild-started; then
     BAT="${WIN_REPO}\\_build_v${NEW_VERSION}.cmd"
     BAT_LOCAL="/tmp/_build_v${NEW_VERSION}.cmd"
     WIN_REPO_ENV="$WIN_REPO" WIN_PROJECT_ENV="$WIN_PROJECT" BAT_LOCAL_ENV="$BAT_LOCAL" python3 -c "
@@ -312,7 +422,7 @@ open(os.environ['BAT_LOCAL_ENV'],'w',newline='').write('\r\n'.join(lines) + '\r\
       ssh "${WIN_SSH_OPTS[@]}" "$WIN_HOST" "schtasks /create /tn AdventShowRelease /tr \"${BAT}\" /sc once /st 23:59 /f && schtasks /run /tn AdventShowRelease"
     }
     retry "pornire build detașat" 40 15 -- schedule_build || fail "pornire build"
-    touch "$STATE/winbuild.started"
+    mark_done winbuild-started
     ok "build pornit detașat pe VM"
   fi
   log "aștept build-ul Windows (polling la 30s)…"
@@ -327,12 +437,12 @@ open(os.environ['BAT_LOCAL_ENV'],'w',newline='').write('\r\n'.join(lines) + '\r\
     sleep 30
   done
   ssh "${WIN_SSH_OPTS[@]}" "$WIN_HOST" "schtasks /delete /tn AdventShowRelease /f" >/dev/null 2>&1 || true
-  touch "$STATE/winbuild.done"
+  mark_done winbuild
 fi
 
 # ── Pull artefacte Windows ────────────────────────────────────────────────────
 
-if [ ! -f "$STATE/winpull.done" ]; then
+if ! step_done winpull; then
   step "7/11 Pull EXE de pe VM"
   REMOTE_DIR_FWD="$(echo "${WIN_PROJECT}\\release\\${NEW_VERSION}" | tr '\\' '/')"
   mkdir -p "$RELEASE_DIR"
@@ -342,19 +452,21 @@ if [ ! -f "$STATE/winpull.done" ]; then
   # fără el fiecare biserică descarcă 113 MB întregi la fiecare versiune.
   retry "scp blockmap exe" 20 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/${EXE_NAME}.blockmap" "${RELEASE_DIR}/${EXE_NAME}.blockmap" \
     || fail "blockmap exe lipsă — fără el update-ul diferențial moare în tăcere pe Windows"
-  # latest.yml nu se urcă în hangar (își generează singur feed-urile), dar puntea de
-  # pe GitHub îl cere: instalările de sub 1.4.0 de acolo își iau update-urile.
+  # latest.yml nu se urcă nicăieri (hangar își generează singur feed-urile, iar pe
+  # GitHub puntea e fixată pe un release vechi), dar absența lui ar însemna că
+  # blocul `publish` a dispărut din electron-builder.json5 — adică installerul de
+  # Windows n-ar mai ști de unde să-și ia update-urile. Îl aducem ca verificare.
   retry "scp latest.yml" 30 15 -- scp "${WIN_SSH_OPTS[@]}" -C "$WIN_HOST:${REMOTE_DIR_FWD}/latest.yml" "${RELEASE_DIR}/latest.yml" \
     || fail "scp latest.yml — fără el puntea GitHub nu se poate publica"
   SIZE_BYTES=$(stat -f%z "$EXE")
   [ "$SIZE_BYTES" -gt 50000000 ] || { rm -f "$EXE"; fail "EXE pare incomplet ($SIZE_BYTES bytes)"; }
-  touch "$STATE/winpull.done"
+  mark_done winpull
   ok "EXE ($(du -h "$EXE" | cut -f1))"
 fi
 
 # ── Notary poll + staple ──────────────────────────────────────────────────────
 
-if [ ! -f "$STATE/staple.done" ]; then
+if ! step_done staple; then
   step "8/11 Notary status + staple"
   while true; do
     # PlistBuddy nu poate citi din pipe (cere fișier seekable) → fișier temporar
@@ -372,7 +484,7 @@ if [ ! -f "$STATE/staple.done" ]; then
   done
   retry "stapler staple" 40 15 -- xcrun stapler staple "$DMG" || fail "stapler staple"
   xcrun stapler validate "$DMG" || fail "stapler validate"
-  touch "$STATE/staple.done"
+  mark_done staple
   ok "DMG notarizat + stapled"
 fi
 
@@ -391,8 +503,17 @@ fi
 
 # ── GitHub Release: DRAFT → upload TOT → verificare → publicare ───────────────
 
-if [ ! -f "$STATE/hangar.done" ]; then
+if ! step_done hangar; then
   step "10/11 Upload în hangar (staging)"
+
+  # Poarta finală: nu urcăm binare care nu vin din codul ăsta. Pașii de build sunt
+  # deja ștampilați cu amprenta, dar dacă cineva a șters markere cu mâna sau a
+  # copiat fișiere în release/, aici se oprește — după upload e prea târziu.
+  for pas in mac winpull; do
+    [ "$(tr -d '[:space:]' < "$STATE/${pas}.fp" 2>/dev/null)" = "$FP" ] \
+      || fail "artefactele de la pasul '${pas}' nu vin din codul de acum — șterge scripts/.release-state/${NEW_VERSION} și reia releaseul"
+  done
+  ok "binarele vin din codul curent (${FP:0:12})"
 
   # Token-ul de upload NU stă în repo. Trăiește în ~/.hangar/tokens.env, mod 600.
   # Nu poate promova — tot ce urcăm rămâne invizibil până când promovezi din interfață.
@@ -469,7 +590,7 @@ if [ ! -f "$STATE/hangar.done" ]; then
   }
   retry "verificare în hangar" 20 15 -- verify_hangar || fail "hangar nu are toate fișierele"
   rm -rf "$STAGING"
-  touch "$STATE/hangar.done"
+  mark_done hangar
   ok "v${NEW_VERSION} e în hangar, în STAGING (invizibil public până promovezi)"
 fi
 
@@ -479,13 +600,46 @@ if [ ! -f "$STATE/gh.done" ]; then
   step "11/11 Tag + note pe GitHub"
   NOTES=$(awk "/^## v${NEW_VERSION}/{f=1; next} f && /^---/{exit} f" CHANGELOG.md)
 
-  # ── PUNTE, O SINGURĂ DATĂ (v1.4.0) ──────────────────────────────────────────
-  # Instalările de până acum au în `app-update.yml` adresa GitHub, scrisă la build.
-  # Ele NU știu de hangar și n-ar vedea niciodată versiunea asta — adică exact
-  # versiunea care le mută pe hangar. Deci 1.4.0 se publică și aici, cu tot cu
-  # feed-uri, ca ele să aibă de unde se actualiza. De la următoarea versiune,
-  # GitHub primește doar tag și note: pune GITHUB_BRIDGE=0.
-  GITHUB_BRIDGE="${GITHUB_BRIDGE:-1}"
+  # ── PUNTEA PENTRU INSTALĂRILE DE SUB 1.4.0 ──────────────────────────────────
+  #
+  # Ele au în `app-update.yml` adresa GitHub, scrisă la build, și nu știu de hangar
+  # (modulul care vorbește cu el a apărut abia în 1.4.0, deci nici update forțat,
+  # nici mesaj nu ajunge la ele). Întreabă GitHub la fiecare pornire și la 6 ore,
+  # iar electron-updater cere `latest.yml` STRICT din release-ul pe care GitHub îl
+  # marchează „Latest". Dacă acolo nu-l găsește, NU se întoarce la unul mai vechi:
+  # se oprește tăcut, pentru totdeauna (verificat în GitHubProvider.js din
+  # node_modules — aruncă ERR_UPDATER_CHANNEL_FILE_NOT_FOUND, fără alternativă).
+  #
+  # Deci nu mai retrimitem binarele la fiecare versiune, dar LĂSĂM marcajul
+  # „Latest" pe release-ul care le are: PUNTE_TAG. Cine deschide o instalare veche
+  # sare acolo, iar de la 1.4.0 în sus aplicația se actualizează din hangar.
+  # Tag-urile noi se creează cu `--latest=false`, ca să nu fure marcajul.
+  #
+  # Puntea se poate desființa (șterge PUNTE_TAG și pune GITHUB_BRIDGE=1 la un
+  # release) abia când contorul afișat la pre-flight rămâne 0 un ciclu întreg —
+  # atunci nu mai verifică nimeni de acolo.
+  PUNTE_TAG="${PUNTE_TAG:-v1.5.1}"
+  if [ -n "$PUNTE_TAG" ] && [ "$PUNTE_TAG" != "$TAG" ]; then
+    verifica_puntea() {
+      gh api "repos/AdventTools/AdventShow/releases/latest" > /tmp/ashow-punte.json 2>/dev/null || return 1
+      node -e '
+        const r = JSON.parse(require("fs").readFileSync("/tmp/ashow-punte.json", "utf8"));
+        const nume = (r.assets || []).map(a => a.name);
+        const lipsa = ["latest.yml", "latest-mac.yml"].filter(n => !nume.includes(n));
+        const instalatoare = nume.filter(n => /\.(exe|dmg|zip)$/.test(n));
+        if (r.tag_name !== process.argv[1]) {
+          console.error(`  …„Latest" pe GitHub e ${r.tag_name}, nu ${process.argv[1]}`); process.exit(1);
+        }
+        if (lipsa.length) { console.error("  …lipsesc din punte: " + lipsa.join(", ")); process.exit(1); }
+        if (!instalatoare.length) { console.error("  …puntea nu are niciun instalator"); process.exit(1); }
+      ' "$PUNTE_TAG"
+    }
+    retry "verificare punte GitHub" 20 15 -- verifica_puntea \
+      || fail "puntea GitHub (${PUNTE_TAG}) nu mai e întreagă — instalările de sub 1.4.0 ar rămâne fără actualizare, fără cale de întoarcere. Repar-o înainte de a publica."
+    ok "puntea GitHub e întreagă: ${PUNTE_TAG} rămâne «Latest», cu feed și instalatoare"
+  fi
+
+  GITHUB_BRIDGE="${GITHUB_BRIDGE:-0}"
   BRIDGE_ASSETS=()
   if [ "$GITHUB_BRIDGE" = "1" ]; then
     BRIDGE_STAGING="/tmp/ashow-bridge-${NEW_VERSION}"
@@ -504,15 +658,34 @@ if [ ! -f "$STATE/gh.done" ]; then
 
 ---
 
-**Începând cu versiunea următoare, AdventShow se actualizează din hangar.it4all.ro.**
-Versiunea aceasta e ultima publicată cu fișiere aici, ca instalările mai vechi să o
-poată prelua. Descărcare: https://hangar.it4all.ro/get/ba3166b608233a30/"
+**AdventShow se actualizează singur din hangar.it4all.ro.** Fișierele de aici sunt
+pentru instalările mai vechi de 1.4.0, care își caută încă actualizarea pe GitHub;
+odată actualizate, trec automat pe hangar și nu mai depind de pagina asta.
+Descărcare: https://hangar.it4all.ro/get/ba3166b608233a30/"
     ok "punte GitHub pregătită (${#BRIDGE_ASSETS[@]} fișiere)"
   fi
 
+  NOTES="${NOTES}
+
+---
+
+Descarcă: https://hangar.it4all.ro/get/ba3166b608233a30/ — după instalare,
+aplicația se actualizează singură."
+
   create_release() {
     gh release view "$TAG" >/dev/null 2>&1 && return 0
-    gh release create "$TAG" --target main --title "${TAG}" --notes "${NOTES}"
+    # Două lucruri, ambele plătite cu bani mulți:
+    # • tag-ul se pune pe commit-ul EXACT din care s-au construit binarele, nu pe
+    #   vârful lui main — dacă între pasul 9 și aici mai urcă cineva un commit,
+    #   `--target main` ar lega versiunea de alt cod decât cel livrat;
+    # • `--latest=false` ca marcajul „Latest" să rămână pe punte (PUNTE_TAG).
+    #   Fără el, gh ar muta marcajul aici, pe un release fără fișiere, iar
+    #   instalările de sub 1.4.0 ar rămâne blocate definitiv.
+    if [ -n "$PUNTE_TAG" ]; then
+      gh release create "$TAG" --target "$(git rev-parse HEAD)" --title "${TAG}" --notes "${NOTES}" --latest=false
+    else
+      gh release create "$TAG" --target "$(git rev-parse HEAD)" --title "${TAG}" --notes "${NOTES}"
+    fi
   }
   retry "gh release create" 40 20 -- create_release || fail "gh release create"
 
