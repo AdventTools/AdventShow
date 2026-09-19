@@ -1,6 +1,6 @@
 # Changelog — AdventShow
 
-## Nepublicat
+## v1.5.2 (19 Septembrie 2026)
 
 ### Modificări
 - Butonul de acompaniament spune de acum dinainte ce se întâmplă când îl apeși: «Descarcă» când imnul e doar pregătit, «Descarcă și cântă» când e deja pe ecran. Dacă te-ai răzgândit cât se descarcă — mai vorbește cineva, nu e momentul — o apăsare oprește pornirea, fără să oprească descărcarea. La imnurile pregătite de noi scrie «Cântă singur», iar alături apare a doua alegere, pentru cine vrea doar acompaniamentul și schimbă strofele cu mâna. Când înregistrarea are mai puține strofe decât are imnul în carte, ecranul nu se mai stinge la ultimul acord: îți dă comanda înapoi, ca adunarea să aibă text până la capăt. Pentru cine pregătește imnurile, meniul de administrare a devenit o masă de lucru adevărată: asculți imnul, apeși un buton la fiecare bucată terminată, iar programul știe singur care e strofă și care refren.
@@ -10,6 +10,12 @@
 - La Biblie: după ce oprești proiecția și cureți previzualizarea cu Esc, alegerea altui verset din același capitol merge din nou cu Enter. Până acum trebuia să ieși pe alt capitol și să te întorci, ca să se întâmple ceva.
 - Fiecare parte a aplicației își spune acum singură cum se folosește: previzualizarea goală și scurtăturile din colțul de sus arată ce e de făcut la Imnuri, la Biblie, la Video, la Ceas și la Anunțuri — nu același text peste tot, ca până acum.
 - Imnurile pe care le-ai adus înapoi din PowerPoint nu mai pleacă spre autori ca „imnuri noi" dacă sunt, de fapt, imnurile noastre scrise puțin altfel — cu alt apostrof, cu sedilă în loc de virgulă sub ș și ț, cu un rând gol în plus. Se compară acum textul curățat de felul în care e scris, nu literă cu literă. Ce ai schimbat tu cu adevărat pleacă mai departe, ca până acum.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
 
 ---
 
@@ -181,14 +187,12 @@
 
 ---
 
-
 ## v1.2.4 (30 Mai 2026)
 
 ### Modificări
 - căutare imnuri insensibilă la diacritice (titlu și conținut) — nu mai e nevoie să scrii cu diacritice
 
 ---
-
 
 ## v1.2.3 (30 Mai 2026)
 
@@ -197,7 +201,6 @@
 
 ---
 
-
 ## v1.2.2 (17 Mai 2026)
 
 ### Modificări
@@ -205,14 +208,12 @@
 
 ---
 
-
 ## v1.2.1 (17 Mai 2026)
 
 ### Modificări
 - fix descărcare YouTube — sunetul lipsea pentru că merge-ul yt-dlp eșua silent; acum descărcăm video și audio separat și le mux-uim cu ffmpeg re-encoding audio în AAC pentru compatibilitate Chromium
 
 ---
-
 
 ## v1.2.0 (1 Mai 2026)
 
@@ -291,7 +292,6 @@
 
 ---
 
-
 ## v1.1.24 (17 Aprilie 2026)
 
 ### Modificări
@@ -299,14 +299,12 @@
 
 ---
 
-
 ## v1.1.23 (17 Aprilie 2026)
 
 ### Modificări
 - Corecție proiecție Windows, jurnal detaliat îmbunătățit, corecție imn 562
 
 ---
-
 
 ## v1.1.22 (17 Aprilie 2026)
 
@@ -333,14 +331,12 @@
 
 ---
 
-
 ## v1.1.19 (13 Aprilie 2026)
 
 ### Modificări
 - Îmbunătățire panou About nativ, test delta update
 
 ---
-
 
 ## v1.1.18 (13 Aprilie 2026)
 
@@ -349,14 +345,12 @@
 
 ---
 
-
 ## v1.1.17 (13 Aprilie 2026)
 
 ### Modificări
 - Fix critic: descărcare update nu funcționa (Electron intercepta fs pentru .asar)
 
 ---
-
 
 ## v1.1.16 (13 Aprilie 2026)
 
@@ -365,14 +359,12 @@
 
 ---
 
-
 ## v1.1.15 (13 Aprilie 2026)
 
 ### Modificări
 - Fix crash la download update, fix CI ffmpeg-static timeout, redesign secțiune Despre
 
 ---
-
 
 ## v1.1.14 (13 Aprilie 2026)
 
@@ -381,14 +373,12 @@
 
 ---
 
-
 ## v1.1.13 (13 Aprilie 2026)
 
 ### Modificări
 - Delta update (descarcă doar codul, nu tot Electron), release script unificat, About simplificat
 
 ---
-
 
 ## v1.1.12 (13 Aprilie 2026)
 
@@ -601,5 +591,4 @@ Fork complet rescris al aplicației originale, cu interfață nouă, integrare B
 - Fundal: culoare solidă, imagine sau video, cu opacitate reglabilă
 - Culoare număr imn și culoare text configurabile
 - Dimensiune font proiecție reglabilă (60%–200%, implicit 120%)
-
 
