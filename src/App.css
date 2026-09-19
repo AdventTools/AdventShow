@@ -269,6 +269,9 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+    /* Scurtăturile sunt ale tabului deschis, deci lungimea lor variază. Fără
+       spațiul ăsta se lipeau de butonul „Setări" când textul era mai lung. */
+    margin-left: 12px;
 }
 
 .kbd-hints kbd {
