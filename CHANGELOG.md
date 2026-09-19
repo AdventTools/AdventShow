@@ -8,6 +8,8 @@
 - La imnul «O cântare de mărire» din Imnuri Speciale, primul rând al strofei revine la «pe Domnul la Calvar».
 - Pe Windows, proiecția acoperă de acum tot al doilea ecran din prima clipă. Când televizorul și laptopul erau setate în Windows cu măriri diferite ale textului, imaginea ieșea cât un sfert de ecran, lipită în colț, și trebuia trasă cu mâna de fiecare dată. Acum aplicația verifică singură dacă a acoperit ecranul și se îndreaptă până reușește.
 - La Biblie: după ce oprești proiecția și cureți previzualizarea cu Esc, alegerea altui verset din același capitol merge din nou cu Enter. Până acum trebuia să ieși pe alt capitol și să te întorci, ca să se întâmple ceva.
+- Fiecare parte a aplicației își spune acum singură cum se folosește: previzualizarea goală și scurtăturile din colțul de sus arată ce e de făcut la Imnuri, la Biblie, la Video, la Ceas și la Anunțuri — nu același text peste tot, ca până acum.
+- Imnurile pe care le-ai adus înapoi din PowerPoint nu mai pleacă spre autori ca „imnuri noi" dacă sunt, de fapt, imnurile noastre scrise puțin altfel — cu alt apostrof, cu sedilă în loc de virgulă sub ș și ț, cu un rând gol în plus. Se compară acum textul curățat de felul în care e scris, nu literă cu literă. Ce ai schimbat tu cu adevărat pleacă mai departe, ca până acum.
 
 ---
 

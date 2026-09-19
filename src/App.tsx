@@ -55,7 +55,7 @@ import {
     HelpCircle,
     Mail,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ProjectorController } from './ProjectorController';
 import type { AccompanimentControl } from './ProjectorController';
@@ -2057,15 +2057,19 @@ function App() {
                     <span className="header-btn-label">Setări</span>
                 </button>
 
+                {/* Scurtăturile din colț sunt ale tabului deschis. Înainte scria peste tot
+                    «Enter previzualizare / proiecție», inclusiv la Ceas și la Anunțuri,
+                    unde nu există nici previzualizare, nici listă de parcurs. */}
                 <div className="kbd-hints">
-                    <kbd>/</kbd>
-                    <span>caută</span>
-                    <kbd>↑↓</kbd>
-                    <span>navigare</span>
-                    <kbd>Enter</kbd>
-                    <span>previzualizare / proiecție</span>
-                    <kbd>Esc</kbd>
-                    <span>oprește</span>
+                    {({
+                        imnuri: [['/', 'caută'], ['↑↓', 'prin listă'], ['Enter', 'pregătește / proiectează'], ['A', 'acompaniament'], ['Esc', 'oprește']],
+                        biblia: [['/', 'caută'], ['↑↓', 'verset cu verset'], ['Enter', 'pregătește / proiectează'], ['Esc', 'oprește']],
+                        video: [['Spațiu', 'pornește / oprește'], ['←→', 'sari 5 secunde'], ['↑↓', 'volum'], ['Esc', 'oprește']],
+                        timer: [['Esc', 'oprește proiecția']],
+                        mesaj: [['Esc', 'oprește proiecția']],
+                    } as Record<Tab, [string, string][]>)[tab].map(([k, t]) => (
+                        <Fragment key={k}><kbd>{k}</kbd><span>{t}</span></Fragment>
+                    ))}
                 </div>
             </header>
 
@@ -2265,6 +2269,7 @@ function App() {
                 {/* Preview */}
                 <div className="preview">
                     <PreviewPanel
+                        tab={tab}
                         previewType={previewType}
                         previewSections={previewSections}
                         previewTitle={previewTitle}
@@ -3454,8 +3459,9 @@ function PreviewPanel({
     previewType, previewSections, previewTitle, previewNumber,
     projecting, projSlideIndex, previewLive,
     onStartProjection, onGoLive, onStopProjection, onClearPreview, onNavigateSlide, onSelectSlide,
-    videoUrl, videoStatus, videoName, floatingActive = false, accompaniment,
+    videoUrl, videoStatus, videoName, floatingActive = false, accompaniment, tab,
 }: {
+    tab: Tab;
     previewType: 'hymn' | 'bible' | null;
     previewSections: { text: string; type: string; label: string }[];
     previewTitle: string;
@@ -3551,6 +3557,44 @@ function PreviewPanel({
     }
 
     if (!previewType || !previewSections.length) {
+        // Fiecare parte a aplicației are alt fel de lucru pe ecran, deci și altă
+        // explicație. Un text comun („selectați un imn sau un pasaj biblic") nu
+        // spunea nimic celui care tocmai deschisese Video.
+        //
+        // Doar Imnuri, Biblia și Video folosesc panoul ăsta; Ceasul și Anunțurile
+        // își au propria previzualizare, cu ce se vede pe ecran.
+        const ghiduri: Partial<Record<Tab, { titlu: string; randuri: React.ReactNode[] }>> = {
+            imnuri: {
+                titlu: 'Alege un imn din listă',
+                randuri: [
+                    <><kbd>Enter</kbd> pregătește imnul → <kbd>Enter</kbd> îl pune pe ecran</>,
+                    <><kbd>↑↓</kbd> treci prin listă, <kbd>←→</kbd> între strofe</>,
+                    <><kbd>A</kbd> pornește acompaniamentul, dacă imnul are</>,
+                    <>caută după număr sau după un cuvânt din text</>,
+                    <><kbd>Esc</kbd> oprește proiecția</>,
+                ],
+            },
+            biblia: {
+                titlu: 'Alege un capitol, apoi versetul',
+                randuri: [
+                    <><kbd>Enter</kbd> pregătește versetul → <kbd>Enter</kbd> îl pune pe ecran</>,
+                    <><kbd>↑↓</kbd> verset cu verset, fără să ieși din capitol</>,
+                    <>scrie scurt: <em>ioa 3 16</em>, <em>ps 23</em>, <em>1cor 13 4-7</em></>,
+                    <>sau caută un cuvânt din Biblie și apasă <kbd>Enter</kbd></>,
+                    <><kbd>Esc</kbd> oprește proiecția</>,
+                ],
+            },
+            video: {
+                titlu: 'Alege un videoclip sau adu unul de pe YouTube',
+                randuri: [
+                    <><kbd>Spațiu</kbd> pornește și oprește</>,
+                    <><kbd>←→</kbd> sar 5 secunde (30 cu <kbd>Shift</kbd>)</>,
+                    <><kbd>↑↓</kbd> volumul, <kbd>M</kbd> taie sunetul</>,
+                    <>sunetul iese pe dispozitivul ales în Setări</>,
+                ],
+            },
+        };
+        const ghid = ghiduri[tab] ?? ghiduri.imnuri!;
         return (
             <div className="preview-panel empty">
                 <div className="preview-header">
@@ -3559,13 +3603,9 @@ function PreviewPanel({
                 <div className="preview-body">
                     <div className="preview-empty">
                         <Monitor className="icon-lg opacity-20" />
-                        <p>Selectați un imn sau un pasaj biblic</p>
+                        <p>{ghid.titlu}</p>
                         <div className="preview-shortcuts">
-                            <div><kbd>Enter</kbd> previzualizare → <kbd>Enter</kbd> proiecție</div>
-                            <div><kbd>↑↓</kbd> navighează versete / imnuri</div>
-                            <div><kbd>Esc</kbd> oprește / curăță</div>
-                            <div><kbd>/</kbd> caută rapid</div>
-                            <div>ex: <em>deu 12 12</em>, <em>ps 23</em>, <em>gen 1:3</em></div>
+                            {ghid.randuri.map((r, i) => <div key={i}>{r}</div>)}
                         </div>
                     </div>
                 </div>

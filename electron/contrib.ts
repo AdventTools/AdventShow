@@ -90,6 +90,32 @@ function contentHash(action: string, c: HymnContent): string {
 }
 
 /**
+ * Amprenta „până la diacritice": același imn, scris altfel.
+ *
+ * O biserică își reimportă cartea din PowerPoint și textul iese cu alt apostrof, cu
+ * sedilă în loc de virgulă sub ș și ț, cu un rând gol în plus. Pentru om e același
+ * imn, dar comparația exactă nu vede asta și imnul pleacă spre autori ca „imn nou".
+ * Așa au ajuns 76 de ecouri din 99 de propuneri, aproape toate de la o singură
+ * biserică ce își importase cartea în colecția ei.
+ *
+ * Se compară doar literele și cifrele, plus tipul strofei: ce rămâne diferit după
+ * curățarea asta chiar e altă scriere a textului, nu altă tastatură. Titlul intră în
+ * amprentă, ca o redenumire să ajungă totuși la autori.
+ *
+ * NU înlocuiește `textHash`: aceea e cheia corecturilor OTA și se potrivește cu ce
+ * ține serverul. Asta e doar pentru decizia locală „nu mai trimite, e ecou".
+ */
+function amprentaEcou(c: HymnContent): string {
+  const curat = (s: string) => (s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  const data = [curat(c.title), ...c.sections.map(s => `${s.type}:${curat(s.text)}`)].join('\n');
+  return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+/**
  * Amprenta TEXTULUI, fără acțiune — aceeași formulă cu `text_hash` din feed-ul de
  * corecturi. Cu ea știm dacă ce are omul local e exact ce i-am trimis noi.
  */
@@ -362,6 +388,7 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
         .map(c => [c.id, c.name]));
     const seedMap = new Map<string, HymnContent>();
     const seedTexts = new Set<string>();
+    const seedEcouri = new Set<string>();
     for (const h of seed.prepare('SELECT id, number, title, category_id FROM hymns WHERE category_id IS NOT NULL').all() as
       { id: number; number: string; title: string; category_id: number }[]) {
       const catName = seedCats.get(h.category_id);
@@ -374,6 +401,7 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
       // „Imnurile mele" — vezi mai jos de ce nu ajunge comparaţia pe slot.
       if (catName !== MY_HYMNS_CATEGORY) {
         seedTexts.add(textHash({ title: h.title, sections }));
+        seedEcouri.add(amprentaEcou({ title: h.title, sections }));
       }
     }
 
@@ -419,10 +447,17 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
         // La fel, pentru ce i-am dat prin corecturi după ce i s-a instalat versiunea:
         // acolo textul nici nu are cum să fie în seed-ul lui.
         if (Object.values(otaApplied).includes(th)) continue;
+        // Și copia reimportată, care diferă doar prin cum e scris: diacritice,
+        // apostrofuri, rânduri goale. Tot textul nostru e, doar trecut prin PowerPoint.
+        if (seedEcouri.has(amprentaEcou(content))) continue;
         action = 'adaugat';
         before = null;
       } else if (seedContent) {
         if (sameContent(content, seedContent)) continue;   // identic cu baza oficială
+        // Sau identic până la felul în care e scris. Baza livrată are deja diacriticele
+        // corecte (virgulă sub ș și ț); o diferență doar la ele nu e o corectură, e
+        // altă tastatură — nu are ce judeca omul acolo.
+        if (amprentaEcou(content) === amprentaEcou(seedContent)) continue;
         // Sau e chiar corectura pe care i-am trimis-o noi: atunci nu e modificarea lui.
         if (otaApplied[`${catName}|${number}`] === textHash(content)) continue;
         action = 'modificat';
