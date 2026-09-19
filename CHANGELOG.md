@@ -1,10 +1,19 @@
 # Changelog — AdventShow
 
+## v1.5.2 (22 August 2026)
+
+### Modificări
+- Butonul de acompaniament spune de acum dinainte ce se întâmplă când îl apeși: «Descarcă» când imnul e doar pregătit, «Descarcă și cântă» când e deja pe ecran. Dacă te-ai răzgândit cât se descarcă — mai vorbește cineva, nu e momentul — o apăsare oprește pornirea, fără să oprească descărcarea. La imnurile pregătite de noi scrie «Cântă singur», iar alături apare a doua alegere, pentru cine vrea doar acompaniamentul și schimbă strofele cu mâna. Când înregistrarea are mai puține strofe decât are imnul în carte, ecranul nu se mai stinge la ultimul acord: îți dă comanda înapoi, ca adunarea să aibă text până la capăt. Pentru cine pregătește imnurile, meniul de administrare a devenit o masă de lucru adevărată: asculți imnul, apeși un buton la fiecare bucată terminată, iar programul știe singur care e strofă și care refren.
+
+---
+
 ## Nepublicat
 
 ### Modificări
 - Momentul în care se schimbă strofa se poate potrivi acum după cum citește adunarea ta: cât mai stă titlul la începutul cântării și cu cât înainte de sfârșitul unei strofe apare următoarea. Reglajele stau într-un meniu ascuns, care se deschide cu o combinație de taste și cere parola de administrare — tot acolo poți vedea o înregistrare desenată, cu semnele care spun unde se termină fiecare strofă. Ce alegi rămâne pe calculatorul tău și după actualizări.
 - La imnul «O cântare de mărire» din Imnuri Speciale, primul rând al strofei revine la «pe Domnul la Calvar».
+- Pe Windows, proiecția acoperă de acum tot al doilea ecran din prima clipă. Când televizorul și laptopul erau setate în Windows cu măriri diferite ale textului, imaginea ieșea cât un sfert de ecran, lipită în colț, și trebuia trasă cu mâna de fiecare dată. Acum aplicația verifică singură dacă a acoperit ecranul și se îndreaptă până reușește.
+- La Biblie: după ce oprești proiecția și cureți previzualizarea cu Esc, alegerea altui verset din același capitol merge din nou cu Enter. Până acum trebuia să ieși pe alt capitol și să te întorci, ca să se întâmple ceva.
 
 ---
 
