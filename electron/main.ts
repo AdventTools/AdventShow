@@ -1008,6 +1008,54 @@ function sendSlideToProjection(index: number) {
 
 // ── Projection window ─────────────────────────────────────────────────────────
 
+/**
+ * Windows: fereastra de proiecție nu intră în ecran complet, ci e doar pusă la
+ * coordonatele ecranului al doilea. Dacă Windows are scalări diferite pe cele două
+ * ecrane (tipic: laptop la 125%, televizor 4K la 150–200%), numerele date la creare
+ * se aplică cu scalarea altui ecran și fereastra iese cât o fracțiune din televizor,
+ * lipită în colțul din stânga-sus — exact ce trebuia tras cu mâna până acum.
+ *
+ * Așa că după ce fereastra există și are un monitor, îi rescriem încadrarea și
+ * VERIFICĂM rezultatul în pixeli reali. Dacă nici așa nu acoperă ecranul, o trecem
+ * în ecran complet pe monitorul pe care e. Fiecare pas se scrie în jurnal, ca data
+ * viitoare să nu mai ghicim.
+ */
+function acoperaEcranul(w: BrowserWindow, target: Electron.Display, pas = 0) {
+  if (!isWinAlive(w)) return
+
+  const ecranFizic = screen.dipToScreenRect(null, target.bounds)
+  const fereastraFizic = screen.dipToScreenRect(w, w.getBounds())
+  const potrivit =
+    Math.abs(fereastraFizic.x - ecranFizic.x) <= 2 &&
+    Math.abs(fereastraFizic.y - ecranFizic.y) <= 2 &&
+    Math.abs(fereastraFizic.width - ecranFizic.width) <= 2 &&
+    Math.abs(fereastraFizic.height - ecranFizic.height) <= 2
+
+  debugLog('[Projection] Verificare încadrare, pasul', pas,
+    'ecran:', JSON.stringify(ecranFizic), 'fereastră:', JSON.stringify(fereastraFizic),
+    potrivit ? '→ acoperă' : '→ NU acoperă')
+
+  if (potrivit) return
+
+  if (pas === 0) {
+    // Fereastra există acum pe monitorul țintă, deci aceleași numere se convertesc
+    // cu scalarea LUI, nu a ecranului principal.
+    w.setBounds(target.bounds)
+  } else if (pas === 1) {
+    // Traducem dimensiunea fizică a ecranului în unitățile monitorului pe care
+    // stă fereastra — asta repară nepotrivirea de scalare, oricare ar fi ea.
+    w.setBounds(screen.screenToDipRect(w, ecranFizic))
+  } else {
+    debugLog('[Projection] Încadrarea tot nu se potrivește → ecran complet')
+    try { w.setFullScreen(true) } catch { /* rămâne cum e; mai bine decât o fereastră moartă */ }
+    return
+  }
+
+  // Windows aplică redimensionarea asincron (WM_DPICHANGED), deci verificăm după ce
+  // se așază, nu imediat.
+  setTimeout(() => acoperaEcranul(w, target, pas + 1), 150)
+}
+
 function createProjectionWindow() {
   const settings = readSettings()
   const displays = screen.getAllDisplays()
@@ -1034,7 +1082,6 @@ function createProjectionWindow() {
     backgroundColor: isWin ? '#000000' : '#00000000',
     show: false,
     alwaysOnTop: targetDisplay.id === primary.id,
-    ...(isWin ? { simpleFullscreen: true } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       // Allow file:// access for background images/videos
@@ -1046,6 +1093,7 @@ function createProjectionWindow() {
 
   projectionWin.once('ready-to-show', () => {
     projectionWin?.show()
+    if (isWin && isWinAlive(projectionWin)) acoperaEcranul(projectionWin, targetDisplay)
     setTimeout(() => win?.focus(), 200)
   })
 

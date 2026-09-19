@@ -1197,6 +1197,27 @@ function App() {
         }
     }, [verses, selectedChapter, books, selectedBookId]);
 
+    // Esc golește previzualizarea, dar capitolul și lista de versete rămân pe ecran.
+    // Efectul de mai sus nu se mai declanșează (`verses` n-a fost înlocuit), așa că
+    // alegerea altui verset din ACELAȘI capitol nu mai avea ce proiecta: Enter părea
+    // fără efect și trebuia ieșit pe alt capitol și revenit. Refacem previzualizarea
+    // aici, pe loc, fără să mutăm versetul ales înapoi la primul.
+    const alegeVersetul = useCallback((idx: number) => {
+        setSelectedVerseIdx(idx);
+        setProjSlideIndex(idx);
+        if (previewType === 'bible' && previewSections.length > 0) return;
+        if (!verses.length || !selectedChapter) return;
+        const book = books.find(b => b.id === selectedBookId);
+        setPreviewType('bible');
+        setPreviewSections(verses.map((v: BibleVerse) => ({
+            text: v.text,
+            type: 'verse',
+            label: `v. ${v.verse}`,
+        })));
+        setPreviewTitle(`${book?.name ?? ''} ${selectedChapter}`);
+        setPreviewNumber(book?.abbreviation ?? '');
+    }, [previewType, previewSections.length, verses, selectedChapter, books, selectedBookId]);
+
     // ── Video actions ──
     const loadVideoFile = useCallback(async () => {
         const filePath = await window.electron.video.pickFile();
@@ -1650,8 +1671,7 @@ function App() {
                     const newIdx = e.key === 'ArrowDown'
                         ? Math.min(selectedVerseIdx + 1, verses.length - 1)
                         : Math.max(selectedVerseIdx - 1, 0);
-                    setSelectedVerseIdx(newIdx);
-                    setProjSlideIndex(newIdx);
+                    alegeVersetul(newIdx);
                 }
                 return;
             }
@@ -1671,7 +1691,7 @@ function App() {
         previewLive, goLivePreview,
         videoStatus, videoStop, videoUrl, videoVolume, videoMuted,
         videoPlay, videoPause, videoSeek, videoSetVolume, videoToggleMute,
-        verses, selectedVerseIdx, books, selectedBookId, selectedChapter,
+        verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul,
         accToggle, accInfo, previewType, adminOpen, requirePassword]);
 
     // ── Resizable column drag handlers ──
@@ -1759,6 +1779,10 @@ function App() {
                     }
                 } else if (previewSections.length > 0 && !projecting) {
                     startProjection(projSlideIndex);
+                } else if (!projecting && verses.length > 0) {
+                    // Previzualizarea a fost golită cu Esc, dar capitolul e tot deschis:
+                    // o aducem înapoi pe versetul ales, ca Enter să nu pară mort.
+                    alegeVersetul(selectedVerseIdx);
                 }
                 return;
             }
@@ -1804,8 +1828,7 @@ function App() {
                     return;
                 }
                 const newIdx = Math.min(selectedVerseIdx + 1, verses.length - 1);
-                setSelectedVerseIdx(newIdx);
-                setProjSlideIndex(newIdx);
+                alegeVersetul(newIdx);
             }
             return;
         }
@@ -1818,8 +1841,7 @@ function App() {
                 if (hymns[nextIdx]) previewHymn(hymns[nextIdx].id);
             } else if (tab === 'biblia' && verses.length > 0) {
                 const newIdx = Math.max(selectedVerseIdx - 1, 0);
-                setSelectedVerseIdx(newIdx);
-                setProjSlideIndex(newIdx);
+                alegeVersetul(newIdx);
             }
             return;
         }
@@ -1827,7 +1849,7 @@ function App() {
         selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
         navigateSlide, contentSearch, doBibleContentSearch, refSearch, biblePassage,
         previewLive, goLivePreview,
-        verses, selectedVerseIdx, books, selectedBookId, selectedChapter]);
+        verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul]);
 
     // ── Close context menu on click elsewhere ──
     useEffect(() => {
@@ -2231,10 +2253,7 @@ function App() {
                             verses={verses}
                             selectedVerseIdx={selectedVerseIdx}
                             onSelectChapter={selectChapter}
-                            onSelectVerse={(idx) => {
-                                setSelectedVerseIdx(idx);
-                                setProjSlideIndex(idx);
-                            }}
+                            onSelectVerse={alegeVersetul}
                             onBackToChapters={() => { setSelectedChapter(null); setVerses([]); }}
                         />
                     )}
@@ -6053,10 +6072,11 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                             <p className="text-white/40 text-xs mt-0.5">
                                                 Dezvoltarea versiunilor recente: colecțiile noi de cântări,
                                                 video &amp; YouTube, căutarea în Biblie, Ceas, Realtime cu
-                                                prezentări și șabloane, sistemul de contribuții și corecturi,
-                                                parola și recuperarea ei, actualizarea automată; și hangar,
-                                                serverul prin care se distribuie versiunile și prin care ajung
-                                                corecturile la imnuri
+                                                prezentări și șabloane, acompaniamentul instrumental al
+                                                imnurilor — pentru când nu e pianist la biserică — cu
+                                                trecerea strofelor pe melodie, corecturile care circulă
+                                                între biserici și autori, parola și recuperarea ei,
+                                                actualizarea automată pe canal stabil sau beta
                                             </p>
                                         </div>
                                     </div>

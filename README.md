@@ -5,7 +5,7 @@
 **AdventShow** este aplicația de proiecție gândită pentru slujbe, Școala de Sabat, întâlniri de tineret și orice eveniment din biserică. Pornește pe al doilea ecran (proiector sau televizor), iar tu controlezi tot de pe laptop. Totul e deja înăuntru: **Biblia Cornilescu completă** (66 cărți, 31.102 versete) și **1.324 de imnuri și cântări** din șase colecții.
 
 ![platform](https://img.shields.io/badge/platforme-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![version](https://img.shields.io/badge/versiune-1.5.1-green)
+![version](https://img.shields.io/badge/versiune-1.5.2-green)
 ![license](https://img.shields.io/badge/licență-gratuită-brightgreen)
 
 > **Gratuit. Fără cont. Fără abonament. Funcționează și fără internet** — toate imnurile și Biblia sunt incluse în aplicație.
@@ -243,7 +243,7 @@ La video: `Spațiu` pornește și oprește, `←` `→` sar 5 secunde (30 cu `Sh
 **AdventShow** este dezvoltat și distribuit **gratuit** de:
 
 - **Ovidius Zanfir** — autor original, interfață, structura aplicației
-- **Samy Balasa** — dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, acompaniamentul instrumental, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, sistemul de contribuții și corecturi, parola și recuperarea ei, actualizarea automată; și **hangar**, serverul prin care se distribuie versiunile (canal stabil și beta, actualizare obligatorie când e cazul) și prin care ajung corecturile la imnuri
+- **Samy Balasa** — dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, acompaniamentul instrumental al imnurilor — pentru când nu e pianist la biserică — cu trecerea strofelor pe melodie, corecturile care circulă între biserici și autori, parola și recuperarea ei, actualizarea automată pe canal stabil sau beta
 
 Organizație: **[AdventTools](https://github.com/AdventTools)**
 
