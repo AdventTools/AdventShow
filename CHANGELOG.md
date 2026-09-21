@@ -1,16 +1,22 @@
 # Changelog — AdventShow
 
-## v1.5.3 (21 Septembrie 2026)
+## v1.5.4 (21 Septembrie 2026)
 
 ### Modificări
-- La proiecția din Biblie: numele cărții nu mai apare dublat («Gen Geneza 19» în loc de «Geneza 19») — nici pe bara de jos, nici pe eticheta verde LIVE, nici în previzualizare. Eticheta de sub verset arăta mereu «Strofa 0» în loc de numărul versetului — acum arată numărul corect.
+- Acompaniamentul nu mai cânta imnul greșit la colecțiile fără înregistrări proprii (Exploratori, Licurici, Companioni, Tineret, Amicus): butonul se oferea după număr, iar un imn din altă colecție cu același număr ca unul din Imnuri Creștine împrumuta acompaniamentul acestuia. Butonul apare acum doar la Imnuri Creștine, singura colecție cu înregistrări deocamdată.
 
 ---
 
 ## Nepublicat
 
+_(nimic încă)_
+
+---
+
+## v1.5.3 (21 Septembrie 2026)
+
 ### Modificări
-- Acompaniamentul nu mai cânta imnul greșit la colecțiile fără înregistrări proprii (Exploratori, Licurici, Companioni, Tineret, Amicus): butonul se oferea după număr, iar un imn din altă colecție cu același număr ca unul din Imnuri Creștine împrumuta acompaniamentul acestuia. Butonul apare acum doar la Imnuri Creștine, singura colecție cu înregistrări deocamdată.
+- La proiecția din Biblie: numele cărții nu mai apare dublat («Gen Geneza 19» în loc de «Geneza 19») — nici pe bara de jos, nici pe eticheta verde LIVE, nici în previzualizare. Eticheta de sub verset arăta mereu «Strofa 0» în loc de numărul versetului — acum arată numărul corect.
 
 ---
 
