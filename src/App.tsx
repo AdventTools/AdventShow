@@ -750,7 +750,7 @@ function App() {
         setProjecting(true);
         setProjSlideIndex(idx);
         setPreviewLive(true);
-        setLiveLabel(ct === 'bible' ? `${previewNumber} ${previewTitle}`.trim() : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
+        setLiveLabel(ct === 'bible' ? previewTitle : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
     }, [previewSections, previewTitle, previewNumber, previewType]);
 
     // ── Trece live imnul PREGĂTIT din previzualizare (comutare fluidă, fără blackout) ──
@@ -766,7 +766,7 @@ function App() {
         await window.electron.projection.updateHymn(secs, previewTitle, previewNumber, idx, ct, br);
         setProjSlideIndex(idx);
         setPreviewLive(true);
-        setLiveLabel(ct === 'bible' ? `${previewNumber} ${previewTitle}`.trim() : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
+        setLiveLabel(ct === 'bible' ? previewTitle : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
     }, [projecting, previewSections, previewType, previewTitle, previewNumber]);
 
     const navigateSlide = useCallback(async (newIdx: number) => {
@@ -2348,9 +2348,10 @@ function App() {
             {/* ── Controller (bottom bar when projecting) ── */}
             {projecting && previewLive && previewSections.length > 0 && (
                 <ProjectorController
-                    sections={previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection))}
+                    sections={previewSections.map(s => ({ text: s.text, type: s.type, label: s.label }))}
                     hymnTitle={previewTitle}
                     hymnNumber={previewNumber}
+                    contentType={previewType === 'bible' ? 'bible' : 'hymn'}
                     onClose={stopProjection}
                     onNavigate={navigateSlide}
                     videoActive={!!videoStatus}
@@ -3618,7 +3619,7 @@ function PreviewPanel({
             <div className="preview-header">
                 <span className="label">{projecting ? (previewLive ? '● LIVE' : '◐ PREGĂTIT') : 'Previzualizare'}</span>
                 <span className="title">
-                    {previewNumber ? `${previewNumber}. ` : ''}{previewTitle}
+                    {previewType !== 'bible' && previewNumber ? `${previewNumber}. ` : ''}{previewTitle}
                 </span>
                 <span className="slide-counter">{projSlideIndex + 1}/{previewSections.length}</span>
             </div>
