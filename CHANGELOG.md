@@ -1,5 +1,18 @@
 # Changelog — AdventShow
 
+## v1.5.3 (21 Septembrie 2026)
+
+### Modificări
+- La proiecția din Biblie: numele cărții nu mai apare dublat («Gen Geneza 19» în loc de «Geneza 19») — nici pe bara de jos, nici pe eticheta verde LIVE, nici în previzualizare. Eticheta de sub verset arăta mereu «Strofa 0» în loc de numărul versetului — acum arată numărul corect.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.5.2 (19 Septembrie 2026)
 
 ### Modificări
@@ -10,13 +23,6 @@
 - La Biblie: după ce oprești proiecția și cureți previzualizarea cu Esc, alegerea altui verset din același capitol merge din nou cu Enter. Până acum trebuia să ieși pe alt capitol și să te întorci, ca să se întâmple ceva.
 - Fiecare parte a aplicației își spune acum singură cum se folosește: previzualizarea goală și scurtăturile din colțul de sus arată ce e de făcut la Imnuri, la Biblie, la Video, la Ceas și la Anunțuri — nu același text peste tot, ca până acum.
 - Imnurile pe care le-ai adus înapoi din PowerPoint nu mai pleacă spre autori ca „imnuri noi" dacă sunt, de fapt, imnurile noastre scrise puțin altfel — cu alt apostrof, cu sedilă în loc de virgulă sub ș și ț, cu un rând gol în plus. Se compară acum textul curățat de felul în care e scris, nu literă cu literă. Ce ai schimbat tu cu adevărat pleacă mai departe, ca până acum.
-
----
-
-## Nepublicat
-
-### Modificări
-- La proiecția din Biblie: numele cărții nu mai apare dublat («Gen Geneza 19» în loc de «Geneza 19») — nici pe bara de jos, nici pe eticheta verde LIVE, nici în previzualizare. Eticheta de sub verset arăta mereu «Strofa 0» în loc de numărul versetului — acum arată numărul corect.
 
 ---
 
