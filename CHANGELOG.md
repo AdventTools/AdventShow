@@ -15,7 +15,8 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- La proiecția din Biblie: numele cărții nu mai apare dublat («Gen Geneza 19» în loc de «Geneza 19») — nici pe bara de jos, nici pe eticheta verde LIVE, nici în previzualizare. Eticheta de sub verset arăta mereu «Strofa 0» în loc de numărul versetului — acum arată numărul corect.
 
 ---
 

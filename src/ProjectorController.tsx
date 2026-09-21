@@ -1,7 +1,13 @@
 import { ChevronLeft, ChevronRight, Download, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { HymnSection } from './vite-env';
 import { accTitle } from './accompaniment-ui';
+
+/** Secțiune de previzualizare — la Biblie `type` e 'verse' și `label` vine deja calculat („v. 5"). */
+interface PreviewSection {
+  text: string;
+  type: string;
+  label?: string;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Projector Controller
@@ -37,9 +43,11 @@ export interface AccompanimentControl {
 }
 
 interface ProjectorControllerProps {
-  sections: HymnSection[];
+  sections: PreviewSection[];
   hymnTitle: string;
   hymnNumber: string;
+  /** 'bible' ascunde prescurtarea cărții din antet și etichetează versetele, nu strofele. */
+  contentType?: 'hymn' | 'bible';
   onClose: () => void;
   onNavigate: (index: number) => void;
   videoActive: boolean;
@@ -52,7 +60,7 @@ function mmss(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, onNavigate, videoActive, accompaniment }: ProjectorControllerProps) {
+export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment }: ProjectorControllerProps) {
   const [currentIndex, setCurrentIndex] = useState(-1);
 
   // Nivelul de zoom al textului pe proiecție, raportat înapoi din fereastra de proiecție
@@ -62,11 +70,13 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
   const zoomPrevRef = useRef(100);
   const zoomInitedRef = useRef(false);
 
+  // La Biblie nu există „slide de titlu" (ca la imnuri) — minimul e primul verset, nu -1.
   const navigate = useCallback(async (index: number) => {
-    const clamped = Math.max(-1, Math.min(index, sections.length - 1));
+    const minIdx = contentType === 'bible' ? 0 : -1;
+    const clamped = Math.max(minIdx, Math.min(index, sections.length - 1));
     setCurrentIndex(clamped);
     onNavigate(clamped);
-  }, [sections, onNavigate]);
+  }, [sections, onNavigate, contentType]);
 
   // Sync index when projection window drives navigation (arrows/Escape pressed there)
   useEffect(() => {
@@ -137,21 +147,20 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
     };
   }, []);
 
+  // Antetul „numărul. titlu" e specific imnurilor — la Biblie titlul (,,Geneza 19") e de-ajuns.
+  const titleLine = contentType === 'hymn' ? `${hymnNumber}. ${hymnTitle}` : hymnTitle;
+
   const current = sections[currentIndex];
   const prev = sections[currentIndex - 1];
   const next = sections[currentIndex + 1];
 
-  // Count strofa index for labels
-  const sectionLabel = (s: HymnSection, idx: number) => {
-    if (s.type === 'refren') return 'Refren';
-    const strofaNum = sections.slice(0, idx + 1).filter(x => x.type === 'strofa').length;
-    return `Strofa ${strofaNum}`;
-  };
+  // Eticheta vine deja calculată din previzualizare („Strofa 3", „Refren", „v. 5")
+  const sectionLabel = (s: PreviewSection) => s.label ?? (s.type === 'refren' ? 'Refren' : '');
 
-  // Etichetă scurtă pentru butonul de salt: „R" refren, altfel numărul strofei
-  const dotLabel = (s: HymnSection, idx: number) => {
+  // Etichetă scurtă pentru butonul de salt: „R" refren, numărul strofei, sau doar cifra versetului
+  const dotLabel = (s: PreviewSection) => {
     if (s.type === 'refren') return 'R';
-    return String(sections.slice(0, idx + 1).filter(x => x.type === 'strofa').length);
+    return (s.label ?? '').replace(/^v\.\s*/, '').replace(/^Strofa\s*/, '');
   };
 
   return (
@@ -161,7 +170,9 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5">
         <Monitor className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-xs font-black text-primary tabular-nums">{hymnNumber}.</span>
+          {contentType === 'hymn' && (
+            <span className="text-xs font-black text-primary tabular-nums">{hymnNumber}.</span>
+          )}
           <span className="text-xs text-white/60 font-semibold truncate">{hymnTitle}</span>
         </div>
         <span className="text-[10px] text-white/20 ml-1">
@@ -293,12 +304,12 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           {currentIndex === 0 ? (
             <div className="min-w-0">
               <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-primary/50">Titlu</div>
-              <div className="text-xs text-white/25 truncate leading-snug">{hymnNumber}. {hymnTitle}</div>
+              <div className="text-xs text-white/25 truncate leading-snug">{titleLine}</div>
             </div>
           ) : prev ? (
             <div className="min-w-0">
               <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${prev.type === 'refren' ? 'text-amber-400/50' : 'text-white/20'}`}>
-                {sectionLabel(prev, currentIndex - 1)}
+                {sectionLabel(prev)}
               </div>
               <div className="text-xs text-white/25 truncate leading-snug">
                 {prev.text.split('\n')[0]}
@@ -315,13 +326,13 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
             <>
               <div className="text-[10px] font-bold uppercase tracking-widest mb-1 text-primary/70">Titlu</div>
               <div className="text-sm text-white/80 leading-relaxed font-medium">
-                <span className="text-primary font-black">{hymnNumber}.</span>{' '}{hymnTitle}
+                {contentType === 'hymn' && <span className="text-primary font-black">{hymnNumber}.</span>}{contentType === 'hymn' ? ' ' : ''}{hymnTitle}
               </div>
             </>
           ) : current ? (
             <>
               <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${current.type === 'refren' ? 'text-amber-400' : 'text-primary/70'}`}>
-                {sectionLabel(current, currentIndex)}
+                {sectionLabel(current)}
               </div>
               <div className="text-sm text-white/80 leading-relaxed line-clamp-3 whitespace-pre-line font-medium">
                 {current.text}
@@ -340,7 +351,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
           {next ? (
             <div className="min-w-0 flex-1">
               <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${next.type === 'refren' ? 'text-amber-400/50' : 'text-white/20'}`}>
-                {sectionLabel(next, currentIndex + 1)}
+                {sectionLabel(next)}
               </div>
               <div className="text-xs text-white/25 truncate leading-snug">
                 {next.text.split('\n')[0]}
@@ -394,7 +405,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
               <button
                 key={i}
                 onClick={() => navigate(i)}
-                title={sectionLabel(s, i)}
+                title={sectionLabel(s)}
                 className={`flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none transition-all duration-200 ${isCurrent
                   ? isRefren
                     ? 'h-4 min-w-[1.4rem] px-1.5 bg-amber-400 text-black'
@@ -404,7 +415,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, onClose, 
                     : 'w-2 h-2 bg-white/15 hover:bg-white/40'
                   }`}
               >
-                {isCurrent ? dotLabel(s, i) : ''}
+                {isCurrent ? dotLabel(s) : ''}
               </button>
             );
           })}
