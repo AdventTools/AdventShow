@@ -9,7 +9,8 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Acompaniamentul nu mai cânta imnul greșit la colecțiile fără înregistrări proprii (Exploratori, Licurici, Companioni, Tineret, Amicus): butonul se oferea după număr, iar un imn din altă colecție cu același număr ca unul din Imnuri Creștine împrumuta acompaniamentul acestuia. Butonul apare acum doar la Imnuri Creștine, singura colecție cu înregistrări deocamdată.
 
 ---
 

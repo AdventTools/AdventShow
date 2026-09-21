@@ -305,6 +305,16 @@ function App() {
     const [previewSections, setPreviewSections] = useState<{ text: string; type: string; label: string }[]>([]);
     const [previewTitle, setPreviewTitle] = useState('');
     const [previewNumber, setPreviewNumber] = useState('');
+    // Categoria imnului pregătit — acompaniamentul (numerotat 1-921, doar Imnuri Creștine
+    // deocamdată) nu trebuie oferit la un imn din altă colecție doar pentru că are
+    // întâmplător același număr (ex. Exploratori #23 ≠ Imnuri Creștine #23).
+    const [previewCategoryId, setPreviewCategoryId] = useState<number | undefined>(undefined);
+    const imnuriCrestineCategoryId = useMemo(
+        () => categories.find(c => c.name === 'Imnuri Creștine')?.id,
+        [categories]);
+    const previewAreAcompaniament = previewType === 'hymn'
+        && previewCategoryId !== undefined
+        && previewCategoryId === imnuriCrestineCategoryId;
 
     // ── Projection state ──
     const [projecting, setProjecting] = useState(false);
@@ -690,6 +700,7 @@ function App() {
         setPreviewSections(expanded);
         setPreviewTitle(data.title);
         setPreviewNumber(String(data.number));
+        setPreviewCategoryId(data.category_id ?? undefined);
         setProjSlideIndex(-1);
         setSelectedHymnId(id);
         // În timpul proiecției, selecția DOAR pregătește imnul în previzualizare
@@ -731,6 +742,7 @@ function App() {
         setPreviewSections([]);
         setPreviewTitle('');
         setPreviewNumber('');
+        setPreviewCategoryId(undefined);
         setProjSlideIndex(0);
         setSelectedHymnId(null);
         setPreviewLive(false);
@@ -908,7 +920,7 @@ function App() {
      * rămân în mâna operatorului. Marcajele există, doar că nu le urmăm.
      */
     const accPlay = useCallback(async (cuSync: boolean) => {
-        if (previewType !== 'hymn') return;
+        if (!previewAreAcompaniament) return;
         const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
         if (!Number.isFinite(numar)) return;
         const el = accRef.current;
@@ -982,7 +994,7 @@ function App() {
             setAccError('Nu pornește sunetul. Verifică ieșirea audio din Setări.');
             setAccPlaying(false);
         }
-    }, [previewType, previewNumber, projecting, previewLive, accNavigheaza]);
+    }, [previewAreAcompaniament, previewNumber, projecting, previewLive, accNavigheaza]);
 
     /** Imnul e chiar acum pe ecran — de asta atârnă ce face o apăsare. */
     const accLive = projecting && previewLive;
@@ -1002,7 +1014,7 @@ function App() {
         // Apăsare în timpul descărcării = frâna: fișierul vine în continuare,
         // dar nu mai pornește singur.
         if (accLoading) { accAutoplayAnulat.current = true; return; }
-        if (previewType !== 'hymn') return;
+        if (!previewAreAcompaniament) return;
         const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
         if (!Number.isFinite(numar)) return;
 
@@ -1015,13 +1027,13 @@ function App() {
         }
         await accPlay(true);
     }, [accPlaying, accLoading, accStop, accDownload, accPlay, accInfo, accLive,
-        previewType, previewNumber]);
+        previewAreAcompaniament, previewNumber]);
 
     /** „Doar muzica": același sunet, dar strofele rămân ale operatorului. */
     const accPlayOnly = useCallback(async () => {
         if (accPlaying) { accStop(); return; }
         if (accLoading) { accAutoplayAnulat.current = true; return; }
-        if (previewType !== 'hymn') return;
+        if (!previewAreAcompaniament) return;
         const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
         if (!Number.isFinite(numar)) return;
         if (!accInfo?.local) {
@@ -1033,7 +1045,7 @@ function App() {
         }
         await accPlay(false);
     }, [accPlaying, accLoading, accStop, accDownload, accPlay, accInfo, accLive,
-        previewType, previewNumber]);
+        previewAreAcompaniament, previewNumber]);
 
     // Un singur obiect de control, folosit și în previzualizare, și în bara de
     // proiecție — ca butonul să arate identic în amândouă și să nu apuce nimeni
@@ -1074,7 +1086,7 @@ function App() {
     // procesului principal, fără rețea și fără disc, deci nu costă nimic să le
     // știm devreme — iar butonul poate spune dinainte că imnul merge singur.
     useEffect(() => {
-        if (previewType !== 'hymn') { setAccInfo(null); setAccHasMarks(false); return; }
+        if (!previewAreAcompaniament) { setAccInfo(null); setAccHasMarks(false); return; }
         const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
         if (!Number.isFinite(numar)) { setAccInfo(null); setAccHasMarks(false); return; }
         let anulat = false;
@@ -1093,7 +1105,7 @@ function App() {
                 setAccHasMarks(false);
             });
         return () => { anulat = true; };
-    }, [previewType, previewNumber]);
+    }, [previewAreAcompaniament, previewNumber]);
 
     // Schimbarea imnului oprește acompaniamentul precedent — altfel ar cânta
     // peste imnul nou, iar operatorul n-ar ști de unde vine sunetul.
