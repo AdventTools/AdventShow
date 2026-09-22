@@ -1,13 +1,6 @@
 # Changelog — AdventShow
 
-## v1.5.4 (21 Septembrie 2026)
-
-### Modificări
-- Acompaniamentul nu mai cânta imnul greșit la colecțiile fără înregistrări proprii (Exploratori, Licurici, Companioni, Tineret, Amicus): butonul se oferea după număr, iar un imn din altă colecție cu același număr ca unul din Imnuri Creștine împrumuta acompaniamentul acestuia. Butonul apare acum doar la Imnuri Creștine, singura colecție cu înregistrări deocamdată.
-
----
-
-## Nepublicat
+## v1.6.0 (22 Septembrie 2026)
 
 ### Modificări
 - Proiecția pe Windows nu mai rămâne uneori în spatele altor ferestre după un alt-tab — fereastra de proiecție stă acum mereu deasupra pe ecranul ei dedicat.
@@ -20,10 +13,21 @@
 - Interfața proprie a aplicației are acum și temă deschisă, pe lângă cea închisă (Setări → Administrare).
 - Ecranul de proiecție se poate schimba acum dintr-un selector rapid, direct din bara de sus — nu doar din Setări.
 - Fereastra de Setări a fost refăcută: ocupă acum tot spațiul aplicației, cu navigare pe bara laterală (4 secțiuni: Proiecție, Administrare, Despre, Ajutor) și câmpuri așezate într-un grid care se adaptează la rezoluție — mult mai puțin scroll, la orice mărime de ecran.
-
-### Adăugat
 - Biblia World English Bible (engleză, domeniu public) — pe lângă Cornilescu, alese dintr-un selector chiar lângă căutarea din Biblie.
 - Interfața aplicației e acum disponibilă și în engleză, cu un selector discret (butonul RO/EN din bara de sus). Traducerea Bibliei alese și interfața se schimbă independent una de alta — proiecția pe ecran urmează mereu Biblia aleasă, nu limba panoului de control al operatorului.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
+## v1.5.4 (21 Septembrie 2026)
+
+### Modificări
+- Acompaniamentul nu mai cânta imnul greșit la colecțiile fără înregistrări proprii (Exploratori, Licurici, Companioni, Tineret, Amicus): butonul se oferea după număr, iar un imn din altă colecție cu același număr ca unul din Imnuri Creștine împrumuta acompaniamentul acestuia. Butonul apare acum doar la Imnuri Creștine, singura colecție cu înregistrări deocamdată.
 
 ---
 
