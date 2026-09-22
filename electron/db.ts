@@ -1087,6 +1087,17 @@ export function initBibleTables() {
 
   // Migration: add search_text column if missing and populate it
   migrateBibleSearchText(db);
+  // Migration: mai multe traduceri (din v1.6.0) — book_id rămâne cheia unică
+  // (fiecare traducere are propriul interval de id-uri), coloana asta e doar
+  // pentru afișare/filtrare rapidă, fără JOIN suplimentar.
+  migrateBibleTranslationColumn(db);
+}
+
+function migrateBibleTranslationColumn(db: ReturnType<typeof getDb>) {
+  const cols = db.prepare("PRAGMA table_info('bible_books')").all() as { name: string }[];
+  if (!cols.some(c => c.name === 'translation')) {
+    db.exec("ALTER TABLE bible_books ADD COLUMN translation TEXT NOT NULL DEFAULT 'cornilescu'");
+  }
 }
 
 function migrateBibleSearchText(db: any) {
@@ -1113,10 +1124,23 @@ function migrateBibleSearchText(db: any) {
 
 // ── Bible queries ─────────────────────────────────────────────────────────────
 
-export function getBibleBooks() {
+export function getBibleBooks(translation: string = 'cornilescu') {
   return getDb()
-    .prepare('SELECT * FROM bible_books ORDER BY book_order')
-    .all();
+    .prepare('SELECT * FROM bible_books WHERE translation = ? ORDER BY book_order')
+    .all(translation);
+}
+
+/** Traducerile chiar prezente în baza asta, pentru selectorul din interfață. */
+export function getBibleTranslations(): { id: string; verseCount: number }[] {
+  return getDb()
+    .prepare(`
+      SELECT bb.translation as id, count(bv.id) as verseCount
+      FROM bible_books bb
+      JOIN bible_verses bv ON bv.book_id = bb.id
+      GROUP BY bb.translation
+      ORDER BY bb.translation
+    `)
+    .all() as { id: string; verseCount: number }[];
 }
 
 export function getBibleChapters(bookId: number): number[] {
@@ -1132,12 +1156,12 @@ export function getBibleVerses(bookId: number, chapter: number) {
     .all(bookId, chapter);
 }
 
-export function searchBible(query: string, bookId?: number, chapter?: number) {
+export function searchBible(query: string, bookId?: number, chapter?: number, translation: string = 'cornilescu') {
   const normalizedPattern = `%${normalizeSearchText(query)}%`;
   const originalPattern = `%${query}%`;
 
-  let whereClause = '(bv.search_text LIKE ? OR bv.text LIKE ?)';
-  const params: any[] = [normalizedPattern, originalPattern];
+  let whereClause = '(bv.search_text LIKE ? OR bv.text LIKE ?) AND bb.translation = ?';
+  const params: any[] = [normalizedPattern, originalPattern, translation];
 
   if (bookId !== undefined) {
     whereClause += ' AND bv.book_id = ?';
@@ -1172,15 +1196,17 @@ export function getBibleVerseRange(bookId: number, chapter: number, startVerse: 
     .all(bookId, chapter, startVerse, endVerse);
 }
 
-export function hasBibleData(): boolean {
+export function hasBibleData(translation?: string): boolean {
   try {
     const row = getDb()
       .prepare("SELECT count(*) as cnt FROM sqlite_master WHERE type='table' AND name='bible_books'")
       .get() as { cnt: number } | undefined;
     if (!row || row.cnt === 0) return false;
-    const verseRow = getDb()
-      .prepare('SELECT count(*) as cnt FROM bible_verses')
-      .get() as { cnt: number } | undefined;
+    const verseRow = translation === undefined
+      ? getDb().prepare('SELECT count(*) as cnt FROM bible_verses').get() as { cnt: number } | undefined
+      : getDb()
+        .prepare('SELECT count(*) as cnt FROM bible_verses bv JOIN bible_books bb ON bb.id = bv.book_id WHERE bb.translation = ?')
+        .get(translation) as { cnt: number } | undefined;
     return !!(verseRow && verseRow.cnt > 0);
   } catch {
     return false;
@@ -1215,29 +1241,27 @@ const ABBREVIATIONS: Record<string, string> = {
   "Apocalipsa": "Apoc",
 };
 
-export function seedBibleFromJson() {
-  // Check if Bible data already exists
-  if (hasBibleData()) return;
-
-  // Find cornilescu.json in various locations
+function findSeedJsonPath(filename: string): string | null {
   const candidatePaths = [
-    path.join(process.resourcesPath ?? '', 'cornilescu.json'),
-    path.join(app.getAppPath(), 'scripts', 'cornilescu.json'),
-    path.join(app.getAppPath(), '..', 'scripts', 'cornilescu.json'),
-    path.join(process.env['APP_ROOT'] ?? '', 'scripts', 'cornilescu.json'),
+    path.join(process.resourcesPath ?? '', filename),
+    path.join(app.getAppPath(), 'scripts', filename),
+    path.join(app.getAppPath(), '..', 'scripts', filename),
+    path.join(process.env['APP_ROOT'] ?? '', 'scripts', filename),
   ];
-
-  let jsonPath: string | null = null;
   for (const p of candidatePaths) {
-    if (fs.existsSync(p)) { jsonPath = p; break; }
+    if (fs.existsSync(p)) return p;
   }
+  return null;
+}
 
-  if (!jsonPath) {
-    console.warn('[Bible] cornilescu.json not found, skipping seed');
-    return;
-  }
-
-  console.log('[Bible] Seeding from', jsonPath);
+/**
+ * Seed generic pentru o traducere a Bibliei. `idOffset` ține id-urile cărților
+ * unei traduceri complet separate de ale alteia (Cornilescu 1-66, WEB 1001-1066
+ * ș.a.m.d.) — `bible_verses.book_id` rămâne singura cheie de care au nevoie
+ * restul interogărilor, fără JOIN suplimentar pe traducere.
+ */
+function seedBibleTranslation(jsonPath: string, translation: string, idOffset: number) {
+  console.log('[Bible] Seeding', translation, 'from', jsonPath);
   try {
     const raw = fs.readFileSync(jsonPath, 'utf-8');
     const data = JSON.parse(raw);
@@ -1246,7 +1270,7 @@ export function seedBibleFromJson() {
 
     const db = getDb();
     const insertBook = db.prepare(
-      'INSERT OR REPLACE INTO bible_books (id, name, abbreviation, testament, book_order, chapter_count) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO bible_books (id, name, abbreviation, testament, book_order, chapter_count, translation) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     const insertVerse = db.prepare(
       'INSERT INTO bible_verses (book_id, chapter, verse, text, search_text) VALUES (?, ?, ?, ?, ?)'
@@ -1256,25 +1280,42 @@ export function seedBibleFromJson() {
       let totalVerses = 0;
       for (const book of books) {
         const nr = book.nr;
+        const id = idOffset + nr;
         const name = book.name;
-        const abbr = ABBREVIATIONS[name] ?? name.substring(0, 4);
-        const testament = nr <= 39 ? 'VT' : 'NT';
+        const abbr = book.abbreviation ?? ABBREVIATIONS[name] ?? name.substring(0, 4);
+        const testament = book.testament ?? (nr <= 39 ? 'VT' : 'NT');
         const chapters = book.chapters ?? [];
-        insertBook.run(nr, name, abbr, testament, nr, chapters.length);
+        insertBook.run(id, name, abbr, testament, nr, chapters.length, translation);
 
         for (const ch of chapters) {
           for (const v of (ch.verses ?? [])) {
             const text = (v.text ?? '').trim();
-            insertVerse.run(nr, ch.chapter, v.verse, text, normalizeSearchText(text));
+            insertVerse.run(id, ch.chapter, v.verse, text, normalizeSearchText(text));
             totalVerses++;
           }
         }
       }
-      console.log(`[Bible] Seeded ${books.length} books, ${totalVerses} verses`);
+      console.log(`[Bible] Seeded ${translation}: ${books.length} books, ${totalVerses} verses`);
     });
     tx();
   } catch (err) {
-    console.error('[Bible] Seed failed:', err);
+    console.error('[Bible] Seed failed for', translation, ':', err);
+  }
+}
+
+/** Seed-ul complet: Cornilescu (română, implicit) + World English Bible
+ * (engleză, domeniu public) — fiecare INDEPENDENT, ca o instalare fără
+ * internet să aibă mereu amândouă traducerile bundle-uite din start. */
+export function seedBibleFromJson() {
+  if (!hasBibleData('cornilescu')) {
+    const p = findSeedJsonPath('cornilescu.json');
+    if (p) seedBibleTranslation(p, 'cornilescu', 0);
+    else console.warn('[Bible] cornilescu.json not found, skipping seed');
+  }
+  if (!hasBibleData('web')) {
+    const p = findSeedJsonPath('web.json');
+    if (p) seedBibleTranslation(p, 'web', 1000);
+    else console.warn('[Bible] web.json not found, skipping seed');
   }
 }
 

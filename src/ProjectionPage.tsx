@@ -394,9 +394,11 @@ export function ProjectionPage() {
 
   const section: HymnSection | undefined = data?.sections[data.currentIndex];
   const isBible = data?.contentType === 'bible';
+  const tabKey: 'imnuri' | 'biblia' = isBible ? 'biblia' : 'imnuri';
 
-  // Font size setting: default 1.2 (larger than before), user-adjustable from settings
-  const fontSizeMultiplier = (bg.projectionFontSize ?? 1.2) * zoomLevel;
+  // Font size setting: default 1.2, separat per tab (imnuri/biblie) dacă a fost
+  // ales explicit; altfel cade pe mărimea generală, pentru instalări vechi.
+  const fontSizeMultiplier = (bg.projectionFontSizeByTab?.[tabKey] ?? bg.projectionFontSize ?? 1.2) * zoomLevel;
 
   // ── Auto-shrink: guarantees text NEVER overflows the container ──
   const contentRef = useRef<HTMLDivElement>(null);
@@ -453,7 +455,7 @@ export function ProjectionPage() {
   const hymnFontSize = (() => {
     if (!data || data.sections.length === 0) return null;
 
-    // For Bible content, keep per-verse sizing (verses are independent)
+    // Biblia se uniformizează separat, mai jos (proză, nu strofe cu rânduri fixe)
     if (isBible) return null;
 
     let worstVw = 10;
@@ -474,37 +476,54 @@ export function ProjectionPage() {
     return `calc(clamp(1.5rem, min(${vw}vw, ${vh}vh), 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   })();
 
-  // Dynamic font size: use the uniform hymn font, or per-section for Bible
+  // ── Font uniform pentru toată pasajul biblic încărcat ──
+  // Aceeași idee ca la imnuri: analizăm TOATE versetele încărcate acum (nu doar
+  // cel curent) și alegem cea mai strânsă potrivire, ca fontul să nu mai sară
+  // vizibil când navighezi de la un verset scurt la unul lung în același pasaj.
+  const bibleFontSize = (() => {
+    if (!data || data.sections.length === 0) return null;
+    if (!isBible) return null;
+
+    // Dimensionare pe ARIE, nu pe „cea mai lungă linie". Versetele biblice sunt
+    // proză continuă care se ÎNCADREAZĂ prin wrapping — o formulă pe linie
+    // presupune o singură linie ne-întreruptă și dă font minuscul la versete
+    // lungi. Aici: font ∝ 1/√(nr. caractere), care umple coerent aria;
+    // plafonat SUS ca textele scurte să NU acopere tot ecranul și JOS ca
+    // textele lungi să rămână lizibile. Bucla de shrink de mai sus corectează
+    // apoi orice depășire reală măsurată.
+    let worstVh = 11;
+    for (const sec of data.sections) {
+      const charCount = Math.max(1, sec.text.trim().length);
+      const sizeVh = Math.max(4.5, Math.min(11, 105 / Math.sqrt(charCount)));
+      worstVh = Math.min(worstVh, sizeVh);
+    }
+    return `calc(clamp(2.5rem, ${worstVh.toFixed(2)}vh, 11rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
+  })();
+
+  // Dynamic font size: hymn uniform, bible uniform, sau fallback per-secțiune
   let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   if (hymnFontSize) {
     // Hymn: consistent font across all slides
     dynamicFontSize = hymnFontSize;
+  } else if (bibleFontSize) {
+    dynamicFontSize = bibleFontSize;
   } else if (section) {
-    if (isBible) {
-      // Dimensionare pe ARIE, nu pe „cea mai lungă linie". Versetele biblice sunt
-      // proză continuă care se ÎNCADREAZĂ prin wrapping — vechea formulă (150/caractere)
-      // presupunea o singură linie ne-întreruptă și dădea font minuscul la versete
-      // lungi (ex. 120 car. pe o linie → ~1.25vw ≈ 24px). Aici: font ∝ 1/√(nr. caractere),
-      // care umple coerent aria; plafonat SUS ca textele scurte să NU acopere tot
-      // ecranul și JOS ca textele lungi să rămână lizibile. Bucla de shrink de mai sus
-      // corectează apoi orice depășire reală măsurată.
-      const charCount = Math.max(1, section.text.trim().length);
-      const sizeVh = Math.max(4.5, Math.min(11, 105 / Math.sqrt(charCount)));
-      dynamicFontSize = `calc(clamp(2.5rem, ${sizeVh.toFixed(2)}vh, 11rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
-    } else {
-      // fallback (conținut fără uniformizare): dimensionare per-secțiune ca înainte
-      const lines = section.text.split('\n');
-      const lineCount = Math.max(1, lines.length);
-      const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
-      const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
-      const maxVh = Math.min(14, 82 / (lineCount * 1.45)).toFixed(2);
-      dynamicFontSize = `calc(clamp(2rem, min(${maxVw}vw, ${maxVh}vh), 8rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
-    }
+    // fallback (conținut fără uniformizare): dimensionare per-secțiune ca înainte
+    const lines = section.text.split('\n');
+    const lineCount = Math.max(1, lines.length);
+    const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
+    const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
+    const maxVh = Math.min(14, 82 / (lineCount * 1.45)).toFixed(2);
+    dynamicFontSize = `calc(clamp(2rem, min(${maxVw}vw, ${maxVh}vh), 8rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   }
 
-  // Resolve background styles
-  const bgType = bg.bgType ?? 'color';
-  const bgColor = bg.bgColor ?? '#000000';
+  // Resolve background styles — override per tab, PESTE fundalul general
+  const bgOverride = bg.bgByTab?.[tabKey];
+  const bgType = bgOverride?.bgType ?? bg.bgType ?? 'color';
+  const bgColor = bgOverride?.bgColor ?? bg.bgColor ?? '#000000';
+  const bgImagePath = bgOverride?.bgImagePath ?? bg.bgImagePath;
+  const bgVideoPath = bgOverride?.bgVideoPath ?? bg.bgVideoPath;
+  const bgOpacity = bgOverride?.bgOpacity ?? bg.bgOpacity ?? 1;
   const hymnNumberColor = bg.hymnNumberColor ?? '#9fb3ff';
   const contentTextColor = bg.contentTextColor ?? '#ffffff';
   const bgStyle: React.CSSProperties =
@@ -520,12 +539,12 @@ export function ProjectionPage() {
     >
       {/* ── Background layers ── */}
 
-      {bgType === 'image' && bg.bgImagePath && (
+      {bgType === 'image' && bgImagePath && (
         <div
           className="absolute inset-0 bg-cover bg-center"
           style={{
-            backgroundImage: `url("${toFileUrl(bg.bgImagePath)}")`,
-            opacity: bg.bgOpacity ?? 1,
+            backgroundImage: `url("${toFileUrl(bgImagePath)}")`,
+            opacity: bgOpacity,
           }}
         >
           {/* dark scrim so text stays readable */}
@@ -533,13 +552,13 @@ export function ProjectionPage() {
         </div>
       )}
 
-      {bgType === 'video' && bg.bgVideoPath && (
+      {bgType === 'video' && bgVideoPath && (
         <>
           <video
             ref={bgVideoRef}
-            src={toFileUrl(bg.bgVideoPath)}
+            src={toFileUrl(bgVideoPath)}
             className="absolute inset-0 w-full h-full object-cover"
-            style={{ opacity: bg.bgOpacity ?? 1 }}
+            style={{ opacity: bgOpacity }}
             autoPlay loop muted playsInline
           />
           <div className="absolute inset-0 bg-black/50" />

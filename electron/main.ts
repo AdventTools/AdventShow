@@ -38,6 +38,7 @@ import {
   searchBible,
   getBibleVerseRange,
   hasBibleData,
+  getBibleTranslations,
   seedBibleFromJson,
   syncSeedCorrections,
   syncSeedContent,
@@ -115,6 +116,21 @@ interface AppSettings {
   contentTextColor?: string
   adminPasswordHash?: string
   projectionFontSize?: number
+  // Mărime separată per tab — dacă lipsește pentru un tab, se folosește
+  // `projectionFontSize` de mai sus (compatibilitate cu instalări vechi)
+  projectionFontSizeByTab?: { imnuri?: number; biblia?: number }
+  // Fundal separat per tab, PESTE fundalul general (bgType/bgColor/... de mai
+  // sus). Dacă un tab n-are override aici, moștenește fundalul general.
+  bgByTab?: {
+    imnuri?: { bgType?: 'color' | 'image' | 'video'; bgColor?: string; bgImagePath?: string; bgVideoPath?: string; bgOpacity?: number }
+    biblia?: { bgType?: 'color' | 'image' | 'video'; bgColor?: string; bgImagePath?: string; bgVideoPath?: string; bgOpacity?: number }
+  }
+  // Tema interfeței PROPRII a aplicației (nu a proiecției) — 'night' rămâne implicit
+  appTheme?: 'dark' | 'light'
+  // Limba interfeței proprii a aplicației
+  uiLanguage?: 'ro' | 'en'
+  // Traducerea Bibliei afișate/proiectate — 'cornilescu' rămâne implicit
+  bibleTranslation?: string
   audioOutputDeviceId?: string
   debugLog?: boolean
   downloadFolder?: string  // custom folder for YouTube downloads
@@ -152,6 +168,16 @@ interface AppSettings {
   // administratorul se păstrează aici și nu se resetează niciodată singur.
   syncTitleDelayMs?: number      // cât mai stă titlul după ce pornește introducerea
   syncLeadMs?: number            // cu cât înainte de sfârșitul secțiunii apare următoarea
+}
+
+/**
+ * Etichetele dialogurilor native (selectoare de fișiere) — SINGURUL loc din
+ * procesul main unde apare text pentru utilizator, deci nu justifică un
+ * sistem separat de traducere: doar alege engleză/română după setarea din
+ * interfață. Restul aplicației (renderer) are propriul `t()` din src/i18n.ts.
+ */
+function dlgLabel(ro: string, en: string): string {
+  return readSettings().uiLanguage === 'en' ? en : ro
 }
 
 // ── Debug Logger ──────────────────────────────────────────────────────────────
@@ -1081,7 +1107,12 @@ function createProjectionWindow() {
     transparent: !isWin,
     backgroundColor: isWin ? '#000000' : '#00000000',
     show: false,
-    alwaysOnTop: targetDisplay.id === primary.id,
+    // Pe ecranul țintă (televizor/proiector) nu rulează nimic altceva, deci a fi
+    // mereu deasupra nu deranjează cu nimic — dar previne exact bug-ul raportat:
+    // Windows retrogradând fereastra de proiecție (frame:false, nu e fullscreen
+    // OS pe Windows) în spate după un alt-tab, când nu era alwaysOnTop decât
+    // pe montaj cu un singur ecran.
+    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       // Allow file:// access for background images/videos
@@ -1096,6 +1127,25 @@ function createProjectionWindow() {
     if (isWin && isWinAlive(projectionWin)) acoperaEcranul(projectionWin, targetDisplay)
     setTimeout(() => win?.focus(), 200)
   })
+
+  // Plasă de siguranță suplimentară pe Windows: chiar cu alwaysOnTop, un
+  // alt-tab poate lăsa temporar fereastra de proiecție acoperită (overlay-uri
+  // de sistem, alte ferestre mereu-deasupra). La orice pierdere de focus a
+  // uneia din cele două ferestre, o readucem deasupra FĂRĂ să-i fure focusul.
+  if (isWin) {
+    const reasertaProiectia = () => {
+      if (!isWinAlive(projectionWin)) return
+      projectionWin!.setAlwaysOnTop(true)
+      projectionWin!.showInactive()
+      projectionWin!.moveTop()
+    }
+    projectionWin.on('blur', reasertaProiectia)
+    win?.on('blur', reasertaProiectia)
+    // scoatem listener-ul de pe fereastra PRINCIPALĂ la închiderea proiecției —
+    // altfel se adună unul nou la fiecare deschidere și `win` trăiește mult
+    // mai mult decât `projectionWin`
+    projectionWin.once('closed', () => { win?.off('blur', reasertaProiectia) })
+  }
 
   const projUrl = VITE_DEV_SERVER_URL
     ? `${VITE_DEV_SERVER_URL}?mode=projection`
@@ -1223,14 +1273,40 @@ function copySeedDbIfNeeded() {
     path.join(process.resourcesPath ?? '', 'hymns.db'),
     path.join(process.env.APP_ROOT!, 'public', 'hymns.db'),
   ]
-  function copyFromSeed() {
+  function copyFromSeedOnce() {
     for (const seedPath of seedPaths) {
       if (fs.existsSync(seedPath)) { fs.copyFileSync(seedPath, userDbPath); return true }
     }
     return false
   }
+  function copyFromSeed() {
+    const maxAttempts = 5
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return copyFromSeedOnce()
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code
+        const retryable = code === 'EBUSY' || code === 'EPERM' || code === 'EACCES'
+        if (!retryable || attempt === maxAttempts) throw err
+        const delayMs = attempt * 400
+        const until = Date.now() + delayMs
+        while (Date.now() < until) { /* așteptare scurtă, sincronă: suntem încă înainte de deschiderea ferestrei */ }
+      }
+    }
+    return false
+  }
   if (!fs.existsSync(userDbPath)) {
-    copyFromSeed()
+    try {
+      copyFromSeed()
+    } catch (err) {
+      dialog.showErrorBox(
+        'AdventShow nu a putut porni',
+        'Copierea bazei de date inițiale a eșuat pentru că fișierul era blocat de un alt program ' +
+        '(de exemplu un antivirus). Închide orice altă instanță AdventShow și antivirusul temporar, ' +
+        'apoi redeschide aplicația.\n\nDetalii: ' + String((err as Error)?.message ?? err),
+      )
+      app.quit()
+    }
   }
 }
 
@@ -1589,7 +1665,7 @@ app.whenReady().then(() => {
     if (!win) return undefined
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
-      filters: [{ name: 'Prezentări PowerPoint', extensions: ['ppt', 'pptx'] }],
+      filters: [{ name: dlgLabel('Prezentări PowerPoint', 'PowerPoint Presentations'), extensions: ['ppt', 'pptx'] }],
     })
     return result.canceled ? undefined : result.filePaths[0]
   })
@@ -1825,12 +1901,12 @@ app.whenReady().then(() => {
   ipcMain.handle('dialog:pick-media', async (_e, mediaType: 'image' | 'video') => {
     const filters = mediaType === 'image'
       ? [
-          { name: 'Imagini', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif'] },
-          { name: 'Toate fișierele', extensions: ['*'] },
+          { name: dlgLabel('Imagini', 'Images'), extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'avif'] },
+          { name: dlgLabel('Toate fișierele', 'All Files'), extensions: ['*'] },
         ]
       : [
-          { name: 'Videoclipuri', extensions: ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg', 'ogv', 'mpg', 'mpeg', 'ts', 'm2ts', 'mts', '3gp', 'divx', 'vob'] },
-          { name: 'Toate fișierele', extensions: ['*'] },
+          { name: dlgLabel('Videoclipuri', 'Videos'), extensions: ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg', 'ogv', 'mpg', 'mpeg', 'ts', 'm2ts', 'mts', '3gp', 'divx', 'vob'] },
+          { name: dlgLabel('Toate fișierele', 'All Files'), extensions: ['*'] },
         ]
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openFile'],
@@ -1950,16 +2026,17 @@ app.whenReady().then(() => {
   })
 
   // ── Bible ───────────────────────────────────────────────────────────────────
-  ipcMain.handle('bible:get-books', () => getBibleBooks())
+  ipcMain.handle('bible:get-books', (_e, translation?: string) => getBibleBooks(translation))
   ipcMain.handle('bible:get-chapters', (_e, bookId: number) => getBibleChapters(bookId))
   ipcMain.handle('bible:get-verses', (_e, bookId: number, chapter: number) =>
     getBibleVerses(bookId, chapter))
-  ipcMain.handle('bible:search', (_e, query: string, bookId?: number, chapter?: number) =>
-    searchBible(query, bookId, chapter))
+  ipcMain.handle('bible:search', (_e, query: string, bookId?: number, chapter?: number, translation?: string) =>
+    searchBible(query, bookId, chapter, translation))
   ipcMain.handle('bible:get-verse-range',
     (_e, bookId: number, chapter: number, startVerse: number, endVerse: number) =>
       getBibleVerseRange(bookId, chapter, startVerse, endVerse))
   ipcMain.handle('bible:has-data', () => hasBibleData())
+  ipcMain.handle('bible:get-translations', () => getBibleTranslations())
 
   // ── Update (electron-updater) ─────────────────────────────────────────────
   ipcMain.handle('update:check', async () => {
@@ -2066,8 +2143,8 @@ app.whenReady().then(() => {
     const result = await dialog.showOpenDialog(win, {
       properties: ['openFile'],
       filters: [
-        { name: 'Videoclipuri', extensions: ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg', 'ogv', 'mpg', 'mpeg', 'ts', 'm2ts', 'mts', '3gp', 'divx', 'vob'] },
-        { name: 'Toate fișierele', extensions: ['*'] },
+        { name: dlgLabel('Videoclipuri', 'Videos'), extensions: ['mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi', 'wmv', 'flv', 'ogg', 'ogv', 'mpg', 'mpeg', 'ts', 'm2ts', 'mts', '3gp', 'divx', 'vob'] },
+        { name: dlgLabel('Toate fișierele', 'All Files'), extensions: ['*'] },
       ],
     })
     if (result.canceled) return undefined

@@ -296,9 +296,16 @@ export async function downloadOne(
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
     const out = fs.createWriteStream(part)
+    // Ascultătorul se atașează ÎNAINTE de buclă: dacă discul se umple în timpul
+    // scrierii, evenimentul 'error' e emis asincron — fără ascultător aici,
+    // Node îl aruncă drept excepție necaptată în procesul main și crapă aplicația.
+    let streamError: Error | null = null
+    out.on('error', (err) => { streamError = err })
+
     let scris = 0
     const reader = res.body.getReader()
     for (;;) {
+      if (streamError) throw streamError
       const { done, value } = await reader.read()
       if (done) break
       if (value) {
@@ -309,9 +316,10 @@ export async function downloadOne(
         }
       }
     }
+    if (streamError) throw streamError
     await new Promise<void>((resolve, reject) => {
       out.end(() => resolve())
-      out.on('error', reject)
+      out.once('error', reject)
     })
 
     if (fs.statSync(part).size !== item.bytes) {
@@ -327,6 +335,11 @@ export async function downloadOne(
       /* nu exista */
     }
     deps.log('[Acompaniament] Eșec la imnul', item.n + ':', (e as Error).message)
+    if ((e as NodeJS.ErrnoException).code === 'ENOSPC') {
+      const discPlin = new Error('disc plin') as NodeJS.ErrnoException
+      discPlin.code = 'ENOSPC'
+      throw discPlin
+    }
     return null
   }
 }
@@ -344,7 +357,7 @@ export async function downloadMissing(
   onProgress: (facute: number, total: number, numar: number, procent: number) => void,
   isCancelled: () => boolean,
   isBusy: () => boolean = () => false,
-): Promise<{ ok: number; esuate: number; oprit: boolean }> {
+): Promise<{ ok: number; esuate: number; oprit: boolean; discPlin?: boolean }> {
   const lipsa = manifest.items.filter(i => !isPresent(deps, i))
   let ok = 0
   let esuate = 0
@@ -355,11 +368,19 @@ export async function downloadMissing(
       await new Promise(r => setTimeout(r, 2000))
     }
     const item = lipsa[idx]
-    const rez = await downloadOne(deps, manifest, item, (n, p) => {
-      onProgress(idx, lipsa.length, n, p)
-    })
-    if (rez) ok++
-    else esuate++
+    try {
+      const rez = await downloadOne(deps, manifest, item, (n, p) => {
+        onProgress(idx, lipsa.length, n, p)
+      })
+      if (rez) ok++
+      else esuate++
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOSPC') {
+        deps.log('[Acompaniament] Disc plin — descărcarea s-a oprit după', item.n)
+        return { ok, esuate, oprit: false, discPlin: true }
+      }
+      esuate++
+    }
   }
   return { ok, esuate, oprit: false }
 }

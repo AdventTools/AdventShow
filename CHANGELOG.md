@@ -9,7 +9,21 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Proiecția pe Windows nu mai rămâne uneori în spatele altor ferestre după un alt-tab — fereastra de proiecție stă acum mereu deasupra pe ecranul ei dedicat.
+- Pe Windows, dacă un antivirus sau o instanță veche bloca temporar fișierul, prima pornire crăpa aplicația în loc să reîncerce — acum reîncearcă singură, iar dacă tot nu merge, arată un mesaj clar în loc să dispară.
+- Pe Mac, dacă discul se umplea în timpul descărcării acompaniamentelor, aplicația crăpa repetat — acum se oprește elegant, cu un mesaj clar («Discul e plin»), și păstrează ce a apucat să descarce.
+- Câmpul de parolă (la editarea unui imn, la admin, la recuperare) uneori nu primea cursorul la click pe Windows — acum reîncearcă singur până reușește.
+- La Biblie: fontul nu mai sare vizibil între un verset scurt și unul lung din același pasaj — se uniformizează la fel ca la imnuri.
+- Mărimea textului de proiecție se ține minte acum separat pentru Imnuri și pentru Biblie.
+- Fundalul proiecției poate fi acum diferit la Biblie față de Imnuri (opțional, peste cel general).
+- Interfața proprie a aplicației are acum și temă deschisă, pe lângă cea închisă (Setări → Administrare).
+- Ecranul de proiecție se poate schimba acum dintr-un selector rapid, direct din bara de sus — nu doar din Setări.
+- Fereastra de Setări a fost refăcută: ocupă acum tot spațiul aplicației, cu navigare pe bara laterală (4 secțiuni: Proiecție, Administrare, Despre, Ajutor) și câmpuri așezate într-un grid care se adaptează la rezoluție — mult mai puțin scroll, la orice mărime de ecran.
+
+### Adăugat
+- Biblia World English Bible (engleză, domeniu public) — pe lângă Cornilescu, alese dintr-un selector chiar lângă căutarea din Biblie.
+- Interfața aplicației e acum disponibilă și în engleză, cu un selector discret (butonul RO/EN din bara de sus). Traducerea Bibliei alese și interfața se schimbă independent una de alta — proiecția pe ecran urmează mereu Biblia aleasă, nu limba panoului de control al operatorului.
 
 ---
 

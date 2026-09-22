@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Download, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { accTitle } from './accompaniment-ui';
+import { useT } from './i18n';
 
 /** Secțiune de previzualizare — la Biblie `type` e 'verse' și `label` vine deja calculat („v. 5"). */
 interface PreviewSection {
@@ -61,6 +62,7 @@ function mmss(sec: number): string {
 }
 
 export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment }: ProjectorControllerProps) {
+  const t = useT();
   const [currentIndex, setCurrentIndex] = useState(-1);
 
   // Nivelul de zoom al textului pe proiecție, raportat înapoi din fereastra de proiecție
@@ -155,7 +157,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
   const next = sections[currentIndex + 1];
 
   // Eticheta vine deja calculată din previzualizare („Strofa 3", „Refren", „v. 5")
-  const sectionLabel = (s: PreviewSection) => s.label ?? (s.type === 'refren' ? 'Refren' : '');
+  const sectionLabel = (s: PreviewSection) => s.label ?? (s.type === 'refren' ? t('Refren') : '');
 
   // Etichetă scurtă pentru butonul de salt: „R" refren, numărul strofei, sau doar cifra versetului
   const dotLabel = (s: PreviewSection) => {
@@ -176,7 +178,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           <span className="text-xs text-white/60 font-semibold truncate">{hymnTitle}</span>
         </div>
         <span className="text-[10px] text-white/20 ml-1">
-          {currentIndex === -1 ? 'Titlu' : `${currentIndex + 1} / ${sections.length}`}
+          {currentIndex === -1 ? t('Titlu') : `${currentIndex + 1} / ${sections.length}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
           {/* Acompaniament — o singură apăsare, sau tasta A. Cât cântă, arată
@@ -195,7 +197,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 {accompaniment.loading ? (
                   <>
                     <Loader className="w-3 h-3 animate-spin" />
-                    {accompaniment.willPlay ? 'Se descarcă… · nu porni' : 'Se descarcă…'}
+                    {accompaniment.willPlay ? t('Se descarcă… · nu porni') : t('Se descarcă…')}
                   </>
                 ) : accompaniment.playing ? (
                   <>
@@ -205,13 +207,13 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 ) : accompaniment.needsDownload ? (
                   <>
                     <Download className="w-3 h-3" />
-                    {accompaniment.willPlay ? 'Descarcă și cântă' : 'Descarcă'}
+                    {accompaniment.willPlay ? t('Descarcă și cântă') : t('Descarcă')}
                     {' '}{accompaniment.sizeMb.toFixed(1)} MB
                   </>
                 ) : accompaniment.hasMarks ? (
-                  <><Music className="w-3 h-3" /> Cântă singur</>
+                  <><Music className="w-3 h-3" /> {t('Cântă singur')}</>
                 ) : (
-                  <><Music className="w-3 h-3" /> Cântă</>
+                  <><Music className="w-3 h-3" /> {t('Cântă')}</>
                 )}
               </button>
               {accompaniment.hasMarks && !accompaniment.playing && !accompaniment.loading
@@ -219,7 +221,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 <button
                   onClick={accompaniment.onPlayOnly}
                   className="mr-1 flex items-center px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-white/60 hover:text-white transition-all"
-                  title="Doar acompaniamentul — strofele le schimbi tu"
+                  title={t('Doar acompaniamentul — strofele le schimbi tu')}
                 >
                   <Music className="w-3 h-3" />
                 </button>
@@ -228,25 +230,25 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           )}
 
           {/* Zoom text proiecție — A− [nivel] A+ (click pe procent = 100%) */}
-          <div className="relative flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 p-0.5 mr-1" title="Zoom text proiecție">
+          <div className="relative flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 p-0.5 mr-1" title={t('Zoom text proiecție')}>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-out')}
               className="w-7 h-6 flex items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold"
-              title="Micșorează textul (↓)"
+              title={t('Micșorează textul (↓)')}
             >
               A−
             </button>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-reset')}
               className="min-w-[2.75rem] h-6 px-1 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-white/75 hover:text-white hover:bg-white/10 transition-all"
-              title="Resetează la 100%"
+              title={t('Resetează la 100%')}
             >
               {zoomPercent}%
             </button>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-in')}
               className="w-7 h-6 flex items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-all text-sm font-bold"
-              title="Mărește textul (↑)"
+              title={t('Mărește textul (↑)')}
             >
               A+
             </button>
@@ -254,18 +256,18 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
               className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 rounded-md bg-black/85 border border-white/15 text-[11px] font-semibold text-white shadow-lg pointer-events-none transition-opacity duration-300"
               style={{ opacity: zoomToast ? 1 : 0 }}
             >
-              Text: {zoomPercent}%
+              {t('Text: {pct}%', { pct: zoomPercent })}
             </div>
           </div>
           <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">
-            ←→ Space: navigare · ↑↓: font{accompaniment ? ' · A: acompaniament' : ''}
+            {t('←→ Space: navigare · ↑↓: font')}{accompaniment ? t(' · A: acompaniament') : ''}
           </kbd>
           <button
             onClick={onClose}
             className="ml-3 flex items-center gap-1.5 px-3 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-semibold transition-all"
-            title="Oprește proiecția (Esc)"
+            title={t('Oprește proiecția (Esc)')}
           >
-            <MonitorOff className="w-3 h-3" /> Oprește
+            <MonitorOff className="w-3 h-3" /> {t('Oprește')}
           </button>
         </div>
       </div>
@@ -275,17 +277,17 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           verde DISPARE — altfel ar minți exact când contează mai mult. */}
       {accompaniment?.autoState === 'auto' && (
         <div className="flex items-center gap-2.5 px-4 py-2 bg-emerald-500/15 border-b border-emerald-400/25">
-          <span className="text-xs font-black tracking-widest text-emerald-300">AUTOMAT</span>
+          <span className="text-xs font-black tracking-widest text-emerald-300">{t('AUTOMAT')}</span>
           <span className="text-xs text-emerald-100/85">
-            Strofele se schimbă singure. Nu atinge nimic.
+            {t('Strofele se schimbă singure. Nu atinge nimic.')}
           </span>
         </div>
       )}
       {accompaniment?.autoState === 'preluat' && (
         <div className="flex items-center gap-2.5 px-4 py-2 bg-amber-500/15 border-b border-amber-400/25">
-          <span className="text-xs font-black tracking-widest text-amber-300">MANUAL</span>
+          <span className="text-xs font-black tracking-widest text-amber-300">{t('MANUAL')}</span>
           <span className="text-xs text-amber-100/85">
-            Ai preluat — de aici schimbi tu. Acompaniamentul merge înainte.
+            {t('Ai preluat — de aici schimbi tu. Acompaniamentul merge înainte.')}
           </span>
         </div>
       )}
@@ -298,12 +300,12 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           onClick={() => navigate(currentIndex - 1)}
           disabled={currentIndex === -1}
           className="flex items-center gap-2 px-4 py-3 text-left transition-all hover:bg-white/3 disabled:opacity-20 disabled:cursor-not-allowed flex-shrink-0 w-48 border-r border-white/5"
-          title="Anterior (←)"
+          title={t('Anterior (←)')}
         >
           <ChevronLeft className="w-4 h-4 text-white/20 flex-shrink-0" />
           {currentIndex === 0 ? (
             <div className="min-w-0">
-              <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-primary/50">Titlu</div>
+              <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-primary/50">{t('Titlu')}</div>
               <div className="text-xs text-white/25 truncate leading-snug">{titleLine}</div>
             </div>
           ) : prev ? (
@@ -324,7 +326,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
         <div className="flex-1 px-6 py-3 bg-white/3 border-r border-white/5">
           {currentIndex === -1 ? (
             <>
-              <div className="text-[10px] font-bold uppercase tracking-widest mb-1 text-primary/70">Titlu</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest mb-1 text-primary/70">{t('Titlu')}</div>
               <div className="text-sm text-white/80 leading-relaxed font-medium">
                 {contentType === 'hymn' && <span className="text-primary font-black">{hymnNumber}.</span>}{contentType === 'hymn' ? ' ' : ''}{hymnTitle}
               </div>
@@ -346,7 +348,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           onClick={() => navigate(currentIndex + 1)}
           disabled={currentIndex === sections.length - 1}
           className="flex items-center gap-2 px-4 py-3 text-left transition-all hover:bg-white/3 disabled:opacity-20 disabled:cursor-not-allowed flex-shrink-0 w-48 border-r border-white/5"
-          title="Următor (→)"
+          title={t('Următor (→)')}
         >
           {next ? (
             <div className="min-w-0 flex-1">
@@ -390,13 +392,13 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           {/* Punct slide de titlu */}
           <button
             onClick={() => navigate(-1)}
-            title="Titlu"
+            title={t('Titlu')}
             className={`flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none transition-all duration-200 ${currentIndex === -1
               ? 'h-4 min-w-[1.4rem] px-1.5 bg-primary text-white'
               : 'w-2 h-2 text-transparent bg-primary/30 hover:bg-primary/60'
               }`}
           >
-            {currentIndex === -1 ? 'T' : ''}
+            {currentIndex === -1 ? t('T') : ''}
           </button>
           {sections.map((s, i) => {
             const isCurrent = i === currentIndex;

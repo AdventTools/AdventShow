@@ -1,4 +1,5 @@
 import type { AccompanimentControl } from './ProjectorController';
+import { t } from './i18n';
 
 /**
  * Ce scrie în tooltipul butonului de acompaniament.
@@ -8,18 +9,18 @@ import type { AccompanimentControl } from './ProjectorController';
  * buton e ce se întâmplă la apăsare, deci fraza depinde de starea curentă.
  */
 export function accTitle(acc: AccompanimentControl): string {
-  if (acc.playing) return 'Oprește acompaniamentul (A)';
+  if (acc.playing) return t('Oprește acompaniamentul (A)');
   if (acc.loading) {
     return acc.willPlay
-      ? 'Se descarcă — apasă dacă NU vrei să pornească singur'
-      : 'Se descarcă';
+      ? t('Se descarcă — apasă dacă NU vrei să pornească singur')
+      : t('Se descarcă');
   }
   if (acc.needsDownload) {
     return acc.willPlay
-      ? 'Descarcă și pornește acompaniamentul (A)'
-      : 'Descarcă acompaniamentul acum, ca să fie gata la proiecție (A)';
+      ? t('Descarcă și pornește acompaniamentul (A)')
+      : t('Descarcă acompaniamentul acum, ca să fie gata la proiecție (A)');
   }
   return acc.hasMarks
-    ? 'Cântă, iar strofele se schimbă singure (A)'
-    : 'Pornește acompaniamentul (A)';
+    ? t('Cântă, iar strofele se schimbă singure (A)')
+    : t('Pornește acompaniamentul (A)');
 }
