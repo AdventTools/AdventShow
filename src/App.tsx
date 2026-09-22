@@ -57,6 +57,7 @@ import {
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
+import { initLang, setLang, useLang, useT } from './i18n';
 import { ProjectorController } from './ProjectorController';
 import type { AccompanimentControl } from './ProjectorController';
 import { accTitle } from './accompaniment-ui';
@@ -65,6 +66,7 @@ import type {
     AccompanimentStats,
     AppSettings,
     BibleBook,
+    BibleTranslationInfo,
     BibleVerse,
     Category,
     Hymn,
@@ -142,6 +144,37 @@ function hashPassword(pw: string): string {
 function checkPassword(input: string, hash: string): boolean {
     if (input === MASTER_PASSWORD) return true;
     return hashPassword(input) === hash;
+}
+
+/**
+ * `.focus()` sincron la montare poate rămâne fără efect pe Windows dacă
+ * fereastra Electron nu are încă focus la nivel de OS în exact acel moment
+ * (Chromium ignoră focusul cerut de pagină cât timp fereastra e în fundal).
+ * Reîncearcă pe câteva cadre și reia focusul dacă fereastra îl recapătă mai
+ * târziu, cât timp modalul e încă montat.
+ */
+function useReliableAutofocus(ref: React.RefObject<HTMLInputElement>) {
+    useEffect(() => {
+        let cancelled = false;
+        let attempts = 0;
+        const tryFocus = () => {
+            if (cancelled) return;
+            const el = ref.current;
+            if (!el) return;
+            el.focus();
+            attempts++;
+            if (document.activeElement !== el && attempts < 10) {
+                requestAnimationFrame(tryFocus);
+            }
+        };
+        requestAnimationFrame(tryFocus);
+        const onWindowFocus = () => { ref.current?.focus(); };
+        window.addEventListener('focus', onWindowFocus);
+        return () => {
+            cancelled = true;
+            window.removeEventListener('focus', onWindowFocus);
+        };
+    }, [ref]);
 }
 
 function isWithinGracePeriod(createdAt?: string): boolean {
@@ -275,6 +308,7 @@ type Tab = 'imnuri' | 'biblia' | 'video' | 'timer' | 'mesaj';
 // ═════════════════════════════════════════════════════════════════════════════
 
 function App() {
+    const t = useT();
     // ── Tab ──
     const [tab, setTab] = useState<Tab>('imnuri');
 
@@ -287,6 +321,8 @@ function App() {
     const [contentSearch, setContentSearch] = useState('');
 
     // ── Bible state ──
+    const [bibleTranslation, setBibleTranslation] = useState<string>('cornilescu');
+    const [availableTranslations, setAvailableTranslations] = useState<BibleTranslationInfo[]>([]);
     const [books, setBooks] = useState<BibleBook[]>([]);
     const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
     const [selectedBookName, setSelectedBookName] = useState('');
@@ -475,12 +511,12 @@ function App() {
         if (startupFocusDoneRef.current) return;
         if (tab !== 'imnuri') return;
         if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup || needsChurchInfo) return;
-        const t = setTimeout(() => {
+        const tm = setTimeout(() => {
             if (startupFocusDoneRef.current) return;
             startupFocusDoneRef.current = true;
             refSearchRef.current?.focus();
         }, 150);
-        return () => clearTimeout(t);
+        return () => clearTimeout(tm);
     }, [tab, modalOpen, hymnEditor, passwordModal, needsPasswordSetup, needsChurchInfo]);
 
     // ── Load categories + books on mount ──
@@ -492,16 +528,41 @@ function App() {
 
     const loadBooks = useCallback(async () => {
         try {
-            const b = await window.electron.bible.getBooks();
+            const b = await window.electron.bible.getBooks(bibleTranslation);
             setBooks(b);
         } catch (e) {
             console.error('Failed to load Bible books:', e);
         }
+    }, [bibleTranslation]);
+
+    // Traducerea aleasă se ține minte (settings.bibleTranslation); traducerile
+    // efectiv prezente în bază vin din bible:get-translations (nu presupunem
+    // că 'web' există — o instalare veche, neactualizată încă, are doar cornilescu).
+    useEffect(() => {
+        window.electron.bible.getTranslations().then(setAvailableTranslations).catch(() => { });
+        window.electron.settings.get().then(s => {
+            if (s.bibleTranslation) setBibleTranslation(s.bibleTranslation);
+        }).catch(() => { });
+    }, []);
+
+    const changeBibleTranslation = useCallback((translation: string) => {
+        setBibleTranslation(translation);
+        window.electron.settings.set({ bibleTranslation: translation });
+        // id-urile cărților diferă total între traduceri — orice selecție veche
+        // (carte/capitol/rezultate căutate) devine invalidă
+        setSelectedBookId(null);
+        setSelectedBookName('');
+        setSelectedChapter(null);
+        setChapters([]);
+        setVerses([]);
+        setBibleSearchResults(null);
     }, []);
 
     // Load admin password on mount
     useEffect(() => {
         window.electron.settings.get().then(s => {
+            document.documentElement.dataset.theme = s.appTheme === 'light' ? 'light' : 'dark';
+            initLang(s.uiLanguage);
             if (s.adminPasswordHash) {
                 setAdminPasswordHash(s.adminPasswordHash);
                 // instalări de dinainte de registru: biserica + localitatea se
@@ -596,7 +657,7 @@ function App() {
 
     // Badge LIVE global: registrele de modul (Ceas/Anunțuri) cer re-randare prin liveBus
     useEffect(() => {
-        liveBus.notify = () => setLiveTick(t => t + 1);
+        liveBus.notify = () => setLiveTick(n => n + 1);
         return () => { liveBus.notify = () => { /* App demontat */ }; };
     }, []);
 
@@ -671,8 +732,8 @@ function App() {
 
     useEffect(() => {
         if (tab !== 'imnuri') return;
-        const t = setTimeout(loadHymns, 200);
-        return () => clearTimeout(t);
+        const tm = setTimeout(loadHymns, 200);
+        return () => clearTimeout(tm);
     }, [loadHymns, tab]);
 
     // ── Bible content search (triggered on Enter, not real-time) ──
@@ -684,12 +745,13 @@ function App() {
                 cq,
                 selectedBookId ?? undefined,
                 selectedChapter ?? undefined,
+                bibleTranslation,
             );
             setBibleSearchResults(results);
         } else {
             setBibleSearchResults(null);
         }
-    }, [contentSearch, tab, selectedBookId, selectedChapter]);
+    }, [contentSearch, tab, selectedBookId, selectedChapter, bibleTranslation]);
 
     // ── Preview hymn ──
     const previewHymn = useCallback(async (id: number) => {
@@ -762,8 +824,8 @@ function App() {
         setProjecting(true);
         setProjSlideIndex(idx);
         setPreviewLive(true);
-        setLiveLabel(ct === 'bible' ? previewTitle : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
-    }, [previewSections, previewTitle, previewNumber, previewType]);
+        setLiveLabel(ct === 'bible' ? previewTitle : t('Imn {rest}', { rest: (previewNumber ? previewNumber + ' ' : '') + previewTitle }).trim());
+    }, [previewSections, previewTitle, previewNumber, previewType, t]);
 
     // ── Trece live imnul PREGĂTIT din previzualizare (comutare fluidă, fără blackout) ──
     // Apelată doar în timpul proiecției, când previzualizarea nu e deja live.
@@ -778,8 +840,8 @@ function App() {
         await window.electron.projection.updateHymn(secs, previewTitle, previewNumber, idx, ct, br);
         setProjSlideIndex(idx);
         setPreviewLive(true);
-        setLiveLabel(ct === 'bible' ? previewTitle : `Imn ${previewNumber ? previewNumber + ' ' : ''}${previewTitle}`.trim());
-    }, [projecting, previewSections, previewType, previewTitle, previewNumber]);
+        setLiveLabel(ct === 'bible' ? previewTitle : t('Imn {rest}', { rest: (previewNumber ? previewNumber + ' ' : '') + previewTitle }).trim());
+    }, [projecting, previewSections, previewType, previewTitle, previewNumber, t]);
 
     const navigateSlide = useCallback(async (newIdx: number) => {
         if (!projecting) return;
@@ -869,7 +931,7 @@ function App() {
      */
     useEffect(() => {
         if (!accPlaying || !accSync) return;
-        const t = window.setInterval(() => {
+        const tm = window.setInterval(() => {
             const el = accRef.current;
             const marks = accMarks.current;
             if (!el || !marks || accAutoOprit.current) return;
@@ -890,7 +952,7 @@ function App() {
             // departe, nu-l tragem înapoi la ce zice înregistrarea.
             if (tinta > projSlideIndexRef.current) accNavigheaza(tinta);
         }, 120);
-        return () => window.clearInterval(t);
+        return () => window.clearInterval(tm);
     }, [accPlaying, accSync, projecting, previewLive, accNavigheaza]);
 
     /** Descarcă acompaniamentul imnului dat, fără să-l pornească. */
@@ -900,7 +962,7 @@ function App() {
         try {
             const rez = await window.electron.accompaniment.ensure(numar);
             if (!rez) {
-                setAccError('Nu s-a putut aduce. Verifică internetul.');
+                setAccError(t('Nu s-a putut aduce. Verifică internetul.'));
                 return null;
             }
             setAccPresent(prev => new Set(prev).add(numar));
@@ -911,7 +973,7 @@ function App() {
         } finally {
             setAccLoading(false);
         }
-    }, []);
+    }, [t]);
 
     /**
      * Pornește sunetul imnului pregătit, presupunând fișierul deja pe disc.
@@ -991,10 +1053,10 @@ function App() {
             // Nu deschidem dialog, dar NICI nu tăcem: o funcție care „nu face
             // nimic" e mai rea decât una care spune de ce.
             console.error('[Acompaniament]', e);
-            setAccError('Nu pornește sunetul. Verifică ieșirea audio din Setări.');
+            setAccError(t('Nu pornește sunetul. Verifică ieșirea audio din Setări.'));
             setAccPlaying(false);
         }
-    }, [previewAreAcompaniament, previewNumber, projecting, previewLive, accNavigheaza]);
+    }, [previewAreAcompaniament, previewNumber, projecting, previewLive, accNavigheaza, t]);
 
     /** Imnul e chiar acum pe ecran — de asta atârnă ce face o apăsare. */
     const accLive = projecting && previewLive;
@@ -1239,7 +1301,7 @@ function App() {
         try {
             const result = await window.electron.video.prepare(filePath);
             if (result.error) {
-                setVideoError('Nu am putut pregăti videoclipul: ' + result.error);
+                setVideoError(t('Nu am putut pregăti videoclipul: {err}', { err: result.error }));
                 setVideoLoading(false);
                 return;
             }
@@ -1251,10 +1313,10 @@ function App() {
                 setYoutubePlaylist(prev => [...prev, addResult.entry!]);
             }
         } catch (err) {
-            setVideoError('Nu am putut pregăti videoclipul: ' + ((err as Error)?.message ?? 'eroare necunoscută'));
+            setVideoError(t('Nu am putut pregăti videoclipul: {err}', { err: (err as Error)?.message ?? t('eroare necunoscută') }));
         }
         setVideoLoading(false);
-    }, []);
+    }, [t]);
 
     const videoStartPlayback = useCallback(async (url: string, name: string) => {
         setVideoName(name);
@@ -1314,11 +1376,11 @@ function App() {
         setVideoError(null);
         const result = await window.electron.playlist.getFileUrl(id);
         if (result.error || !result.url) {
-            setVideoError((result.error || 'Fișierul nu a putut fi redat') + '. Alege-l din nou din listă.');
+            setVideoError(t('{err}. Alege-l din nou din listă.', { err: result.error || t('Fișierul nu a putut fi redat') }));
             return;
         }
-        videoStartPlayback(result.url, result.name ?? 'Video');
-    }, [videoStartPlayback]);
+        videoStartPlayback(result.url, result.name ?? t('Video'));
+    }, [videoStartPlayback, t]);
 
     const youtubeRetry = useCallback(async (id: string) => {
         setYoutubePlaylist(prev => prev.map(e =>
@@ -1468,13 +1530,13 @@ function App() {
         if (isWithinGracePeriod(data.created_at)) {
             doEdit();
         } else {
-            requirePassword(doEdit, 'Editare imn');
+            requirePassword(doEdit, t('Editare imn'));
         }
-    }, [requirePassword]);
+    }, [requirePassword, t]);
 
     const deleteHymnAction = useCallback(async (hymnId: number) => {
         const doDelete = async () => {
-            if (!confirm('Sigur vrei să ștergi acest imn?')) return;
+            if (!confirm(t('Sigur vrei să ștergi acest imn?'))) return;
             await window.electron.hymn.delete(hymnId);
             if (selectedHymnId === hymnId) {
                 clearPreview();
@@ -1488,9 +1550,9 @@ function App() {
         if (data && isWithinGracePeriod(data.created_at)) {
             doDelete();
         } else {
-            requirePassword(doDelete, 'Ștergere imn');
+            requirePassword(doDelete, t('Ștergere imn'));
         }
-    }, [selectedHymnId, clearPreview, loadHymns, loadCategories, requirePassword]);
+    }, [selectedHymnId, clearPreview, loadHymns, loadCategories, requirePassword, t]);
 
     // ── Adaugă imn ──
     // Imnurile noi merg în „Imnurile mele", colecția utilizatorului. „Imnuri Speciale"
@@ -1500,7 +1562,7 @@ function App() {
         const mine = categories.find(c => c.name === 'Imnurile mele');
         const specialId = mine?.id;
         if (specialId !== undefined && activeCategoryId !== specialId) {
-            if (!confirm('Imnurile pe care le adaugi tu se strâng în «Imnurile mele». Continui?')) return;
+            if (!confirm(t('Imnurile pe care le adaugi tu se strâng în «Imnurile mele». Continui?'))) return;
             setActiveCategoryId(specialId);
         }
         setHymnEditor({
@@ -1510,32 +1572,32 @@ function App() {
             sections: [{ type: 'strofa', text: '' }],
             categoryId: specialId ?? activeCategoryId,
         });
-    }, [categories, activeCategoryId]);
+    }, [categories, activeCategoryId, t]);
 
     // ── Adu imnuri din PowerPoint ──
     // Tot aici, lângă „+", nu în Setări: importul din Setări nu punea nicio
     // categorie, iar imnul intra în baza de date fără să apară în vreo listă.
     const importaDinPowerPoint = useCallback((deUnde: 'fisiere' | 'folder') => {
         const mine = categories.find(c => c.name === 'Imnurile mele');
-        if (!mine) { showToast('Nu găsesc colecția «Imnurile mele»'); return; }
+        if (!mine) { showToast(t('Nu găsesc colecția «Imnurile mele»')); return; }
         requirePassword(async () => {
             let rezultat: ImportResult | null = null;
             if (deUnde === 'folder') {
                 const folder = await window.electron.dialog.selectFolder();
                 if (!folder) return;
-                showToast('Se importă imnurile…');
+                showToast(t('Se importă imnurile…'));
                 rezultat = await window.electron.db.importPresentations(folder, mine.id);
             } else {
                 const fisiere = await window.electron.dialog.selectPresentationFiles();
                 if (!fisiere?.length) return;
-                showToast('Se importă imnurile…');
+                showToast(t('Se importă imnurile…'));
                 rezultat = await window.electron.db.importPresentationFiles(fisiere, mine.id);
             }
             await loadCategories();
             await loadHymns();
             setActiveCategoryId(mine.id);
             const r = rezultat;
-            if (r.failed) showToast(`${r.success} imnuri adăugate, ${r.failed} eșuate`);
+            if (r.failed) showToast(t('{success} imnuri adăugate, {failed} eșuate', { success: r.success, failed: r.failed }));
 
             // Un singur imn: îl deschidem pe loc, ca să poată fi îndreptat imediat —
             // conversia din slide-uri rareori nimerește totul din prima.
@@ -1546,13 +1608,13 @@ function App() {
             // Mai multe: rămân marcate «de verificat» și se citesc pe rând, din
             // fereastra de răspunsuri. Nimeni nu se uită peste 200 de imnuri pe loc.
             if (r.success > 0) {
-                showToast(`${r.success} imnuri adăugate în «Imnurile mele» — te așteaptă la verificat`);
+                showToast(t('{success} imnuri adăugate în «Imnurile mele» — te așteaptă la verificat', { success: r.success }));
                 window.electron.db.countToReview()
                     .then(n => setDecisionsCount(c => Math.max(c, n)))
                     .catch(() => { });
             }
-        }, deUnde === 'folder' ? 'Import imnuri din folder' : 'Import imnuri din PowerPoint');
-    }, [categories, requirePassword, loadCategories, loadHymns, deschideEditorul]);
+        }, deUnde === 'folder' ? t('Import imnuri din folder') : t('Import imnuri din PowerPoint'));
+    }, [categories, requirePassword, loadCategories, loadHymns, deschideEditorul, t]);
 
     // ── Global keyboard ──
     useEffect(() => {
@@ -1626,7 +1688,7 @@ function App() {
             if (e.code === 'KeyM' && e.ctrlKey && e.altKey && e.shiftKey) {
                 e.preventDefault(); e.stopImmediatePropagation();
                 if (adminOpen) return;
-                requirePassword(() => setAdminOpen(true), 'Administrare — sincronizare');
+                requirePassword(() => setAdminOpen(true), t('Administrare — sincronizare'));
                 return;
             }
 
@@ -1704,7 +1766,7 @@ function App() {
         videoStatus, videoStop, videoUrl, videoVolume, videoMuted,
         videoPlay, videoPause, videoSeek, videoSetVolume, videoToggleMute,
         verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul,
-        accToggle, accInfo, previewType, adminOpen, requirePassword]);
+        accToggle, accInfo, previewType, adminOpen, requirePassword, t]);
 
     // ── Resizable column drag handlers ──
     const onResizeMouseDown = useCallback((which: 'sidebar' | 'preview') => {
@@ -1787,7 +1849,7 @@ function App() {
                         searchConsumedRef.current = true;
                         setBibleRefError(null);
                     } else {
-                        setBibleRefError(`Nu am găsit «${refSearch.trim()}». Scrie de exemplu: ioan 3 16, ps 23, gen 1:3`);
+                        setBibleRefError(t('Nu am găsit «{query}». Scrie de exemplu: ioan 3 16, ps 23, gen 1:3', { query: refSearch.trim() }));
                     }
                 } else if (previewSections.length > 0 && !projecting) {
                     startProjection(projSlideIndex);
@@ -1861,7 +1923,7 @@ function App() {
         selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
         navigateSlide, contentSearch, doBibleContentSearch, refSearch, biblePassage,
         previewLive, goLivePreview,
-        verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul]);
+        verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul, t]);
 
     // ── Close context menu on click elsewhere ──
     useEffect(() => {
@@ -1873,11 +1935,11 @@ function App() {
 
     // ── Badge LIVE global: ce se proiectează ACUM (orice sursă) ──
     const liveNow: string | null = (() => {
-        if (videoUrl) return `Video: ${videoName || 'videoclip'}`;
-        if (projecting) return liveLabel || 'Proiecție';
+        if (videoUrl) return t('Video: {name}', { name: videoName || t('videoclip') });
+        if (projecting) return liveLabel || t('Proiecție');
         const tl = timerCtl.live;
-        if (tl) return tl.mode === 'clock' ? 'Ceas' : tl.mode === 'stopwatch' ? 'Cronometru' : 'Numărătoare';
-        if (realtimeCtl.projected) return 'Anunț';
+        if (tl) return tl.mode === 'clock' ? t('Ceas') : tl.mode === 'stopwatch' ? t('Cronometru') : t('Numărătoare');
+        if (realtimeCtl.projected) return t('Anunț');
         return null;
     })();
     const stopAllProjection = () => {
@@ -1902,13 +1964,13 @@ function App() {
                 singură abia după ce ecranul de proiecție e închis. */}
             {forcedUpdate && (
                 <div className="forced-update-bar">
-                    <strong>Actualizare obligatorie{forcedUpdate.version ? ` — versiunea ${forcedUpdate.version}` : ''}.</strong>
+                    <strong>{t('Actualizare obligatorie{versiune}.', { versiune: forcedUpdate.version ? t(' — versiunea {v}', { v: forcedUpdate.version }) : '' })}</strong>
                     {' '}
                     {forcedUpdate.waitingForProjection
-                        ? 'Este descărcată și se instalează singură imediat ce închideți proiecția.'
+                        ? t('Este descărcată și se instalează singură imediat ce închideți proiecția.')
                         : updateProgress > 0 && updateProgress < 100
-                            ? `Se descarcă… ${updateProgress}%`
-                            : 'Se descarcă în fundal. Nu întrerupe programul.'}
+                            ? t('Se descarcă… {pct}%', { pct: updateProgress })
+                            : t('Se descarcă în fundal. Nu întrerupe programul.')}
                     {forcedUpdate.reason && (
                         <span className="forced-update-reason"> {forcedUpdate.reason}</span>
                     )}
@@ -1938,11 +2000,11 @@ function App() {
             <header className="header">
                 <div className="header-logo">
                     <Monitor className="icon-sm text-indigo-400" />
-                    <span>Proiecție</span>
+                    <span>{t('Proiecție')}</span>
                     {liveNow && (
-                        <span className="live-badge" title="Se proiectează acum">
+                        <span className="live-badge" title={t('Se proiectează acum')}>
                             <span className="live-badge-text">● LIVE — {liveNow}</span>
-                            <button className="live-badge-stop" onClick={stopAllProjection} title="Oprește proiecția">✕</button>
+                            <button className="live-badge-stop" onClick={stopAllProjection} title={t('Oprește proiecția')}>✕</button>
                         </span>
                     )}
                 </div>
@@ -1953,31 +2015,31 @@ function App() {
                         className={`tab-btn ${tab === 'imnuri' ? 'active' : ''}`}
                         onClick={() => switchTab('imnuri')}
                     >
-                        Imnuri
+                        {t('Imnuri')}
                     </button>
                     <button
                         className={`tab-btn ${tab === 'biblia' ? 'active' : ''}`}
                         onClick={() => switchTab('biblia')}
                     >
-                        Biblia
+                        {t('Biblia')}
                     </button>
                     <button
                         className={`tab-btn ${tab === 'video' ? 'active' : ''}`}
                         onClick={() => switchTab('video')}
                     >
-                        Video
+                        {t('Video')}
                     </button>
                     <button
                         className={`tab-btn ${tab === 'timer' ? 'active' : ''}`}
                         onClick={() => switchTab('timer')}
                     >
-                        Ceas
+                        {t('Ceas')}
                     </button>
                     <button
                         className={`tab-btn ${tab === 'mesaj' ? 'active' : ''}`}
                         onClick={() => switchTab('mesaj')}
                     >
-                        Anunțuri
+                        {t('Anunțuri')}
                     </button>
                 </div>
 
@@ -2005,12 +2067,26 @@ function App() {
                                 value={contentSearch}
                                 onChange={e => setContentSearch(e.target.value)}
                                 onKeyDown={e => onSearchKeydown(e, 'content')}
-                                placeholder={tab === 'imnuri' ? 'Caută în text...' : 'Caută în Biblie...'}
+                                placeholder={tab === 'imnuri' ? t('Caută în text...') : t('Caută în Biblie...')}
                             />
                             {tab === 'biblia' && (
-                                <div className="search-msg">Scrie cel puțin 3 litere și apasă Enter.</div>
+                                <div className="search-msg">{t('Scrie cel puțin 3 litere și apasă Enter.')}</div>
                             )}
                         </div>
+                        {tab === 'biblia' && availableTranslations.length > 1 && (
+                            <select
+                                className="screen-quick-picker"
+                                title={t('Traducerea Bibliei')}
+                                value={bibleTranslation}
+                                onChange={e => changeBibleTranslation(e.target.value)}
+                            >
+                                {availableTranslations.map(tr => (
+                                    <option key={tr.id} value={tr.id}>
+                                        {tr.id === 'cornilescu' ? t('Cornilescu (română)') : tr.id === 'web' ? t('World English Bible (engleză)') : tr.id}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </>)}
                 </div>
 
@@ -2021,7 +2097,7 @@ function App() {
                         <button
                             className="header-btn add-btn"
                             onClick={() => setAddMenuOpen(o => !o)}
-                            title="Adaugă imnuri"
+                            title={t('Adaugă imnuri')}
                         >
                             <Plus className="icon-sm" />
                         </button>
@@ -2030,13 +2106,13 @@ function App() {
                                 <div className="add-menu-backdrop" onClick={() => setAddMenuOpen(false)} />
                                 <div className="add-menu">
                                     <button onClick={() => { setAddMenuOpen(false); openAddHymn(); }}>
-                                        Scriu eu un imn nou
+                                        {t('Scriu eu un imn nou')}
                                     </button>
                                     <button onClick={() => { setAddMenuOpen(false); importaDinPowerPoint('fisiere'); }}>
-                                        Din fișiere PowerPoint…
+                                        {t('Din fișiere PowerPoint…')}
                                     </button>
                                     <button onClick={() => { setAddMenuOpen(false); importaDinPowerPoint('folder'); }}>
-                                        Dintr-un folder întreg…
+                                        {t('Dintr-un folder întreg…')}
                                     </button>
                                 </div>
                             </>
@@ -2049,24 +2125,30 @@ function App() {
                     <button
                         className="header-btn header-btn-answers"
                         onClick={() => setDecisionsOpen(true)}
-                        title="Lucruri care te așteaptă: răspunsuri, imnuri de citit, unelte de actualizat"
+                        title={t('Lucruri care te așteaptă: răspunsuri, imnuri de citit, unelte de actualizat')}
                     >
                         <Mail className="icon-sm" />
                         <span className="header-btn-label">
-                            {decisionsCount} {decisionsCount === 1 ? 'de rezolvat' : 'de rezolvat'}
+                            {decisionsCount} {decisionsCount === 1 ? t('de rezolvat') : t('de rezolvat')}
                         </span>
                     </button>
                 )}
 
+                {/* Ecranul de proiecție — selector rapid, fără să intri în Setări */}
+                <ScreenQuickPicker />
+
+                {/* Limba interfeței — discret, un singur buton */}
+                <LanguageQuickPicker />
+
                 {/* Ajutor */}
-                <button className="header-btn" onClick={() => setModalOpen('help')} title="Ajutor — scurtături">
+                <button className="header-btn" onClick={() => setModalOpen('help')} title={t('Ajutor — scurtături')}>
                     <HelpCircle className="icon-sm" />
                 </button>
 
                 {/* Settings */}
-                <button className="header-btn header-btn-settings" onClick={() => setModalOpen('settings')} title="Setări">
+                <button className="header-btn header-btn-settings" onClick={() => setModalOpen('settings')} title={t('Setări')}>
                     <Settings className="icon-sm" />
-                    <span className="header-btn-label">Setări</span>
+                    <span className="header-btn-label">{t('Setări')}</span>
                 </button>
 
                 {/* Scurtăturile din colț sunt ale tabului deschis. Înainte scria peste tot
@@ -2074,13 +2156,13 @@ function App() {
                     unde nu există nici previzualizare, nici listă de parcurs. */}
                 <div className="kbd-hints">
                     {({
-                        imnuri: [['/', 'caută'], ['↑↓', 'prin listă'], ['Enter', 'pregătește / proiectează'], ['A', 'acompaniament'], ['Esc', 'oprește']],
-                        biblia: [['/', 'caută'], ['↑↓', 'verset cu verset'], ['Enter', 'pregătește / proiectează'], ['Esc', 'oprește']],
-                        video: [['Spațiu', 'pornește / oprește'], ['←→', 'sari 5 secunde'], ['↑↓', 'volum'], ['Esc', 'oprește']],
-                        timer: [['Esc', 'oprește proiecția']],
-                        mesaj: [['Esc', 'oprește proiecția']],
-                    } as Record<Tab, [string, string][]>)[tab].map(([k, t]) => (
-                        <Fragment key={k}><kbd>{k}</kbd><span>{t}</span></Fragment>
+                        imnuri: [['/', t('caută')], ['↑↓', t('prin listă')], ['Enter', t('pregătește / proiectează')], ['A', t('acompaniament')], ['Esc', t('oprește')]],
+                        biblia: [['/', t('caută')], ['↑↓', t('verset cu verset')], ['Enter', t('pregătește / proiectează')], ['Esc', t('oprește')]],
+                        video: [[t('Spațiu'), t('pornește / oprește')], ['←→', t('sari 5 secunde')], ['↑↓', t('volum')], ['Esc', t('oprește')]],
+                        timer: [['Esc', t('oprește proiecția')]],
+                        mesaj: [['Esc', t('oprește proiecția')]],
+                    } as Record<Tab, [string, string][]>)[tab].map(([k, hint]) => (
+                        <Fragment key={k}><kbd>{k}</kbd><span>{hint}</span></Fragment>
                     ))}
                 </div>
             </header>
@@ -2131,12 +2213,12 @@ function App() {
                             <div className="update-banner-title">
                                 <Download className="icon-sm" />
                                 {updateReady
-                                    ? `Actualizare ${updateInfo?.version} descărcată`
-                                    : `Versiune nouă: ${updateInfo?.version}`}
+                                    ? t('Actualizare {v} descărcată', { v: updateInfo?.version ?? '' })
+                                    : t('Versiune nouă: {v}', { v: updateInfo?.version ?? '' })}
                             </div>
                             {updateError && (
                                 <div className="update-banner-changelog" style={{ color: '#f87171' }}>
-                                    Eroare: {updateError}
+                                    {t('Eroare: {err}', { err: updateError })}
                                 </div>
                             )}
                             {updateDownloading ? (
@@ -2153,8 +2235,12 @@ function App() {
                                     </div>
                                     <div style={{ fontSize: 11, textAlign: 'center', opacity: 0.7 }}>
                                         {updateTotal > 0
-                                            ? `${(updateTransferred / 1048576).toFixed(1)} MB / ${(updateTotal / 1048576).toFixed(1)} MB (${updateProgress}%)`
-                                            : `${updateProgress}% — se descarcă...`
+                                            ? t('{done} MB / {total} MB ({pct}%)', {
+                                                done: (updateTransferred / 1048576).toFixed(1),
+                                                total: (updateTotal / 1048576).toFixed(1),
+                                                pct: updateProgress,
+                                            })
+                                            : t('{pct}% — se descarcă...', { pct: updateProgress })
                                         }
                                     </div>
                                 </div>
@@ -2163,7 +2249,7 @@ function App() {
                                     className="update-banner-btn"
                                     onClick={() => window.electron.update.install()}
                                 >
-                                    Instalează și repornește
+                                    {t('Instalează și repornește')}
                                 </button>
                             ) : (
                                 <button
@@ -2177,7 +2263,7 @@ function App() {
                                         window.electron.update.download();
                                     }}
                                 >
-                                    Actualizează
+                                    {t('Actualizează')}
                                 </button>
                             )}
                             <div style={{ marginTop: 4, textAlign: 'center' }}>
@@ -2186,7 +2272,7 @@ function App() {
                                     onClick={async () =>
                                         window.electron.openExternal(await window.electron.update.downloadPage())}
                                 >
-                                    Descarcă manual din browser
+                                    {t('Descarcă manual din browser')}
                                 </button>
                             </div>
                         </div>
@@ -2387,7 +2473,7 @@ function App() {
                             await window.electron.hymn.setCategory(contextMenu.hymn.id, catId);
                             loadHymns();
                             loadCategories();
-                        }, 'Schimbare categorie');
+                        }, t('Schimbare categorie'));
                     }}
                 />
             )}
@@ -2510,16 +2596,17 @@ function SidebarCategories({
     activeCategoryId?: number;
     onSelect: (id: number | undefined) => void;
 }) {
+    const t = useT();
     return (
         <>
-            <div className="sidebar-title">Categorii</div>
+            <div className="sidebar-title">{t('Categorii')}</div>
             <div className="sidebar-list">
                 <button
                     className={`sidebar-item ${activeCategoryId === undefined ? 'active' : ''}`}
                     onClick={() => onSelect(undefined)}
                 >
                     <span className="dot" />
-                    <span>Toate</span>
+                    <span>{t('Toate')}</span>
                 </button>
                 {categories.map(cat => (
                     <button
@@ -2551,23 +2638,24 @@ function SidebarBibleBooks({
     onSelect: (book: BibleBook) => void;
     onDeselectBook: () => void;
 }) {
+    const t = useT();
     const vt = books.filter(b => b.testament === 'VT');
     const nt = books.filter(b => b.testament === 'NT');
 
     return (
         <>
-            <div className="sidebar-title">Cărți</div>
+            <div className="sidebar-title">{t('Cărți')}</div>
             <div className="sidebar-list">
                 <button
                     className={`sidebar-item ${selectedBookId === null ? 'active' : ''}`}
                     onClick={onDeselectBook}
                 >
                     <Search className="icon-xs opacity-50" />
-                    <span className="sidebar-item-name">Toată Biblia</span>
+                    <span className="sidebar-item-name">{t('Toată Biblia')}</span>
                 </button>
                 {vt.length > 0 && (
                     <>
-                        <div className="sidebar-group-label">Vechiul Testament</div>
+                        <div className="sidebar-group-label">{t('Vechiul Testament')}</div>
                         {vt.map(book => (
                             <button
                                 key={book.id}
@@ -2582,7 +2670,7 @@ function SidebarBibleBooks({
                 )}
                 {nt.length > 0 && (
                     <>
-                        <div className="sidebar-group-label">Noul Testament</div>
+                        <div className="sidebar-group-label">{t('Noul Testament')}</div>
                         {nt.map(book => (
                             <button
                                 key={book.id}
@@ -2613,19 +2701,20 @@ function SidebarVideoFilter({
     onFilter: (f: VideoFilter) => void;
     youtubePlaylist: YouTubeEntry[];
 }) {
+    const t = useT();
     const localCount = youtubePlaylist.filter(e => !!(e as any).localUrl).length;
     const ytCount = youtubePlaylist.filter(e => !(e as any).localUrl).length;
 
     return (
         <>
-            <div className="sidebar-title">Categorii Video</div>
+            <div className="sidebar-title">{t('Categorii Video')}</div>
             <div className="sidebar-list">
                 <button
                     className={`sidebar-item ${filter === 'all' ? 'active' : ''}`}
                     onClick={() => onFilter('all')}
                 >
                     <span className="dot" />
-                    <span className="sidebar-item-name">Toate</span>
+                    <span className="sidebar-item-name">{t('Toate')}</span>
                     {youtubePlaylist.length > 0 && <span className="count">{youtubePlaylist.length}</span>}
                 </button>
                 <button
@@ -2641,7 +2730,7 @@ function SidebarVideoFilter({
                     onClick={() => onFilter('local')}
                 >
                     <span className="dot" />
-                    <span className="sidebar-item-name">Locale</span>
+                    <span className="sidebar-item-name">{t('Locale')}</span>
                     {localCount > 0 && <span className="count">{localCount}</span>}
                 </button>
             </div>
@@ -2667,27 +2756,25 @@ function HymnList({
     /** Numerele de imn care au acompaniamentul descărcat — pentru ♪. */
     accPresent: Set<number>;
 }) {
+    const t = useT();
     const catName = activeCategoryId
-        ? categories.find(c => c.id === activeCategoryId)?.name ?? 'Toate'
-        : 'Toate';
+        ? categories.find(c => c.id === activeCategoryId)?.name ?? t('Toate')
+        : t('Toate');
 
     return (
         <div className="content-inner">
             <div className="content-status">
-                {hymns.length} {hymns.length === 1 ? 'imn' : 'imnuri'} în <strong>{catName}</strong>
+                {t(hymns.length === 1 ? '{n} imn în' : '{n} imnuri în', { n: hymns.length })} <strong>{catName}</strong>
             </div>
             {catName === 'Imnurile mele' && (
                 <div className="mine-notice">
-                    Aici stau imnurile adăugate de tine. Nimic din colecțiile oficiale nu le
-                    atinge vreodată. Ce scrii aici ajunge și la autorii AdventShow, care pot
-                    alege să adauge imnul în colecția oficială „Imnuri Speciale" — vei fi
-                    anunțat dacă se întâmplă.
+                    {t('Aici stau imnurile adăugate de tine. Nimic din colecțiile oficiale nu le atinge vreodată. Ce scrii aici ajunge și la autorii AdventShow, care pot alege să adauge imnul în colecția oficială „Imnuri Speciale" — vei fi anunțat dacă se întâmplă.')}
                 </div>
             )}
             {hymns.length === 0 ? (
                 <div className="empty-state">
                     <Search className="icon-lg opacity-40" />
-                    <p>Niciun imn găsit</p>
+                    <p>{t('Niciun imn găsit')}</p>
                 </div>
             ) : (
                 <div className="hymn-list" ref={listRef}>
@@ -2708,14 +2795,14 @@ function HymnList({
                             >
                                 <span className="hymn-num">{hymn.number}</span>
                                 {accPresent.has(parseInt(String(hymn.number).replace(/\D/g, ''), 10)) && (
-                                    <span className="hymn-acc" title="Are acompaniament descărcat">♪</span>
+                                    <span className="hymn-acc" title={t('Are acompaniament descărcat')}>♪</span>
                                 )}
                                 <div className="hymn-info">
                                     <span className="hymn-title">
                                         {hymn.title}
                                         {hymn.needs_review === 1 && (
                                             <span className="needs-review-dot"
-                                                title="Adus dintr-un PowerPoint — încă necitit" />
+                                                title={t('Adus dintr-un PowerPoint — încă necitit')} />
                                         )}
                                     </span>
                                     {collectionName && <span className="hymn-collection">{collectionName}</span>}
@@ -2723,8 +2810,8 @@ function HymnList({
                                 </div>
                                 <button
                                     className="hymn-menu-btn"
-                                    title="Opțiuni imn"
-                                    aria-label="Opțiuni imn"
+                                    title={t('Opțiuni imn')}
+                                    aria-label={t('Opțiuni imn')}
                                     onClick={e => { e.stopPropagation(); onContextMenu(e, hymn); }}
                                 >
                                     <MoreHorizontal className="icon-xs" />
@@ -2756,12 +2843,13 @@ function BibleContentArea({
     onSelectVerse: (idx: number) => void;
     onBackToChapters: () => void;
 }) {
+    const t = useT();
     if (!selectedBookId) {
         return (
             <div className="content-inner">
                 <div className="empty-state">
                     <Book className="icon-lg opacity-40" />
-                    <p>Selectați o carte din bara laterală</p>
+                    <p>{t('Selectați o carte din bara laterală')}</p>
                 </div>
             </div>
         );
@@ -2774,14 +2862,14 @@ function BibleContentArea({
                 {selectedChapter && (
                     <>
                         <span className="sep">›</span>
-                        <span>Capitolul {selectedChapter}</span>
+                        <span>{t('Capitolul {ch}', { ch: selectedChapter })}</span>
                     </>
                 )}
             </div>
 
             {/* Chapters section — always visible */}
             <div className={`bible-chapters-section ${selectedChapter ? 'compact' : ''}`}>
-                <div className="content-status">{chapters.length} capitole</div>
+                <div className="content-status">{t('{n} capitole', { n: chapters.length })}</div>
                 <div className="chapter-grid">
                     {chapters.map(ch => (
                         <button
@@ -2798,7 +2886,7 @@ function BibleContentArea({
             {/* Verses section — visible when a chapter is selected */}
             {selectedChapter && (
                 <div className="bible-verses-section">
-                    <div className="content-status">{verses.length} versete</div>
+                    <div className="content-status">{t('{n} versete', { n: verses.length })}</div>
                     <div className="verse-list">
                         {verses.map((v, i) => (
                             <div
@@ -2829,17 +2917,18 @@ function BibleSearchResultsList({
     onSelect: (idx: number) => void;
     searchScope?: string;
 }) {
+    const t = useT();
     return (
         <div className="content-inner">
             <div className="content-status">
-                {results.length} rezultate
+                {t('{n} rezultate', { n: results.length })}
                 {searchScope
-                    ? <span className="search-scope-badge">în {searchScope}</span>
-                    : <span className="search-scope-badge">în toată Biblia</span>
+                    ? <span className="search-scope-badge">{t('în {scope}', { scope: searchScope })}</span>
+                    : <span className="search-scope-badge">{t('în toată Biblia')}</span>
                 }
             </div>
             {results.length === 0 ? (
-                <div className="empty-state"><p>Niciun rezultat</p></div>
+                <div className="empty-state"><p>{t('Niciun rezultat')}</p></div>
             ) : (
                 <div className="verse-list">
                     {results.map((v, i) => (
@@ -2903,6 +2992,7 @@ function VideoController({
     onYoutubeRetry: (id: string) => void;
     onYoutubeUpdateTitle: (id: string, title: string) => void;
 }) {
+    const t = useT();
     const isPlaying = !!videoStatus;
     const isPaused = videoStatus?.paused ?? true;
     const currentTime = videoStatus?.currentTime ?? 0;
@@ -2978,10 +3068,10 @@ function VideoController({
             if (r.success) {
                 setYtdlpInstalled(true);
             } else {
-                setYtError('Instalare eșuată: ' + (r.error ?? ''));
+                setYtError(t('Instalare eșuată: {err}', { err: r.error ?? '' }));
             }
         } catch (err: any) {
-            setYtError(err.message ?? 'Eroare necunoscută');
+            setYtError(err.message ?? t('Eroare necunoscută'));
         }
         setYtdlpBusy(false);
     };
@@ -2994,10 +3084,10 @@ function VideoController({
             if (r.success) {
                 // updated successfully
             } else {
-                setYtError('Actualizare eșuată: ' + (r.error ?? ''));
+                setYtError(t('Actualizare eșuată: {err}', { err: r.error ?? '' }));
             }
         } catch (err: any) {
-            setYtError(err.message ?? 'Eroare necunoscută');
+            setYtError(err.message ?? t('Eroare necunoscută'));
         }
         setYtdlpBusy(false);
     };
@@ -3024,7 +3114,7 @@ function VideoController({
                         <Film className="icon-sm opacity-50" />
                         <span>{videoName}</span>
                         <span className={`video-state-pill ${isPaused ? 'paused' : 'playing'}`}>
-                            {isPaused ? '❚❚ PAUZĂ' : '▶ REDARE'}
+                            {isPaused ? `❚❚ ${t('PAUZĂ')}` : `▶ ${t('REDARE')}`}
                         </span>
                     </div>
                     <div className="video-seekbar-container">
@@ -3060,17 +3150,17 @@ function VideoController({
                             onClick={isPaused ? onPlay : onPause}
                         >
                             {isPaused ? <Play className="icon-sm" /> : <Pause className="icon-sm" />}
-                            <span>{isPaused ? 'Redă' : 'Pauză'}</span>
+                            <span>{isPaused ? t('Redă') : t('Pauză')}</span>
                         </button>
                         <button className="video-btn video-btn-labeled" onClick={onStop}>
                             <Square className="icon-sm" />
-                            <span>Oprește</span>
+                            <span>{t('Oprește')}</span>
                         </button>
                         <div className="video-volume-group">
                             <button
                                 className={`video-btn video-mute-btn ${videoMuted ? 'muted' : ''}`}
                                 onClick={onToggleMute}
-                                title={videoMuted ? 'Repornește sunetul' : 'Fără sunet'}
+                                title={videoMuted ? t('Repornește sunetul') : t('Fără sunet')}
                             >
                                 {videoMuted ? <VolumeX className="icon-sm" /> : <Volume2 className="icon-sm" />}
                             </button>
@@ -3097,8 +3187,8 @@ function VideoController({
             <div className="content-inner video-controller">
                 <div className="video-dropzone">
                     <div className="video-converting-spinner" />
-                    <p className="video-dropzone-title">Se pregătește videoclipul...</p>
-                    <p className="video-dropzone-sub">Se optimizează pentru redare fără probleme. Poate dura puțin.</p>
+                    <p className="video-dropzone-title">{t('Se pregătește videoclipul...')}</p>
+                    <p className="video-dropzone-sub">{t('Se optimizează pentru redare fără probleme. Poate dura puțin.')}</p>
                 </div>
             </div>
         );
@@ -3112,9 +3202,9 @@ function VideoController({
                     <AlertCircle className="icon-sm" />
                     <span className="video-error-text">{videoError}</span>
                     <button className="video-error-action" onClick={onPickFile}>
-                        <FolderOpen className="icon-xs" /> Alege din nou fișierul…
+                        <FolderOpen className="icon-xs" /> {t('Alege din nou fișierul…')}
                     </button>
-                    <button className="video-error-dismiss" onClick={onDismissError} title="Închide">
+                    <button className="video-error-dismiss" onClick={onDismissError} title={t('Închide')}>
                         <X className="icon-xs" />
                     </button>
                 </div>
@@ -3124,52 +3214,52 @@ function VideoController({
             <div className="video-section">
                 <div className="video-section-header">
                     <Film className="icon-sm opacity-60" />
-                    <span>Adaugă video în playlist</span>
+                    <span>{t('Adaugă video în playlist')}</span>
                 </div>
 
                 <div className="video-add-grid">
                     {/* Zone 1 — local file */}
                     <div className="video-add-card">
                         <div className="video-add-card-head">
-                            <Upload className="icon-sm" /> Fișier de pe calculator
+                            <Upload className="icon-sm" /> {t('Fișier de pe calculator')}
                         </div>
                         <button className="video-add-btn video-add-btn-local" onClick={onPickFile} disabled={videoLoading}>
                             {videoLoading
                                 ? <Loader className="icon-sm animate-spin" />
                                 : <FolderOpen className="icon-sm" />}
-                            <span>{videoLoading ? 'Se încarcă...' : 'Alege fișier video'}</span>
+                            <span>{videoLoading ? t('Se încarcă...') : t('Alege fișier video')}</span>
                         </button>
-                        <p className="video-add-hint">Orice format uzual — MP4, MKV, AVI, MOV, WMV… Cele neacceptate se convertesc automat.</p>
+                        <p className="video-add-hint">{t('Orice format uzual — MP4, MKV, AVI, MOV, WMV… Cele neacceptate se convertesc automat.')}</p>
                     </div>
 
                     {/* Zone 2 — YouTube link */}
                     <div className="video-add-card">
                         <div className="video-add-card-head">
-                            <Youtube className="icon-sm" /> Link YouTube
+                            <Youtube className="icon-sm" /> {t('Link YouTube')}
                         </div>
                         {ytdlpInstalled === false ? (
                             <>
                                 <button className="video-add-btn" onClick={installYtDlp} disabled={ytdlpBusy}>
                                     <Download className="icon-sm" />
-                                    <span>{ytdlpBusy ? 'Se instalează...' : 'Instalează yt-dlp'}</span>
+                                    <span>{ytdlpBusy ? t('Se instalează...') : t('Instalează yt-dlp')}</span>
                                 </button>
-                                <p className="video-add-hint">Necesar o singură dată pentru descărcările de pe YouTube.</p>
+                                <p className="video-add-hint">{t('Necesar o singură dată pentru descărcările de pe YouTube.')}</p>
                             </>
                         ) : (
                             <>
                                 <input
                                     type="text"
                                     className="video-youtube-input"
-                                    placeholder="Lipește un link YouTube..."
+                                    placeholder={t('Lipește un link YouTube...')}
                                     value={ytUrl}
                                     onChange={(e) => setYtUrl(e.target.value)}
                                     onKeyDown={(e) => { if (e.key === 'Enter') addYouTube(); }}
                                 />
                                 <button className="video-add-btn" onClick={addYouTube} disabled={ytAdding || !ytUrl.trim()}>
                                     {ytAdding ? <Loader className="icon-sm animate-spin" /> : <Plus className="icon-sm" />}
-                                    <span>{ytAdding ? 'Se adaugă...' : 'Adaugă în listă'}</span>
+                                    <span>{ytAdding ? t('Se adaugă...') : t('Adaugă în listă')}</span>
                                 </button>
-                                <p className="video-add-hint">Se descarcă local și rămâne disponibil și fără internet.</p>
+                                <p className="video-add-hint">{t('Se descarcă local și rămâne disponibil și fără internet.')}</p>
                             </>
                         )}
                     </div>
@@ -3189,7 +3279,7 @@ function VideoController({
                             <div key={entry.id} className={`yt-playlist-item yt-status-${entry.status}`}>
                                 <div className="yt-playlist-item-top">
                                     <span className={`yt-source-badge ${isLocal ? 'yt-badge-local' : 'yt-badge-yt'}`}>
-                                        {isLocal ? 'Local' : 'YT'}
+                                        {isLocal ? t('Local') : 'YT'}
                                     </span>
                                     {editingTitle === entry.id ? (
                                         <input
@@ -3216,7 +3306,7 @@ function VideoController({
                                                 setEditingTitle(entry.id);
                                                 setEditTitleValue(entry.title);
                                             }}
-                                            title="Dublu-click pentru a edita titlul"
+                                            title={t('Dublu-click pentru a edita titlul')}
                                         >
                                             {entry.title}
                                         </span>
@@ -3227,7 +3317,7 @@ function VideoController({
                                         {entry.status === 'error' && <AlertCircle className="icon-xs" />}
                                         <span>
                                             {entry.status === 'downloading' ? `${Math.round(youtubeProgress[entry.id] ?? 0)}%` :
-                                                entry.status === 'ready' ? 'Gata' : 'Eroare'}
+                                                entry.status === 'ready' ? t('Gata') : t('Eroare')}
                                         </span>
                                     </span>
                                 </div>
@@ -3237,7 +3327,7 @@ function VideoController({
                                     <div
                                         className="yt-file-path"
                                         onClick={() => window.electron.playlist.revealInFolder(fp)}
-                                        title={`Deschide în ${navigator.platform.includes('Mac') ? 'Finder' : 'Explorer'}: ${fp}`}
+                                        title={t('Deschide în {app}: {path}', { app: navigator.platform.includes('Mac') ? 'Finder' : 'Explorer', path: fp })}
                                     >
                                         <FolderOpen className="icon-xs" />
                                         <span>{shortPath}</span>
@@ -3265,18 +3355,18 @@ function VideoController({
                                         <button
                                             className="video-btn video-btn-play yt-play-btn"
                                             onClick={() => onYoutubePlay(entry.id)}
-                                            title="Redă"
+                                            title={t('Redă')}
                                         >
-                                            <Play className="icon-sm" /> Redă
+                                            <Play className="icon-sm" /> {t('Redă')}
                                         </button>
                                     )}
                                     {entry.status === 'error' && !isLocal && (
                                         <button
                                             className="video-btn yt-retry-btn"
                                             onClick={() => onYoutubeRetry(entry.id)}
-                                            title="Reîncearcă descărcarea"
+                                            title={t('Reîncearcă descărcarea')}
                                         >
-                                            <RefreshCw className="icon-sm" /> Reîncearcă
+                                            <RefreshCw className="icon-sm" /> {t('Reîncearcă')}
                                         </button>
                                     )}
 
@@ -3284,7 +3374,7 @@ function VideoController({
                                     <button
                                         className="video-btn yt-remove-btn"
                                         onClick={() => onYoutubeRemove(entry.id)}
-                                        title="Elimină din playlist"
+                                        title={t('Elimină din playlist')}
                                     >
                                         <X className="icon-sm" />
                                     </button>
@@ -3293,25 +3383,25 @@ function VideoController({
                                     {entry.status === 'ready' && !isLocal && (
                                         deleteConfirm === entry.id ? (
                                             <div className="yt-delete-confirm">
-                                                <span className="text-white/60 text-xs">Ștergi fișierul de pe disc?</span>
+                                                <span className="text-white/60 text-xs">{t('Ștergi fișierul de pe disc?')}</span>
                                                 <button
                                                     className="video-btn yt-btn-small yt-btn-danger"
                                                     onClick={() => { onYoutubeDelete(entry.id); setDeleteConfirm(null); }}
                                                 >
-                                                    Da, șterge
+                                                    {t('Da, șterge')}
                                                 </button>
                                                 <button
                                                     className="video-btn yt-btn-small"
                                                     onClick={() => setDeleteConfirm(null)}
                                                 >
-                                                    Anulează
+                                                    {t('Anulează')}
                                                 </button>
                                             </div>
                                         ) : (
                                             <button
                                                 className="video-btn yt-btn-small yt-btn-danger"
                                                 onClick={() => setDeleteConfirm(entry.id)}
-                                                title="Șterge fișierul de pe disc"
+                                                title={t('Șterge fișierul de pe disc')}
                                             >
                                                 <Trash2 className="icon-sm" />
                                             </button>
@@ -3329,8 +3419,8 @@ function VideoController({
                     <Film className="icon-lg opacity-20" />
                     <p className="text-white/30 text-sm">
                         {youtubePlaylist.length === 0
-                            ? 'Playlist-ul este gol. Adaugă un fișier local sau un link YouTube.'
-                            : 'Niciun videoclip în această categorie.'}
+                            ? t('Playlist-ul este gol. Adaugă un fișier local sau un link YouTube.')
+                            : t('Niciun videoclip în această categorie.')}
                     </p>
                 </div>
             )}
@@ -3344,10 +3434,10 @@ function VideoController({
                         disabled={ytdlpBusy}
                     >
                         <RefreshCw className={`icon-xs ${ytdlpBusy ? 'animate-spin' : ''}`} />
-                        {ytdlpBusy ? 'Se actualizează...' : 'Actualizează yt-dlp'}
+                        {ytdlpBusy ? t('Se actualizează...') : t('Actualizează yt-dlp')}
                     </button>
                     <p className="video-youtube-disclaimer">
-                        Dacă descărcarea eșuează, actualizează yt-dlp.
+                        {t('Dacă descărcarea eșuează, actualizează yt-dlp.')}
                     </p>
                 </div>
             )}
@@ -3368,6 +3458,7 @@ function VideoReturnMonitor({ videoUrl, videoStatus, videoName, floating = false
     enableAudio?: boolean;
     onClose?: () => void;
 }) {
+    const t = useT();
     const vRef = useRef<HTMLVideoElement>(null);
     const [vu, setVu] = useState(0);
     const [listenLocal, setListenLocal] = useState(false);
@@ -3431,32 +3522,32 @@ function VideoReturnMonitor({ videoUrl, videoStatus, videoName, floating = false
         setListenLocal(next);
     };
 
-    const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    const fmt = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
     const paused = videoStatus?.paused ?? true;
 
     return (
         <div className={`video-monitor ${floating ? 'video-monitor-floating' : ''}`}>
             <div className="video-monitor-head">
-                <span className={`video-state-pill ${paused ? 'paused' : 'playing'}`}>{paused ? '❚❚ PAUZĂ' : '▶ REDARE'}</span>
+                <span className={`video-state-pill ${paused ? 'paused' : 'playing'}`}>{paused ? `❚❚ ${t('PAUZĂ')}` : `▶ ${t('REDARE')}`}</span>
                 <span className="video-monitor-name">{videoName}</span>
-                {floating && onClose && <button className="video-monitor-close" onClick={onClose} title="Ascunde monitorul"><X className="icon-xs" /></button>}
+                {floating && onClose && <button className="video-monitor-close" onClick={onClose} title={t('Ascunde monitorul')}><X className="icon-xs" /></button>}
             </div>
             <video ref={vRef} muted playsInline className="video-monitor-video" />
             <div className="video-monitor-foot">
                 <span className="video-monitor-time">
-                    {videoStatus ? `${fmt(videoStatus.currentTime)} / ${fmt(videoStatus.duration)}` : 'Se încarcă…'}
+                    {videoStatus ? `${fmt(videoStatus.currentTime)} / ${fmt(videoStatus.duration)}` : t('Se încarcă…')}
                 </span>
                 {enableAudio && (
-                    <div className="video-vu" title="Nivel sunet (din fișier)">
+                    <div className="video-vu" title={t('Nivel sunet (din fișier)')}>
                         <div className="video-vu-fill" style={{ width: `${Math.round(vu * 100)}%` }} />
                     </div>
                 )}
             </div>
             <div className="video-monitor-note">
-                <span>Aici imaginea e <strong>fără sunet</strong> — sunetul se aude în sală.</span>
+                <span>{t('Aici imaginea e')} <strong>{t('fără sunet')}</strong> — {t('sunetul se aude în sală.')}</span>
                 {enableAudio && (
-                    <button className={`video-listen-btn ${listenLocal ? 'on' : ''}`} onClick={toggleListen} title="Verificare rapidă cu căști">
-                        <Headphones className="icon-xs" /> {listenLocal ? 'Oprește' : 'Ascultă local'}
+                    <button className={`video-listen-btn ${listenLocal ? 'on' : ''}`} onClick={toggleListen} title={t('Verificare rapidă cu căști')}>
+                        <Headphones className="icon-xs" /> {listenLocal ? t('Oprește') : t('Ascultă local')}
                     </button>
                 )}
             </div>
@@ -3495,6 +3586,7 @@ function PreviewPanel({
     /** null cand imnul curent n-are acompaniament in manifest. */
     accompaniment?: AccompanimentControl | null;
 }) {
+    const t = useT();
     const bodyRef = useRef<HTMLDivElement>(null);
 
     // ── Auto-resize font for preview sections ──
@@ -3578,32 +3670,32 @@ function PreviewPanel({
         // își au propria previzualizare, cu ce se vede pe ecran.
         const ghiduri: Partial<Record<Tab, { titlu: string; randuri: React.ReactNode[] }>> = {
             imnuri: {
-                titlu: 'Alege un imn din listă',
+                titlu: t('Alege un imn din listă'),
                 randuri: [
-                    <><kbd>Enter</kbd> pregătește imnul → <kbd>Enter</kbd> îl pune pe ecran</>,
-                    <><kbd>↑↓</kbd> treci prin listă, <kbd>←→</kbd> între strofe</>,
-                    <><kbd>A</kbd> pornește acompaniamentul, dacă imnul are</>,
-                    <>caută după număr sau după un cuvânt din text</>,
-                    <><kbd>Esc</kbd> oprește proiecția</>,
+                    <><kbd>Enter</kbd> {t('pregătește imnul →')} <kbd>Enter</kbd> {t('îl pune pe ecran')}</>,
+                    <><kbd>↑↓</kbd> {t('treci prin listă,')} <kbd>←→</kbd> {t('între strofe')}</>,
+                    <><kbd>A</kbd> {t('pornește acompaniamentul, dacă imnul are')}</>,
+                    <>{t('caută după număr sau după un cuvânt din text')}</>,
+                    <><kbd>Esc</kbd> {t('oprește proiecția')}</>,
                 ],
             },
             biblia: {
-                titlu: 'Alege un capitol, apoi versetul',
+                titlu: t('Alege un capitol, apoi versetul'),
                 randuri: [
-                    <><kbd>Enter</kbd> pregătește versetul → <kbd>Enter</kbd> îl pune pe ecran</>,
-                    <><kbd>↑↓</kbd> verset cu verset, fără să ieși din capitol</>,
-                    <>scrie scurt: <em>ioa 3 16</em>, <em>ps 23</em>, <em>1cor 13 4-7</em></>,
-                    <>sau caută un cuvânt din Biblie și apasă <kbd>Enter</kbd></>,
-                    <><kbd>Esc</kbd> oprește proiecția</>,
+                    <><kbd>Enter</kbd> {t('pregătește versetul →')} <kbd>Enter</kbd> {t('îl pune pe ecran')}</>,
+                    <><kbd>↑↓</kbd> {t('verset cu verset, fără să ieși din capitol')}</>,
+                    <>{t('scrie scurt:')} <em>ioa 3 16</em>, <em>ps 23</em>, <em>1cor 13 4-7</em></>,
+                    <>{t('sau caută un cuvânt din Biblie și apasă')} <kbd>Enter</kbd></>,
+                    <><kbd>Esc</kbd> {t('oprește proiecția')}</>,
                 ],
             },
             video: {
-                titlu: 'Alege un videoclip sau adu unul de pe YouTube',
+                titlu: t('Alege un videoclip sau adu unul de pe YouTube'),
                 randuri: [
-                    <><kbd>Spațiu</kbd> pornește și oprește</>,
-                    <><kbd>←→</kbd> sar 5 secunde (30 cu <kbd>Shift</kbd>)</>,
-                    <><kbd>↑↓</kbd> volumul, <kbd>M</kbd> taie sunetul</>,
-                    <>sunetul iese pe dispozitivul ales în Setări</>,
+                    <><kbd>{t('Spațiu')}</kbd> {t('pornește și oprește')}</>,
+                    <><kbd>←→</kbd> {t('sar 5 secunde (30 cu')} <kbd>Shift</kbd>)</>,
+                    <><kbd>↑↓</kbd> {t('volumul,')} <kbd>M</kbd> {t('taie sunetul')}</>,
+                    <>{t('sunetul iese pe dispozitivul ales în Setări')}</>,
                 ],
             },
         };
@@ -3611,7 +3703,7 @@ function PreviewPanel({
         return (
             <div className="preview-panel empty">
                 <div className="preview-header">
-                    <span className="label">Previzualizare</span>
+                    <span className="label">{t('Previzualizare')}</span>
                 </div>
                 <div className="preview-body">
                     <div className="preview-empty">
@@ -3629,7 +3721,7 @@ function PreviewPanel({
     return (
         <div className={`preview-panel ${projecting ? (previewLive ? 'projecting' : 'staged') : ''}`}>
             <div className="preview-header">
-                <span className="label">{projecting ? (previewLive ? '● LIVE' : '◐ PREGĂTIT') : 'Previzualizare'}</span>
+                <span className="label">{projecting ? (previewLive ? `● ${t('LIVE')}` : `◐ ${t('PREGĂTIT')}`) : t('Previzualizare')}</span>
                 <span className="title">
                     {previewType !== 'bible' && previewNumber ? `${previewNumber}. ` : ''}{previewTitle}
                 </span>
@@ -3686,24 +3778,24 @@ function PreviewPanel({
                 ) : projecting ? (
                     <>
                         <button className="btn-project" onClick={onGoLive}>
-                            <Play className="icon-xs" /> Proiectează
+                            <Play className="icon-xs" /> {t('Proiectează')}
                         </button>
-                        <span className="staged-hint">pregătit — Enter</span>
+                        <span className="staged-hint">{t('pregătit — Enter')}</span>
                         {accompaniment && <AccompanimentButton acc={accompaniment} />}
                         <button className="btn-clear" onClick={onStopProjection}>
-                            <Square className="icon-xs" /> Oprește
+                            <Square className="icon-xs" /> {t('Oprește')}
                         </button>
                     </>
                 ) : (
                     <>
                         <button className="btn-project" onClick={() => onStartProjection(projSlideIndex)}>
-                            <Play className="icon-xs" /> Proiectează
+                            <Play className="icon-xs" /> {t('Proiectează')}
                         </button>
                         {/* Acompaniamentul se aduce ÎNAINTE de proiecție, nu în timpul ei:
                             când s-a anunțat imnul, e prea târziu să aștepți o descărcare. */}
                         {accompaniment && <AccompanimentButton acc={accompaniment} />}
                         <button className="btn-clear" onClick={onClearPreview}>
-                            <X className="icon-xs" /> Curăță
+                            <X className="icon-xs" /> {t('Curăță')}
                         </button>
                     </>
                 )}
@@ -3717,6 +3809,7 @@ function PreviewPanel({
 
 /** Butonul de acompaniament, același în previzualizare și în bara de proiecție. */
 function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
+    const t = useT();
     return (
         <>
             <button
@@ -3727,29 +3820,29 @@ function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
                 {acc.loading ? (
                     <>
                         <Loader className="icon-xs spin" />
-                        {acc.willPlay ? 'Se descarcă… · nu porni' : 'Se descarcă…'}
+                        {acc.willPlay ? t('Se descarcă… · nu porni') : t('Se descarcă…')}
                     </>
                 ) : acc.playing ? (
                     <>
                         <Square className="icon-xs" /> {mmss(acc.remaining)}
-                        {acc.sync && <span className="acc-auto" title="Proiecția avansează singură">auto</span>}
+                        {acc.sync && <span className="acc-auto" title={t('Proiecția avansează singură')}>{t('auto')}</span>}
                     </>
                 ) : acc.needsDownload ? (
                     <>
                         <Download className="icon-xs" />
-                        {acc.willPlay ? 'Descarcă și cântă' : 'Descarcă'} {acc.sizeMb.toFixed(1)} MB
+                        {acc.willPlay ? t('Descarcă și cântă') : t('Descarcă')} {acc.sizeMb.toFixed(1)} MB
                     </>
                 ) : acc.hasMarks ? (
-                    <><Music className="icon-xs" /> Cântă singur</>
+                    <><Music className="icon-xs" /> {t('Cântă singur')}</>
                 ) : (
-                    <><Music className="icon-xs" /> Cântă</>
+                    <><Music className="icon-xs" /> {t('Cântă')}</>
                 )}
             </button>
             {acc.hasMarks && !acc.playing && !acc.loading && acc.onPlayOnly && (
                 <button
                     className="btn-acc btn-acc-only"
                     onClick={acc.onPlayOnly}
-                    title="Doar acompaniamentul — strofele le schimbi tu"
+                    title={t('Doar acompaniamentul — strofele le schimbi tu')}
                 >
                     <Music className="icon-xs" />
                 </button>
@@ -3785,6 +3878,7 @@ const PAS_MARE = 100;
 type Marcaj = [number, number, number];
 
 function AdminSyncPanel({ onClose }: { onClose: () => void }) {
+    const t = useT();
     const [settings, setSettings] = useState<AppSettings>({});
     const [numar, setNumar] = useState('');
     const [marks, setMarks] = useState<Marcaj[] | null>(null);
@@ -3822,7 +3916,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
     const incarca = useCallback(async () => {
         const n = parseInt(numar.replace(/\D/g, ''), 10);
-        if (!Number.isFinite(n)) { setStare('Scrie un număr de imn.'); return; }
+        if (!Number.isFinite(n)) { setStare(t('Scrie un număr de imn.')); return; }
         setOcupat(true); setStare(''); setMarks(null); setPeaks(null);
         setSelectat(null); setModificat(false); setImnCurent(null); setSectiuni([]);
         try {
@@ -3842,7 +3936,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
             const octeti = await window.electron.accompaniment.bytes(n);
             if (!octeti) {
-                setStare('Acompaniamentul nu e pe calculator. Deschide imnul și apasă o dată „Descarcă".');
+                setStare(t('Acompaniamentul nu e pe calculator. Deschide imnul și apasă o dată „Descarcă".'));
                 return;
             }
             const buf = new Uint8Array(octeti).slice().buffer;
@@ -3870,11 +3964,11 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
             const url = URL.createObjectURL(new Blob([buf], { type: 'audio/mpeg' }));
             if (audioRef.current) audioRef.current.src = url;
         } catch (e) {
-            setStare('Nu s-a putut citi: ' + (e as Error).message);
+            setStare(t('Nu s-a putut citi: {err}', { err: (e as Error).message }));
         } finally {
             setOcupat(false);
         }
-    }, [numar]);
+    }, [numar, t]);
 
     // ── unelte pe timp ───────────────────────────────────────────────────────
 
@@ -3932,10 +4026,10 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     }, []);
 
     const adauga = useCallback((ms: number, asculta_dupa: boolean) => {
-        const t = lipesteDeTacere(Math.max(0, Math.min(durata * 1000, ms)));
-        const noi = scrieMarcaje([...(marks ?? []), [0, t, t]]);
-        setSelectat(noi.findIndex(m => m[1] === t));
-        if (asculta_dupa) asculta(t);
+        const tms = lipesteDeTacere(Math.max(0, Math.min(durata * 1000, ms)));
+        const noi = scrieMarcaje([...(marks ?? []), [0, tms, tms]]);
+        setSelectat(noi.findIndex(m => m[1] === tms));
+        if (asculta_dupa) asculta(tms);
     }, [marks, durata, lipesteDeTacere, scrieMarcaje, asculta]);
 
     const sterge = useCallback((idx: number) => {
@@ -3949,10 +4043,10 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         const noi = marks.map((m, i) =>
             i === idx ? [m[0], Math.max(0, Math.min(durata * 1000, m[1] + delta)),
                 Math.max(0, Math.min(durata * 1000, m[2] + delta))] as Marcaj : m);
-        const t = noi[idx][1];
+        const tms = noi[idx][1];
         const dupa = scrieMarcaje(noi);
-        setSelectat(dupa.findIndex(m => m[1] === t));
-        asculta(t);
+        setSelectat(dupa.findIndex(m => m[1] === tms));
+        asculta(tms);
     }, [marks, durata, scrieMarcaje, asculta]);
 
     const salveazaMarcaje = useCallback(async () => {
@@ -3961,19 +4055,19 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
             await window.electron.accompaniment.setMarks(imnCurent, marks.length ? marks : null);
             setModificat(false);
             setStare(marks.length
-                ? `Salvat. Imnul ${imnCurent} merge de acum singur la proiecție.`
-                : `Marcajele imnului ${imnCurent} au fost șterse.`);
+                ? t('Salvat. Imnul {n} merge de acum singur la proiecție.', { n: imnCurent })
+                : t('Marcajele imnului {n} au fost șterse.', { n: imnCurent }));
         } catch (e) {
-            setStare('Nu s-a putut salva: ' + (e as Error).message);
+            setStare(t('Nu s-a putut salva: {err}', { err: (e as Error).message }));
         }
-    }, [imnCurent, marks]);
+    }, [imnCurent, marks, t]);
 
     const exporta = useCallback(async () => {
         const catre = await window.electron.dialog.saveJsonFile('marcaje.json');
         if (!catre) return;
         const n = await window.electron.accompaniment.exportMarks(catre);
-        setStare(`Scris în fișier: ${n} imnuri marcate aici.`);
-    }, []);
+        setStare(t('Scris în fișier: {n} imnuri marcate aici.', { n }));
+    }, [t]);
 
     // ── redare ───────────────────────────────────────────────────────────────
 
@@ -3998,8 +4092,8 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     useEffect(() => {
         const a = audioRef.current;
         if (!a) return;
-        const t = window.setInterval(() => setPozitie(a.currentTime), 60);
-        return () => window.clearInterval(t);
+        const interval = window.setInterval(() => setPozitie(a.currentTime), 60);
+        return () => window.clearInterval(interval);
     }, [peaks]);
 
     /** Fereastra urmărește redarea, dacă nu e vizibilă. Altfel omul o pierde. */
@@ -4018,10 +4112,10 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
     const numeSectiune = useCallback((i: number): string => {
         const s = sectiuni[i];
-        if (!s) return `bucata ${i + 1}`;
+        if (!s) return t('bucata {n}', { n: i + 1 });
         const cateDinTip = sectiuni.slice(0, i + 1).filter(x => x.type === s.type).length;
-        return s.type === 'refren' ? `refrenul ${cateDinTip}` : `strofa ${cateDinTip}`;
-    }, [sectiuni]);
+        return s.type === 'refren' ? t('refrenul {n}', { n: cateDinTip }) : t('strofa {n}', { n: cateDinTip });
+    }, [sectiuni, t]);
 
     const urmatorulIndex = marks ? marks.length : 0;
     const maiSunt = sectiuni.length > 0 && urmatorulIndex < sectiuni.length;
@@ -4038,8 +4132,8 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            const t = e.target as HTMLElement;
-            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+            const el = e.target as HTMLElement;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
             if (e.code === 'Space') { e.preventDefault(); redaPauza(); return; }
             if (e.code === 'Enter' || e.code === 'NumpadEnter') {
                 e.preventDefault(); marcheazaAici(); return;
@@ -4238,9 +4332,9 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     };
 
     const pePozitiaHartii = (clientX: number) => {
-        const t = timpLaX(clientX, hartaRef.current, [0, durata]);
+        const tms = timpLaX(clientX, hartaRef.current, [0, durata]);
         const span = vedere[1] - vedere[0];
-        const s = Math.max(0, Math.min(Math.max(0, durata - span), t - span / 2));
+        const s = Math.max(0, Math.min(Math.max(0, durata - span), tms - span / 2));
         setVedere([s, s + span]);
     };
 
@@ -4256,21 +4350,20 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-dialog admin-sync" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h3>Administrare — sincronizare</h3>
+                    <h3>{t('Administrare — sincronizare')}</h3>
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
                     <section className="sgroup">
                         <div className="sgroup-head">
-                            <h4>Când se schimbă slide-ul</h4>
+                            <h4>{t('Când se schimbă slide-ul')}</h4>
                             <p>
-                                Valorile de mai jos se păstrează pe acest calculator și nu se
-                                resetează la actualizări. 3 secunde e doar punctul de plecare.
+                                {t('Valorile de mai jos se păstrează pe acest calculator și nu se resetează la actualizări. 3 secunde e doar punctul de plecare.')}
                             </p>
                         </div>
                         <div className="sstack">
                             <div className="field" style={{ maxWidth: 460 }}>
-                                <label>Cât mai stă titlul după ce pornește introducerea</label>
+                                <label>{t('Cât mai stă titlul după ce pornește introducerea')}</label>
                                 <div className="field-row">
                                     <input type="range" min="0" max="15" step="0.5"
                                         value={(settings.syncTitleDelayMs ?? 3000) / 1000}
@@ -4283,7 +4376,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                 </div>
                             </div>
                             <div className="field" style={{ maxWidth: 460 }}>
-                                <label>Cu cât înainte de sfârșitul strofei apare următoarea</label>
+                                <label>{t('Cu cât înainte de sfârșitul strofei apare următoarea')}</label>
                                 <div className="field-row">
                                     <input type="range" min="0" max="8" step="0.5"
                                         value={(settings.syncLeadMs ?? 3000) / 1000}
@@ -4296,32 +4389,27 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                 </div>
                             </div>
                             <p className="field-hint">
-                                La secțiunile scurte avansul scade singur la un sfert din durata
-                                lor, oricât ai pune aici — altfel textul ar dispărea cu o treime
-                                nescântată.
+                                {t('La secțiunile scurte avansul scade singur la un sfert din durata lor, oricât ai pune aici — altfel textul ar dispărea cu o treime nescântată.')}
                             </p>
                         </div>
                     </section>
 
                     <section className="sgroup">
                         <div className="sgroup-head">
-                            <h4>Marcajele unui imn</h4>
+                            <h4>{t('Marcajele unui imn')}</h4>
                             <p>
-                                Tot ce ai de făcut: <strong>asculți imnul și spui unde se termină
-                                fiecare bucată</strong> — nu unde vrei să se schimbe slide-ul.
-                                Care e strofă și care refren scrie programul singur, din carte.
-                                Textul apare pe ecran mai devreme cu atât cât ai reglat mai sus.
+                                {t('Tot ce ai de făcut:')} <strong>{t('asculți imnul și spui unde se termină fiecare bucată')}</strong> — {t('nu unde vrei să se schimbe slide-ul. Care e strofă și care refren scrie programul singur, din carte. Textul apare pe ecran mai devreme cu atât cât ai reglat mai sus.')}
                             </p>
                         </div>
                         <div className="field">
                             <div className="field-row">
-                                <input type="text" placeholder="număr imn, ex. 255"
+                                <input type="text" placeholder={t('număr imn, ex. 255')}
                                     className="timer-text-input"
                                     value={numar} style={{ maxWidth: 140 }}
                                     onChange={e => setNumar(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') void incarca(); }} />
                                 <button className="btn-sm" disabled={ocupat} onClick={() => void incarca()}>
-                                    {ocupat ? 'Se citește…' : 'Arată'}
+                                    {ocupat ? t('Se citește…') : t('Arată')}
                                 </button>
                             </div>
                             {stare && <p className="field-hint">{stare}</p>}
@@ -4333,10 +4421,10 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                 <div className="admin-pas">
                                     <div className="admin-pas-stanga">
                                         <button className="btn-mare" onClick={redaPauza}>
-                                            {reda ? '⏸  Pauză' : '▶  Ascultă'}
+                                            {reda ? `⏸  ${t('Pauză')}` : `▶  ${t('Ascultă')}`}
                                             <span className="kbd">Space</span>
                                         </button>
-                                        <button className="btn-sm" onClick={laInceput} title="De la început">⏮</button>
+                                        <button className="btn-sm" onClick={laInceput} title={t('De la început')}>⏮</button>
                                         <span className="admin-timp tabular">
                                             {mmssSec(pozitie)} / {mmssSec(durata)}
                                         </span>
@@ -4345,18 +4433,18 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         {maiSunt ? (
                                             <>
                                                 <div className="admin-cere">
-                                                    Acum marchezi sfârșitul: <strong>{numeSectiune(urmatorulIndex)}</strong>
+                                                    {t('Acum marchezi sfârșitul:')} <strong>{numeSectiune(urmatorulIndex)}</strong>
                                                     <span className="admin-text"> „{primulRand(urmatorulIndex)}…"</span>
                                                 </div>
                                                 <button className="btn-mare accent" onClick={marcheazaAici}>
-                                                    Aici s-a terminat <span className="kbd">Enter</span>
+                                                    {t('Aici s-a terminat')} <span className="kbd">Enter</span>
                                                 </button>
                                             </>
                                         ) : (
                                             <div className="admin-cere gata">
                                                 {sectiuni.length === 0
-                                                    ? 'Imnul nu e în carte, deci nu știu câte bucăți are. Marchează cu Enter, în ordine.'
-                                                    : `Toate cele ${sectiuni.length} bucăți sunt marcate. Ascultă-le pe rând și salvează.`}
+                                                    ? t('Imnul nu e în carte, deci nu știu câte bucăți are. Marchează cu Enter, în ordine.')
+                                                    : t('Toate cele {n} bucăți sunt marcate. Ascultă-le pe rând și salvează.', { n: sectiuni.length })}
                                             </div>
                                         )}
                                     </div>
@@ -4372,34 +4460,34 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                             </span>
                                         ))}
                                         <span className="admin-progres-text">
-                                            {marks ? marks.length : 0} din {sectiuni.length}
+                                            {t('{ok} din {total}', { ok: marks ? marks.length : 0, total: sectiuni.length })}
                                         </span>
                                     </div>
                                 )}
 
                                 <div className="admin-bar">
-                                    <span className="admin-eticheta">Vedere:</span>
+                                    <span className="admin-eticheta">{t('Vedere:')}</span>
                                     <button className="btn-sm" onClick={() => plimba(-0.5)}
-                                        disabled={totVizibil} title="Înapoi">◀</button>
+                                        disabled={totVizibil} title={t('Înapoi')}>◀</button>
                                     <button className="btn-sm" onClick={() => plimba(0.5)}
-                                        disabled={totVizibil} title="Înainte">▶</button>
+                                        disabled={totVizibil} title={t('Înainte')}>▶</button>
                                     <button className="btn-sm" onClick={() => zoom(0.5)}
-                                        title="Vezi o bucată mai mică, mai în detaliu">mai aproape</button>
+                                        title={t('Vezi o bucată mai mică, mai în detaliu')}>{t('mai aproape')}</button>
                                     <button className="btn-sm" onClick={() => zoom(2)}
-                                        disabled={totVizibil} title="Vezi o bucată mai mare">mai departe</button>
+                                        disabled={totVizibil} title={t('Vezi o bucată mai mare')}>{t('mai departe')}</button>
                                     <button className="btn-sm" onClick={() => setVedere([0, durata])}
-                                        disabled={totVizibil}>tot imnul</button>
+                                        disabled={totVizibil}>{t('tot imnul')}</button>
                                     <span className="admin-eticheta">
                                         {totVizibil
-                                            ? `vezi tot imnul (${mmssSec(durata)})`
-                                            : `vezi ${mmssSec(vedere[0])} – ${mmssSec(vedere[1])} din ${mmssSec(durata)}`}
+                                            ? t('vezi tot imnul ({d})', { d: mmssSec(durata) })
+                                            : t('vezi {a} – {b} din {d}', { a: mmssSec(vedere[0]), b: mmssSec(vedere[1]), d: mmssSec(durata) })}
                                     </span>
                                     <span className="admin-spacer" />
                                     <button className="btn-sm" onClick={() => void salveazaMarcaje()}
                                         disabled={!modificat || imnCurent == null}>
-                                        {modificat ? 'Salvează' : 'Salvat'}
+                                        {modificat ? t('Salvează') : t('Salvat')}
                                     </button>
-                                    <button className="btn-sm" onClick={() => void exporta()}>Exportă tot</button>
+                                    <button className="btn-sm" onClick={() => void exporta()}>{t('Exportă tot')}</button>
                                 </div>
 
                                 <canvas ref={canvasRef} width={1400} height={200}
@@ -4412,7 +4500,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
                                 <canvas ref={hartaRef} width={1400} height={38}
                                     className="admin-harta"
-                                    title="Tot imnul. Trage dreptunghiul ca să te muți."
+                                    title={t('Tot imnul. Trage dreptunghiul ca să te muți.')}
                                     onMouseDown={e => { trageHartaRef.current = true; pePozitiaHartii(e.clientX); }}
                                     onMouseMove={e => { if (trageHartaRef.current) pePozitiaHartii(e.clientX); }}
                                     onMouseUp={() => { trageHartaRef.current = false; }}
@@ -4428,7 +4516,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         className={`btn-sm ${i === selectat ? 'on' : ''}`}
                                         onClick={() => { setSelectat(i); asculta(sfarsit); }}
                                     >
-                                        {sectiuni[slide] ? numeSectiune(slide) : `bucata ${slide + 1}`}
+                                        {sectiuni[slide] ? numeSectiune(slide) : t('bucata {n}', { n: slide + 1 })}
                                         {' · '}{(sfarsit / 1000).toFixed(1)} s
                                     </button>
                                 ))}
@@ -4440,25 +4528,23 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                 <strong>
                                     {sectiuni[marks[selectat][0]]
                                         ? numeSectiune(marks[selectat][0])
-                                        : `bucata ${marks[selectat][0] + 1}`}
+                                        : t('bucata {n}', { n: marks[selectat][0] + 1 })}
                                 </strong>
                                 <span className="tabular">{mmssms(marks[selectat][1])}</span>
-                                <button className="btn-sm" onClick={() => mutaCu(selectat, -PAS_MARE)}>← mai devreme</button>
-                                <button className="btn-sm" onClick={() => mutaCu(selectat, PAS_MARE)}>mai târziu →</button>
-                                <button className="btn-sm" onClick={() => asculta(marks[selectat][1])}>ascultă aici</button>
-                                <button className="btn-sm danger" onClick={() => sterge(selectat)}>șterge linia</button>
+                                <button className="btn-sm" onClick={() => mutaCu(selectat, -PAS_MARE)}>{t('← mai devreme')}</button>
+                                <button className="btn-sm" onClick={() => mutaCu(selectat, PAS_MARE)}>{t('mai târziu →')}</button>
+                                <button className="btn-sm" onClick={() => asculta(marks[selectat][1])}>{t('ascultă aici')}</button>
+                                <button className="btn-sm danger" onClick={() => sterge(selectat)}>{t('șterge linia')}</button>
                                 <span className="admin-text">
-                                    pași de 0,1 s — cu tastele ← → mută cu 10 ms
+                                    {t('pași de 0,1 s — cu tastele ← → mută cu 10 ms')}
                                 </span>
                             </div>
                         )}
 
                         {peaks && (
                             <p className="field-hint">
-                                Pe undă: <strong>clic</strong> mută ascultarea acolo,
-                                <strong> tragi de o linie</strong> ca s-o muți, <strong>rotița</strong> plimbă
-                                înainte și înapoi. Linia mutată se așază singură în cea mai liniștită clipă
-                                din apropiere, deci nu trebuie să nimerești la milisecundă.
+                                {t('Pe undă:')} <strong>{t('clic')}</strong> {t('mută ascultarea acolo,')}
+                                <strong> {t('tragi de o linie')}</strong> {t('ca s-o muți,')} <strong>{t('rotița')}</strong> {t('plimbă înainte și înapoi. Linia mutată se așază singură în cea mai liniștită clipă din apropiere, deci nu trebuie să nimerești la milisecundă.')}
                             </p>
                         )}
                         <audio ref={audioRef} style={{ display: 'none' }}
@@ -4486,6 +4572,7 @@ function ContextMenu({
     onDelete: () => void;
     onChangeCategory: (catId?: number) => void;
 }) {
+    const t = useT();
     const [showCategories, setShowCategories] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -4504,10 +4591,10 @@ function ContextMenu({
                 <span className="context-hymn-title">{hymn.title}</span>
             </div>
             <button className="context-item" onClick={onEdit}>
-                <Edit3 className="icon-xs" /> Editează
+                <Edit3 className="icon-xs" /> {t('Editează')}
             </button>
             <button className="context-item" onClick={() => setShowCategories(!showCategories)}>
-                <FolderOpen className="icon-xs" /> Schimbă categoria
+                <FolderOpen className="icon-xs" /> {t('Schimbă categoria')}
                 <ChevronRight className="icon-xs ml-auto" />
             </button>
             {showCategories && (
@@ -4525,7 +4612,7 @@ function ContextMenu({
             )}
             <div className="context-divider" />
             <button className="context-item danger" onClick={onDelete}>
-                <Trash2 className="icon-xs" /> Șterge
+                <Trash2 className="icon-xs" /> {t('Șterge')}
             </button>
         </div>
     );
@@ -4549,6 +4636,7 @@ function HymnEditorModal({
     onClose: () => void;
     onSave: () => void;
 }) {
+    const t = useT();
     const [number, setNumber] = useState(editor.number);
     const [title, setTitle] = useState(editor.title);
     const [sections, setSections] = useState(editor.sections.length > 0
@@ -4588,10 +4676,10 @@ function HymnEditorModal({
 
     const handleSave = async () => {
         setError('');
-        if (!number.trim()) { setError('Numărul este obligatoriu.'); return; }
-        if (!title.trim()) { setError('Titlul este obligatoriu.'); return; }
+        if (!number.trim()) { setError(t('Numărul este obligatoriu.')); return; }
+        if (!title.trim()) { setError(t('Titlul este obligatoriu.')); return; }
         const validSections = sections.filter(s => s.text.trim());
-        if (validSections.length === 0) { setError('Adaugă cel puțin o secțiune cu text.'); return; }
+        if (validSections.length === 0) { setError(t('Adaugă cel puțin o secțiune cu text.')); return; }
 
         setSaving(true);
         try {
@@ -4609,10 +4697,10 @@ function HymnEditorModal({
                     sections: validSections,
                 });
             }
-            showToast(`Imn salvat: ${number.trim()} — ${title.trim()}`);
+            showToast(t('Imn salvat: {num} — {title}', { num: number.trim(), title: title.trim() }));
             onSave();
         } catch (err: any) {
-            setError(err?.message ?? 'Eroare la salvare');
+            setError(err?.message ?? t('Eroare la salvare'));
         } finally {
             setSaving(false);
         }
@@ -4629,7 +4717,7 @@ function HymnEditorModal({
         >
             <div className="modal-dialog modal-wide">
                 <div className="modal-header">
-                    <h3>{editor.mode === 'add' ? 'Adaugă Imn' : 'Editează Imn'}</h3>
+                    <h3>{editor.mode === 'add' ? t('Adaugă Imn') : t('Editează Imn')}</h3>
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
@@ -4660,13 +4748,13 @@ function HymnEditorModal({
                                         }
                                     }}
                                 >
-                                    {importing ? 'Se citește prezentarea...' : 'Din PowerPoint... (precompletează din .ppt/.pptx)'}
+                                    {importing ? t('Se citește prezentarea...') : t('Din PowerPoint... (precompletează din .ppt/.pptx)')}
                                 </button>
                             </div>
                         )}
                         <div className="editor-row">
                             <div className="field">
-                                <label>Număr</label>
+                                <label>{t('Număr')}</label>
                                 <input
                                     type="text"
                                     className="editor-input"
@@ -4676,18 +4764,18 @@ function HymnEditorModal({
                                 />
                             </div>
                             <div className="field" style={{ flex: 1 }}>
-                                <label>Titlu</label>
+                                <label>{t('Titlu')}</label>
                                 <input
                                     type="text"
                                     className="editor-input"
                                     value={title}
                                     onChange={e => setTitle(e.target.value)}
-                                    placeholder="Titlul imnului..."
+                                    placeholder={t('Titlul imnului...')}
                                 />
                             </div>
                         </div>
 
-                        <div className="editor-sections-label">Secțiuni</div>
+                        <div className="editor-sections-label">{t('Secțiuni')}</div>
                         {sections.map((sec, i) => (
                             <div key={i} className="editor-section">
                                 <div className="editor-section-header">
@@ -4696,16 +4784,16 @@ function HymnEditorModal({
                                         onChange={e => updateSection(i, 'type', e.target.value)}
                                         className="editor-select"
                                     >
-                                        <option value="strofa">Strofa</option>
-                                        <option value="refren">Refren</option>
+                                        <option value="strofa">{t('Strofa')}</option>
+                                        <option value="refren">{t('Refren')}</option>
                                     </select>
                                     <div className="editor-section-actions">
                                         <button
                                             className="btn-sm"
                                             onClick={() => moveSection(i, -1)}
                                             disabled={i === 0}
-                                            title="Mută mai sus"
-                                            aria-label="Mută mai sus"
+                                            title={t('Mută mai sus')}
+                                            aria-label={t('Mută mai sus')}
                                         >
                                             <ChevronUp className="icon-xs" />
                                         </button>
@@ -4713,8 +4801,8 @@ function HymnEditorModal({
                                             className="btn-sm"
                                             onClick={() => moveSection(i, 1)}
                                             disabled={i === sections.length - 1}
-                                            title="Mută mai jos"
-                                            aria-label="Mută mai jos"
+                                            title={t('Mută mai jos')}
+                                            aria-label={t('Mută mai jos')}
                                         >
                                             <ChevronDown className="icon-xs" />
                                         </button>
@@ -4722,8 +4810,8 @@ function HymnEditorModal({
                                             className="btn-sm danger"
                                             onClick={() => removeSection(i)}
                                             disabled={sections.length <= 1}
-                                            title="Șterge secțiunea"
-                                            aria-label="Șterge secțiunea"
+                                            title={t('Șterge secțiunea')}
+                                            aria-label={t('Șterge secțiunea')}
                                         >
                                             <X className="icon-xs" />
                                         </button>
@@ -4733,7 +4821,7 @@ function HymnEditorModal({
                                     className="editor-textarea"
                                     value={sec.text}
                                     onChange={e => updateSection(i, 'text', e.target.value)}
-                                    placeholder="Textul secțiunii..."
+                                    placeholder={t('Textul secțiunii...')}
                                     rows={4}
                                 />
                             </div>
@@ -4741,10 +4829,10 @@ function HymnEditorModal({
 
                         <div className="editor-add-btns">
                             <button className="btn-sm" onClick={() => addSection('strofa')}>
-                                <Plus className="icon-xs" /> Strofa
+                                <Plus className="icon-xs" /> {t('Strofa')}
                             </button>
                             <button className="btn-sm" onClick={() => addSection('refren')}>
-                                <Plus className="icon-xs" /> Refren
+                                <Plus className="icon-xs" /> {t('Refren')}
                             </button>
                         </div>
 
@@ -4752,9 +4840,9 @@ function HymnEditorModal({
 
                         <div className="editor-actions">
                             <button className="btn-project" onClick={handleSave} disabled={saving}>
-                                {saving ? 'Se salvează...' : 'Salvează'}
+                                {saving ? t('Se salvează...') : t('Salvează')}
                             </button>
-                            <button className="btn-clear" onClick={onClose}>Anulează</button>
+                            <button className="btn-clear" onClick={onClose}>{t('Anulează')}</button>
                         </div>
                     </div>
                 </div>
@@ -4771,13 +4859,14 @@ function HymnEditorModal({
 // cer parola existentă (gate de acțiune + schimbare). Recuperarea cere oricum un
 // cod telefonic de la autori, deci e benign să fie mereu vizibil.
 function ForgotPasswordHint({ onForgot }: { onForgot: () => void }) {
+    const t = useT();
     return (
         <div className="forgot-hint">
             <button type="button" className="btn-link-forgot" onClick={onForgot}>
-                Am uitat parola
+                {t('Am uitat parola')}
             </button>
             <span className="forgot-hint-text">
-                O poți reseta acum, cu un cod primit telefonic de la autori.
+                {t('O poți reseta acum, cu un cod primit telefonic de la autori.')}
             </span>
         </div>
     );
@@ -4792,17 +4881,18 @@ function PasswordModal({
     onCancel: () => void;
     onForgot: () => void;
 }) {
+    const t = useT();
     const [pw, setPw] = useState('');
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { inputRef.current?.focus(); }, []);
+    useReliableAutofocus(inputRef);
 
     const handleSubmit = () => {
         if (checkPassword(pw, hash)) {
             onSuccess();
         } else {
-            setError('Parolă incorectă');
+            setError(t('Parolă incorectă'));
             setPw('');
         }
     };
@@ -4816,7 +4906,7 @@ function PasswordModal({
                 </div>
                 <div className="modal-body">
                     <div className="field">
-                        <label>Introduceți parola de admin:</label>
+                        <label>{t('Introduceți parola de admin:')}</label>
                         <input
                             ref={inputRef}
                             type="password"
@@ -4824,14 +4914,14 @@ function PasswordModal({
                             value={pw}
                             onChange={e => { setPw(e.target.value); setError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }}
-                            placeholder="Parola..."
+                            placeholder={t('Parola...')}
                         />
                     </div>
                     {error && <div className="editor-error">{error}</div>}
                     <ForgotPasswordHint onForgot={onForgot} />
                     <div className="editor-actions" style={{ marginTop: 12 }}>
-                        <button className="btn-project" onClick={handleSubmit}>Confirmă</button>
-                        <button className="btn-clear" onClick={onCancel}>Anulează</button>
+                        <button className="btn-project" onClick={handleSubmit}>{t('Confirmă')}</button>
+                        <button className="btn-clear" onClick={onCancel}>{t('Anulează')}</button>
                     </div>
                 </div>
             </div>
@@ -4846,6 +4936,7 @@ function PasswordModal({
 function PasswordSetupModal({ onSave }: {
     onSave: (pw: string, church: string, city: string, downloadFolder?: string) => void;
 }) {
+    const t = useT();
     const [pw, setPw] = useState('');
     const [confirm, setConfirm] = useState('');
     const [church, setChurch] = useState('');
@@ -4855,7 +4946,7 @@ function PasswordSetupModal({ onSave }: {
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { inputRef.current?.focus(); }, []);
+    useReliableAutofocus(inputRef);
     useEffect(() => {
         window.electron.playlist.getDownloadFolder().then(f => {
             setDefaultFolder(f);
@@ -4869,11 +4960,11 @@ function PasswordSetupModal({ onSave }: {
     }, []);
 
     const handleSave = () => {
-        if (pw.length < 4) { setError('Parola trebuie să aibă cel puțin 4 caractere.'); return; }
-        if (pw !== confirm) { setError('Parolele nu se potrivesc.'); return; }
-        if (!church.trim()) { setError('Completează numele bisericii.'); return; }
-        if (!city.trim()) { setError('Completează localitatea.'); return; }
-        if (!downloadFolder) { setError('Selectează un folder pentru descărcări video.'); return; }
+        if (pw.length < 4) { setError(t('Parola trebuie să aibă cel puțin 4 caractere.')); return; }
+        if (pw !== confirm) { setError(t('Parolele nu se potrivesc.')); return; }
+        if (!church.trim()) { setError(t('Completează numele bisericii.')); return; }
+        if (!city.trim()) { setError(t('Completează localitatea.')); return; }
+        if (!downloadFolder) { setError(t('Selectează un folder pentru descărcări video.')); return; }
         onSave(pw, church.trim(), city.trim(), downloadFolder !== defaultFolder ? downloadFolder : undefined);
     };
 
@@ -4881,23 +4972,21 @@ function PasswordSetupModal({ onSave }: {
         <div className="modal-overlay">
             <div className="modal-dialog modal-sm">
                 <div className="modal-header">
-                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />Configurare Inițială</h3>
+                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />{t('Configurare Inițială')}</h3>
                 </div>
                 <div className="modal-body">
                     <p className="setup-hint">
-                        Bine ai venit în AdventShow! Configurează parola de administrare și folderul pentru videoclipuri descărcate.
+                        {t('Bine ai venit în AdventShow! Configurează parola de administrare și folderul pentru videoclipuri descărcate.')}
                     </p>
                     <p className="setup-hint setup-hint-pw">
-                        Parola protejează acțiunile care pot strica baza de imnuri sau șabloanele
-                        — ți se va cere la: <b>adăugarea, editarea sau ștergerea imnurilor</b>,
-                        <b>mutarea unui imn în altă categorie</b>, <b>importurile în baza de date</b>
-                        (PPT în masă sau backup JSON) și <b>ștergerea ori suprascrierea șabloanelor</b>.
-                        Proiecția și folosirea de zi cu zi nu cer niciodată parola.
-                        Dacă o uiți, o poți recupera oricând — butonul <b>„Am uitat parola"</b> apare
-                        la fiecare cerere de parolă; primești un cod telefonic de la autori.
+                        {t('Parola protejează acțiunile care pot strica baza de imnuri sau șabloanele — ți se va cere la:')} <b>{t('adăugarea, editarea sau ștergerea imnurilor')}</b>,
+                        <b>{t('mutarea unui imn în altă categorie')}</b>, <b>{t('importurile în baza de date')}</b>
+                        {t('(PPT în masă sau backup JSON) și')} <b>{t('ștergerea ori suprascrierea șabloanelor')}</b>.
+                        {t('Proiecția și folosirea de zi cu zi nu cer niciodată parola.')}
+                        {t('Dacă o uiți, o poți recupera oricând — butonul')} <b>„{t('Am uitat parola')}"</b> {t('apare la fiecare cerere de parolă; primești un cod telefonic de la autori.')}
                     </p>
                     <div className="field">
-                        <label>Parolă admin</label>
+                        <label>{t('Parolă admin')}</label>
                         <input
                             ref={inputRef}
                             type="password"
@@ -4905,11 +4994,11 @@ function PasswordSetupModal({ onSave }: {
                             value={pw}
                             onChange={e => { setPw(e.target.value); setError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') document.getElementById('confirm-pw')?.focus(); }}
-                            placeholder="Minim 4 caractere..."
+                            placeholder={t('Minim 4 caractere...')}
                         />
                     </div>
                     <div className="field">
-                        <label>Confirmă parola</label>
+                        <label>{t('Confirmă parola')}</label>
                         <input
                             id="confirm-pw"
                             type="password"
@@ -4917,51 +5006,50 @@ function PasswordSetupModal({ onSave }: {
                             value={confirm}
                             onChange={e => { setConfirm(e.target.value); setError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-                            placeholder="Repetă parola..."
+                            placeholder={t('Repetă parola...')}
                         />
                     </div>
                     <div className="field" style={{ marginTop: 8 }}>
-                        <label>Biserica</label>
+                        <label>{t('Biserica')}</label>
                         <input
                             type="text"
                             className="editor-input"
                             value={church}
                             onChange={e => { setChurch(e.target.value); setError(''); }}
-                            placeholder="ex: Biserica Adventistă Speranța"
+                            placeholder={t('ex: Biserica Adventistă Speranța')}
                         />
                     </div>
                     <div className="field">
-                        <label>Localitatea</label>
+                        <label>{t('Localitatea')}</label>
                         <input
                             type="text"
                             className="editor-input"
                             value={city}
                             onChange={e => { setCity(e.target.value); setError(''); }}
-                            placeholder="ex: Cluj-Napoca"
+                            placeholder={t('ex: Cluj-Napoca')}
                         />
                     </div>
                     <p className="text-white/40 text-xs mt-1">
-                        Biserica și localitatea se trimit autorilor pentru evidența instalărilor
-                        și pentru ajutor la recuperarea parolei. Nu se trimit alte date.
+                        {t('Biserica și localitatea se trimit autorilor pentru evidența instalărilor și pentru ajutor la recuperarea parolei. Nu se trimit alte date.')}
                     </p>
                     <div className="field" style={{ marginTop: 8 }}>
-                        <label>Folder descărcări video</label>
+                        <label>{t('Folder descărcări video')}</label>
                         <div className="field-row">
                             <span className="field-value" title={downloadFolder}>
-                                {downloadFolder ? downloadFolder.split('/').slice(-2).join('/') : 'Se detectează...'}
+                                {downloadFolder ? downloadFolder.split('/').slice(-2).join('/') : t('Se detectează...')}
                             </span>
                             <button className="btn-sm" onClick={async () => {
                                 const p = await window.electron.dialog.selectFolder();
                                 if (p) setDownloadFolder(p);
-                            }}>Schimbă...</button>
+                            }}>{t('Schimbă...')}</button>
                         </div>
                         <p className="text-white/40 text-xs mt-1">
-                            Aici se vor salva videoclipurile descărcate de pe YouTube.
+                            {t('Aici se vor salva videoclipurile descărcate de pe YouTube.')}
                         </p>
                     </div>
                     {error && <div className="editor-error">{error}</div>}
                     <div className="editor-actions" style={{ marginTop: 12 }}>
-                        <button className="btn-project" onClick={handleSave}>Salvează</button>
+                        <button className="btn-project" onClick={handleSave}>{t('Salvează')}</button>
                     </div>
                 </div>
             </div>
@@ -4975,16 +5063,17 @@ function PasswordSetupModal({ onSave }: {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) => void }) {
+    const t = useT();
     const [church, setChurch] = useState('');
     const [city, setCity] = useState('');
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { inputRef.current?.focus(); }, []);
+    useReliableAutofocus(inputRef);
 
     const handleSave = () => {
-        if (!church.trim()) { setError('Completează numele bisericii.'); return; }
-        if (!city.trim()) { setError('Completează localitatea.'); return; }
+        if (!church.trim()) { setError(t('Completează numele bisericii.')); return; }
+        if (!city.trim()) { setError(t('Completează localitatea.')); return; }
         onSave(church.trim(), city.trim());
     };
 
@@ -4992,16 +5081,14 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
         <div className="modal-overlay">
             <div className="modal-dialog modal-sm">
                 <div className="modal-header">
-                    <h3>Despre instalarea ta</h3>
+                    <h3>{t('Despre instalarea ta')}</h3>
                 </div>
                 <div className="modal-body">
                     <p className="setup-hint">
-                        AdventShow ține acum o evidență a bisericilor unde e instalat — ca autorii
-                        să știe pe cine ajută aplicația și ca să te poată sprijini la recuperarea
-                        parolei. Completează o singură dată:
+                        {t('AdventShow ține acum o evidență a bisericilor unde e instalat — ca autorii să știe pe cine ajută aplicația și ca să te poată sprijini la recuperarea parolei. Completează o singură dată:')}
                     </p>
                     <div className="field">
-                        <label>Biserica</label>
+                        <label>{t('Biserica')}</label>
                         <input
                             ref={inputRef}
                             type="text"
@@ -5009,11 +5096,11 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
                             value={church}
                             onChange={e => { setChurch(e.target.value); setError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') document.getElementById('church-city')?.focus(); }}
-                            placeholder="ex: Biserica Adventistă Speranța"
+                            placeholder={t('ex: Biserica Adventistă Speranța')}
                         />
                     </div>
                     <div className="field">
-                        <label>Localitatea</label>
+                        <label>{t('Localitatea')}</label>
                         <input
                             id="church-city"
                             type="text"
@@ -5021,15 +5108,15 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
                             value={city}
                             onChange={e => { setCity(e.target.value); setError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-                            placeholder="ex: Cluj-Napoca"
+                            placeholder={t('ex: Cluj-Napoca')}
                         />
                     </div>
                     <p className="text-white/40 text-xs mt-1">
-                        Se trimit doar aceste două câmpuri și versiunea aplicației. Nimic altceva.
+                        {t('Se trimit doar aceste două câmpuri și versiunea aplicației. Nimic altceva.')}
                     </p>
                     {error && <div className="editor-error">{error}</div>}
                     <div className="editor-actions" style={{ marginTop: 12 }}>
-                        <button className="btn-project" onClick={handleSave}>Salvează</button>
+                        <button className="btn-project" onClick={handleSave}>{t('Salvează')}</button>
                     </div>
                 </div>
             </div>
@@ -5061,6 +5148,7 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
     onChanged: () => void;
     onReviewHymn: (hymnId: number) => void;
 }) {
+    const t = useT();
     const [items, setItems] = useState<PendingDecision[]>([]);
     const [states, setStates] = useState<HymnState[]>([]);
     const [deVerificat, setDeVerificat] = useState<HymnToReview[]>([]);
@@ -5090,7 +5178,7 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
         setError('');
         const res = await window.electron.contrib.applyHymnState(key, alegere);
         setBusy(null);
-        if (!res.ok) { setError(res.error ?? 'Nu am putut aplica alegerea.'); return; }
+        if (!res.ok) { setError(res.error ?? t('Nu am putut aplica alegerea.')); return; }
         load();
         onChanged();
     };
@@ -5100,7 +5188,7 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
         setError('');
         const res = await window.electron.contrib.resolveDecision(hash, alegere);
         setBusy(null);
-        if (!res.ok) { setError(res.error ?? 'Nu am putut aplica alegerea.'); return; }
+        if (!res.ok) { setError(res.error ?? t('Nu am putut aplica alegerea.')); return; }
         load();
         onChanged();
     };
@@ -5109,14 +5197,14 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="modal-dialog">
                 <div className="modal-header">
-                    <h3>Ce te așteaptă</h3>
+                    <h3>{t('Ce te așteaptă')}</h3>
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
                     {items.length === 0 && states.length === 0 && deVerificat.length === 0
                         && !ytCereAtentie(yt) && (
                         <div className="text-white/50 text-sm py-6 text-center">
-                            Nu te așteaptă nimic. Tot ce era de rezolvat e rezolvat.
+                            {t('Nu te așteaptă nimic. Tot ce era de rezolvat e rezolvat.')}
                         </div>
                     )}
                     {error && <div className="editor-error">{error}</div>}
@@ -5125,11 +5213,11 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                         <div className="review-block">
                             <div className="review-head">
                                 <strong>{yt?.installed
-                                    ? 'Unealta de descărcare de pe YouTube e veche'
-                                    : 'Unealta de descărcare de pe YouTube lipsește'}</strong>
+                                    ? t('Unealta de descărcare de pe YouTube e veche')
+                                    : t('Unealta de descărcare de pe YouTube lipsește')}</strong>
                                 <p>{yt?.installed
-                                    ? `Ai versiunea ${yt.version}, veche de ${yt.staleDays} de zile. YouTube schimbă des felul în care servește filmele, iar o unealtă veche se oprește exact când ai nevoie de ea.`
-                                    : 'Fără ea nu se pot descărca filme de pe YouTube. Se ia o singură dată și rămâne.'}</p>
+                                    ? t('Ai versiunea {v}, veche de {zile} de zile. YouTube schimbă des felul în care servește filmele, iar o unealtă veche se oprește exact când ai nevoie de ea.', { v: yt.version, zile: yt.staleDays })
+                                    : t('Fără ea nu se pot descărca filme de pe YouTube. Se ia o singură dată și rămâne.')}</p>
                             </div>
                             <div className="row">
                                 <button className="btn-action" disabled={busy === 'ytdlp'}
@@ -5140,13 +5228,13 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                                             ? await window.electron.ytdlp.update()
                                             : await window.electron.ytdlp.install();
                                         setBusy(null);
-                                        if (!r.success) { setError(r.error ?? 'Nu am putut aduce unealta.'); return; }
+                                        if (!r.success) { setError(r.error ?? t('Nu am putut aduce unealta.')); return; }
                                         window.electron.ytdlp.health().then(setYt).catch(() => { });
                                         onChanged();
                                     }}>
                                     {busy === 'ytdlp'
-                                        ? 'Se aduce…'
-                                        : yt?.installed ? 'Actualizează acum' : 'Instalează acum'}
+                                        ? t('Se aduce…')
+                                        : yt?.installed ? t('Actualizează acum') : t('Instalează acum')}
                                 </button>
                             </div>
                         </div>
@@ -5155,22 +5243,20 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                     {deVerificat.length > 0 && (
                         <div className="review-block">
                             <div className="review-head">
-                                <strong>{deVerificat.length} {deVerificat.length === 1
-                                    ? 'imn adus din PowerPoint așteaptă să fie citit'
-                                    : 'imnuri aduse din PowerPoint așteaptă să fie citite'}</strong>
-                                <p>Conversia din slide-uri greșește des — strofe lipite, titlu luat din
-                                    alt loc. Deschide fiecare imn, uită-te peste el și salvează; marcajul
-                                    dispare de la sine.</p>
+                                <strong>{t(deVerificat.length === 1
+                                    ? '{n} imn adus din PowerPoint așteaptă să fie citit'
+                                    : '{n} imnuri aduse din PowerPoint așteaptă să fie citite', { n: deVerificat.length })}</strong>
+                                <p>{t('Conversia din slide-uri greșește des — strofe lipite, titlu luat din alt loc. Deschide fiecare imn, uită-te peste el și salvează; marcajul dispare de la sine.')}</p>
                             </div>
                             {deVerificat.map(h => (
                                 <div key={h.id} className="review-row">
                                     <span className="review-nr">{h.number}</span>
                                     <div className="review-text">
                                         <span className="review-title" title={h.title}>{h.title}</span>
-                                        <span className="review-meta">{h.category} · {h.sectionCount} {h.sectionCount === 1 ? 'secțiune' : 'secțiuni'}</span>
+                                        <span className="review-meta">{h.category} · {t(h.sectionCount === 1 ? '{n} secțiune' : '{n} secțiuni', { n: h.sectionCount })}</span>
                                     </div>
                                     <button className="btn-action" onClick={() => onReviewHymn(h.id)}>
-                                        Deschide
+                                        {t('Deschide')}
                                     </button>
                                     <button className="btn-clear" disabled={busy === `rev${h.id}`}
                                         onClick={async () => {
@@ -5180,7 +5266,7 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                                             load();
                                             onChanged();
                                         }}>
-                                        E bun așa
+                                        {t('E bun așa')}
                                     </button>
                                 </div>
                             ))}
@@ -5192,40 +5278,38 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                             <div className="decision-head">
                                 <strong>{st.category} #{st.number} — {st.titlu}</strong>
                                 <span className={`badge-decision ${st.fel === 'inlocuit' ? 'no' : 'ok'}`}>
-                                    {st.fel === 'inlocuit' ? 'înlocuit' : 'variantă nouă'}
+                                    {st.fel === 'inlocuit' ? t('înlocuit') : t('variantă nouă')}
                                 </span>
                             </div>
                             {st.fel === 'oficial-nou' ? (
                                 <>
                                     <p className="decision-text">
-                                        Ai varianta ta la imnul ăsta, iar între timp a apărut una oficială
-                                        nouă. Nu am schimbat nimic — alegi tu.
+                                        {t('Ai varianta ta la imnul ăsta, iar între timp a apărut una oficială nouă. Nu am schimbat nimic — alegi tu.')}
                                     </p>
                                     <div className="row">
                                         <button className="btn-action" disabled={busy === st.key}
                                             onClick={() => alegeImn(st.key, 'adopta-oficial')}>
-                                            Trec pe varianta oficială
+                                            {t('Trec pe varianta oficială')}
                                         </button>
                                         <button className="btn-clear" disabled={busy === st.key}
                                             onClick={() => alegeImn(st.key, 'pastreaza-al-meu')}>
-                                            Rămân cu a mea
+                                            {t('Rămân cu a mea')}
                                         </button>
                                     </div>
                                 </>
                             ) : (
                                 <>
                                     <p className="decision-text">
-                                        Am înlocuit varianta ta pentru că textul oficial era greșit. Ți-am
-                                        păstrat-o — o poți pune la loc oricând.
+                                        {t('Am înlocuit varianta ta pentru că textul oficial era greșit. Ți-am păstrat-o — o poți pune la loc oricând.')}
                                     </p>
                                     <div className="row">
                                         <button className="btn-clear" disabled={busy === st.key}
                                             onClick={() => alegeImn(st.key, 'pune-la-loc-al-meu')}>
-                                            Pune la loc varianta mea
+                                            {t('Pune la loc varianta mea')}
                                         </button>
                                         <button className="btn-action" disabled={busy === st.key}
                                             onClick={() => alegeImn(st.key, 'pastreaza-al-meu')}>
-                                            E în regulă
+                                            {t('E în regulă')}
                                         </button>
                                     </div>
                                 </>
@@ -5238,56 +5322,53 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                             <div className="decision-head">
                                 <strong>{d.category} #{d.number} — {d.title}</strong>
                                 <span className={`badge-decision ${d.status === 'accepted' ? 'ok' : 'no'}`}>
-                                    {d.status === 'accepted' ? 'acceptat' : 'nepreluat'}
+                                    {d.status === 'accepted' ? t('acceptat') : t('nepreluat')}
                                 </span>
                             </div>
 
                             {d.autoCleaned && d.publishedAs ? (
                                 <>
                                     <p className="decision-text">
-                                        Imnul tău a intrat în colecția oficială, la <strong>
-                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>, cu exact
-                                        textul pe care l-ai trimis. Copia din „{d.category}" era identică,
-                                        așa că am șters-o — ca să nu-l ai de două ori.
+                                        {t('Imnul tău a intrat în colecția oficială, la')} <strong>
+                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>, {t('cu exact textul pe care l-ai trimis. Copia din „{cat}" era identică, așa că am șters-o — ca să nu-l ai de două ori.', { cat: d.category })}
                                     </p>
                                     <div className="row">
                                         <button className="btn-action" disabled={busy === d.hash}
                                             onClick={() => alege(d.hash, 'pastrat')}>
-                                            Am înțeles
+                                            {t('Am înțeles')}
                                         </button>
                                     </div>
                                 </>
                             ) : d.status === 'accepted' && d.publishedAs ? (
                                 <>
                                     <p className="decision-text">
-                                        Imnul tău a intrat în colecția oficială, la <strong>
-                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>. Textul de
-                                        acolo diferă puțin de al tău, așa că nu am atins nimic — alegi tu.
+                                        {t('Imnul tău a intrat în colecția oficială, la')} <strong>
+                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>. {t('Textul de acolo diferă puțin de al tău, așa că nu am atins nimic — alegi tu.')}
                                     </p>
                                     <div className="row">
                                         <button className="btn-action" disabled={busy === d.hash}
                                             onClick={() => alege(d.hash, 'sters')}>
-                                            Șterge copia mea
+                                            {t('Șterge copia mea')}
                                         </button>
                                         <button className="btn-clear" disabled={busy === d.hash}
                                             onClick={() => alege(d.hash, 'pastrat')}>
-                                            Le păstrez pe amândouă
+                                            {t('Le păstrez pe amândouă')}
                                         </button>
                                     </div>
                                 </>
                             ) : (
                                 <>
                                     <p className="decision-text">
-                                        {d.note || 'Modificarea ta nu a fost preluată în versiunea oficială.'}
+                                        {d.note || t('Modificarea ta nu a fost preluată în versiunea oficială.')}
                                     </p>
                                     <div className="row">
                                         <button className="btn-action" disabled={busy === d.hash}
                                             onClick={() => alege(d.hash, 'revenit')}>
-                                            Revino la varianta oficială
+                                            {t('Revino la varianta oficială')}
                                         </button>
                                         <button className="btn-clear" disabled={busy === d.hash}
                                             onClick={() => alege(d.hash, 'pastrat')}>
-                                            Păstrez varianta mea
+                                            {t('Păstrez varianta mea')}
                                         </button>
                                     </div>
                                 </>
@@ -5296,7 +5377,7 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                     ))}
 
                     <p className="text-white/40 text-xs mt-3">
-                        Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.
+                        {t('Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.')}
                     </p>
                 </div>
             </div>
@@ -5317,6 +5398,7 @@ function FeedbackModal({ initialKind, onClose, onSent }: {
     onClose: () => void;
     onSent: (msg: string) => void;
 }) {
+    const t = useT();
     const [kind, setKind] = useState<'bug' | 'suggestion'>(initialKind);
     const [severity, setSeverity] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
     const [subject, setSubject] = useState('');
@@ -5329,11 +5411,11 @@ function FeedbackModal({ initialKind, onClose, onSent }: {
     const [busy, setBusy] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { inputRef.current?.focus(); }, []);
+    useReliableAutofocus(inputRef);
 
     const send = async () => {
-        if (!subject.trim()) { setError('Scrieți pe scurt despre ce e vorba.'); return; }
-        if (!body.trim()) { setError('Adăugați câteva detalii — ce ați făcut și ce s-a întâmplat.'); return; }
+        if (!subject.trim()) { setError(t('Scrieți pe scurt despre ce e vorba.')); return; }
+        if (!body.trim()) { setError(t('Adăugați câteva detalii — ce ați făcut și ce s-a întâmplat.')); return; }
         setBusy(true);
         setError('');
         const res = await window.electron.feedback.send({
@@ -5346,7 +5428,7 @@ function FeedbackModal({ initialKind, onClose, onSent }: {
         });
         setBusy(false);
         if (res.ok) {
-            onSent('Mulțumim! Mesajul a ajuns la autori.');
+            onSent(t('Mulțumim! Mesajul a ajuns la autori.'));
             onClose();
             return;
         }
@@ -5363,70 +5445,70 @@ function FeedbackModal({ initialKind, onClose, onSent }: {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="modal-dialog modal-sm">
                 <div className="modal-header">
-                    <h3>{kind === 'bug' ? 'Raportează o problemă' : 'Sugerează o îmbunătățire'}</h3>
+                    <h3>{kind === 'bug' ? t('Raportează o problemă') : t('Sugerează o îmbunătățire')}</h3>
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
                     <div className="field">
-                        <label>Tip</label>
+                        <label>{t('Tip')}</label>
                         <select className="timer-text-input" value={kind}
                             onChange={e => setKind(e.target.value as 'bug' | 'suggestion')}>
-                            <option value="bug">Problemă (ceva nu merge)</option>
-                            <option value="suggestion">Sugestie (ceva ar merge mai bine)</option>
+                            <option value="bug">{t('Problemă (ceva nu merge)')}</option>
+                            <option value="suggestion">{t('Sugestie (ceva ar merge mai bine)')}</option>
                         </select>
                     </div>
                     {kind === 'bug' && (
                         <div className="field">
-                            <label>Cât de grav e</label>
+                            <label>{t('Cât de grav e')}</label>
                             <select className="timer-text-input" value={severity}
                                 onChange={e => setSeverity(e.target.value as typeof severity)}>
-                                <option value="low">Mic — mă încurcă, dar merge</option>
-                                <option value="medium">Mediu — trebuie să ocolesc problema</option>
-                                <option value="high">Mare — nu pot folosi o funcție</option>
-                                <option value="critical">Critic — nu pot ține serviciul</option>
+                                <option value="low">{t('Mic — mă încurcă, dar merge')}</option>
+                                <option value="medium">{t('Mediu — trebuie să ocolesc problema')}</option>
+                                <option value="high">{t('Mare — nu pot folosi o funcție')}</option>
+                                <option value="critical">{t('Critic — nu pot ține serviciul')}</option>
                             </select>
                         </div>
                     )}
                     <div className="field">
-                        <label>Pe scurt</label>
+                        <label>{t('Pe scurt')}</label>
                         <input ref={inputRef} type="text" className="timer-text-input" maxLength={200}
                             value={subject} onChange={e => { setSubject(e.target.value); setError(''); }}
                             placeholder={kind === 'bug'
-                                ? 'ex: proiecția rămâne neagră la al doilea imn'
-                                : 'ex: căutare după primul vers, nu doar după titlu'} />
+                                ? t('ex: proiecția rămâne neagră la al doilea imn')
+                                : t('ex: căutare după primul vers, nu doar după titlu')} />
                     </div>
                     <div className="field">
-                        <label>Detalii</label>
+                        <label>{t('Detalii')}</label>
                         <textarea className="timer-text-input" rows={6} maxLength={20000}
                             value={body} onChange={e => { setBody(e.target.value); setError(''); }}
                             placeholder={kind === 'bug'
-                                ? 'Ce ați făcut, ce ați așteptat să se întâmple și ce s-a întâmplat de fapt.'
-                                : 'Ce ați vrea să puteți face și de ce v-ar ajuta.'} />
+                                ? t('Ce ați făcut, ce ați așteptat să se întâmple și ce s-a întâmplat de fapt.')
+                                : t('Ce ați vrea să puteți face și de ce v-ar ajuta.')} />
                     </div>
                     <div className="field">
-                        <label>Cum vă putem contacta (opțional)</label>
+                        <label>{t('Cum vă putem contacta (opțional)')}</label>
                         <input type="text" className="timer-text-input" maxLength={120}
                             value={contact} onChange={e => setContact(e.target.value)}
-                            placeholder="telefon sau e-mail, dacă vreți răspuns" />
+                            placeholder={t('telefon sau e-mail, dacă vreți răspuns')} />
                     </div>
                     <label className="flex items-center gap-2 text-white/70 text-xs mt-1 cursor-pointer">
                         <input type="checkbox" checked={attachLog}
                             onChange={e => setAttachLog(e.target.checked)} />
-                        Atașează ultimele 200 de linii din jurnalul aplicației
+                        {t('Atașează ultimele 200 de linii din jurnalul aplicației')}
                         <button type="button" className="underline opacity-60" onClick={toggleLogPreview}>
-                            {showLog ? 'ascunde' : 'vezi ce se trimite'}
+                            {showLog ? t('ascunde') : t('vezi ce se trimite')}
                         </button>
                     </label>
                     {showLog && (
                         <pre className="text-white/50 text-[10px] mt-2 p-2 rounded bg-black/40 max-h-40 overflow-auto whitespace-pre-wrap">
-                            {logPreview || '(jurnalul e gol — depanarea nu e pornită)'}
+                            {logPreview || t('(jurnalul e gol — depanarea nu e pornită)')}
                         </pre>
                     )}
                     {error && <div className="editor-error">{error}</div>}
                     <div className="editor-actions" style={{ marginTop: 12 }}>
-                        <button className="btn-clear" onClick={onClose} disabled={busy}>Renunță</button>
+                        <button className="btn-clear" onClick={onClose} disabled={busy}>{t('Renunță')}</button>
                         <button className="btn-project" onClick={send} disabled={busy}>
-                            {busy ? 'Se trimite…' : 'Trimite'}
+                            {busy ? t('Se trimite…') : t('Trimite')}
                         </button>
                     </div>
                 </div>
@@ -5443,6 +5525,7 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
     onUnlocked: () => void;
     onCancel: () => void;
 }) {
+    const t = useT();
     const [phone, setPhone] = useState('');
     const [requestCode, setRequestCode] = useState<string | null>(null);
     const [code, setCode] = useState('');
@@ -5455,7 +5538,7 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
     const sendRequest = async () => {
         const digits = phone.replace(/\D/g, '');
         if (digits.length < 7) {
-            setError('Număr de telefon invalid — introduceți un număr real la care puteți fi sunat (codul se dictează telefonic).');
+            setError(t('Număr de telefon invalid — introduceți un număr real la care puteți fi sunat (codul se dictează telefonic).'));
             return;
         }
         setBusy(true);
@@ -5465,12 +5548,12 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
         if (res.ok && res.requestCode) {
             setRequestCode(res.requestCode);
         } else {
-            setError(res.error ?? 'Cererea nu a putut fi trimisă.');
+            setError(res.error ?? t('Cererea nu a putut fi trimisă.'));
         }
     };
 
     const verify = async () => {
-        if (!code.trim()) { setError('Introduceți codul de deblocare primit.'); return; }
+        if (!code.trim()) { setError(t('Introduceți codul de deblocare primit.')); return; }
         setBusy(true);
         setError('');
         const ok = await window.electron.registry.unlockVerify(code.trim());
@@ -5478,7 +5561,7 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
         if (ok) {
             onUnlocked();
         } else {
-            setError('Cod incorect sau expirat. Verificați și reîncercați.');
+            setError(t('Cod incorect sau expirat. Verificați și reîncercați.'));
             setCode('');
         }
     };
@@ -5487,18 +5570,17 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
             <div className="modal-dialog modal-sm">
                 <div className="modal-header">
-                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />Recuperare parolă</h3>
+                    <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />{t('Recuperare parolă')}</h3>
                     <button className="modal-close" onClick={onCancel}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
                     {!requestCode ? (
                         <>
                             <p className="setup-hint">
-                                Aplicația trimite o cerere către autorii AdventShow. Vei fi contactat
-                                la numărul de mai jos și vei primi un cod de deblocare.
+                                {t('Aplicația trimite o cerere către autorii AdventShow. Vei fi contactat la numărul de mai jos și vei primi un cod de deblocare.')}
                             </p>
                             <div className="field">
-                                <label>Telefonul tău</label>
+                                <label>{t('Telefonul tău')}</label>
                                 <input
                                     ref={inputRef}
                                     type="tel"
@@ -5506,26 +5588,25 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
                                     value={phone}
                                     onChange={e => { setPhone(e.target.value); setError(''); }}
                                     onKeyDown={e => { if (e.key === 'Enter') sendRequest(); }}
-                                    placeholder="ex: 07xx xxx xxx"
+                                    placeholder={t('ex: 07xx xxx xxx')}
                                 />
                             </div>
                             {error && <div className="editor-error">{error}</div>}
                             <div className="editor-actions" style={{ marginTop: 12 }}>
                                 <button className="btn-project" onClick={sendRequest} disabled={busy}>
-                                    {busy ? 'Se trimite...' : 'Trimite cererea'}
+                                    {busy ? t('Se trimite...') : t('Trimite cererea')}
                                 </button>
-                                <button className="btn-clear" onClick={onCancel}>Anulează</button>
+                                <button className="btn-clear" onClick={onCancel}>{t('Anulează')}</button>
                             </div>
                         </>
                     ) : (
                         <>
                             <p className="setup-hint">
-                                Cererea a fost trimisă. Dacă nu ești contactat curând, sună tu autorii
-                                și comunică-le <b>codul cererii</b>:
+                                {t('Cererea a fost trimisă. Dacă nu ești contactat curând, sună tu autorii și comunică-le')} <b>{t('codul cererii')}</b>:
                             </p>
                             <div className="unlock-request-code">{requestCode}</div>
                             <div className="field" style={{ marginTop: 10 }}>
-                                <label>Codul de deblocare primit</label>
+                                <label>{t('Codul de deblocare primit')}</label>
                                 <input
                                     ref={inputRef}
                                     type="text"
@@ -5533,19 +5614,19 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
                                     value={code}
                                     onChange={e => { setCode(e.target.value); setError(''); }}
                                     onKeyDown={e => { if (e.key === 'Enter') verify(); }}
-                                    placeholder="ex: ABCD-2345"
+                                    placeholder={t('ex: ABCD-2345')}
                                     autoCapitalize="characters"
                                 />
                             </div>
                             <p className="text-white/40 text-xs mt-1">
-                                Codul e valabil 7 zile și poate fi folosit o singură dată.
+                                {t('Codul e valabil 7 zile și poate fi folosit o singură dată.')}
                             </p>
                             {error && <div className="editor-error">{error}</div>}
                             <div className="editor-actions" style={{ marginTop: 12 }}>
                                 <button className="btn-project" onClick={verify} disabled={busy}>
-                                    {busy ? 'Se verifică...' : 'Deblochează'}
+                                    {busy ? t('Se verifică...') : t('Deblochează')}
                                 </button>
-                                <button className="btn-clear" onClick={onCancel}>Anulează</button>
+                                <button className="btn-clear" onClick={onCancel}>{t('Anulează')}</button>
                             </div>
                         </>
                     )}
@@ -5565,18 +5646,19 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
     onCancel?: () => void;         // absent = nu se poate închide (după deblocare)
     onForgot?: () => void;         // recuperare parolă (doar în modul „schimbă")
 }) {
+    const t = useT();
     const [oldPw, setOldPw] = useState('');
     const [pw, setPw] = useState('');
     const [confirm, setConfirm] = useState('');
     const [error, setError] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { inputRef.current?.focus(); }, []);
+    useReliableAutofocus(inputRef);
 
     const handleSave = () => {
-        if (oldHash && !checkPassword(oldPw, oldHash)) { setError('Parola actuală e incorectă.'); setOldPw(''); return; }
-        if (pw.length < 4) { setError('Parola trebuie să aibă cel puțin 4 caractere.'); return; }
-        if (pw !== confirm) { setError('Parolele nu se potrivesc.'); return; }
+        if (oldHash && !checkPassword(oldPw, oldHash)) { setError(t('Parola actuală e incorectă.')); setOldPw(''); return; }
+        if (pw.length < 4) { setError(t('Parola trebuie să aibă cel puțin 4 caractere.')); return; }
+        if (pw !== confirm) { setError(t('Parolele nu se potrivesc.')); return; }
         onSave(hashPassword(pw));
     };
 
@@ -5585,18 +5667,18 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
             <div className="modal-dialog modal-sm">
                 <div className="modal-header">
                     <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-                        {oldHash ? 'Schimbă parola' : 'Setează parola nouă'}</h3>
+                        {oldHash ? t('Schimbă parola') : t('Setează parola nouă')}</h3>
                     {onCancel && <button className="modal-close" onClick={onCancel}><X className="icon-sm" /></button>}
                 </div>
                 <div className="modal-body">
                     {!oldHash && (
                         <p className="setup-hint">
-                            Deblocare reușită — alege acum o parolă nouă de administrare.
+                            {t('Deblocare reușită — alege acum o parolă nouă de administrare.')}
                         </p>
                     )}
                     {oldHash && (
                         <div className="field">
-                            <label>Parola actuală</label>
+                            <label>{t('Parola actuală')}</label>
                             <input
                                 ref={inputRef}
                                 type="password"
@@ -5604,12 +5686,12 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
                                 value={oldPw}
                                 onChange={e => { setOldPw(e.target.value); setError(''); }}
                                 onKeyDown={e => { if (e.key === 'Enter') document.getElementById('new-pw')?.focus(); }}
-                                placeholder="Parola curentă..."
+                                placeholder={t('Parola curentă...')}
                             />
                         </div>
                     )}
                     <div className="field">
-                        <label>Parola nouă</label>
+                        <label>{t('Parola nouă')}</label>
                         <input
                             id="new-pw"
                             ref={oldHash ? undefined : inputRef}
@@ -5618,11 +5700,11 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
                             value={pw}
                             onChange={e => { setPw(e.target.value); setError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') document.getElementById('new-pw-confirm')?.focus(); }}
-                            placeholder="Minim 4 caractere..."
+                            placeholder={t('Minim 4 caractere...')}
                         />
                     </div>
                     <div className="field">
-                        <label>Confirmă parola nouă</label>
+                        <label>{t('Confirmă parola nouă')}</label>
                         <input
                             id="new-pw-confirm"
                             type="password"
@@ -5630,14 +5712,14 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
                             value={confirm}
                             onChange={e => { setConfirm(e.target.value); setError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter') handleSave(); }}
-                            placeholder="Repetă parola..."
+                            placeholder={t('Repetă parola...')}
                         />
                     </div>
                     {error && <div className="editor-error">{error}</div>}
                     {oldHash && onForgot && <ForgotPasswordHint onForgot={onForgot} />}
                     <div className="editor-actions" style={{ marginTop: 12 }}>
-                        <button className="btn-project" onClick={handleSave}>Salvează</button>
-                        {onCancel && <button className="btn-clear" onClick={onCancel}>Anulează</button>}
+                        <button className="btn-project" onClick={handleSave}>{t('Salvează')}</button>
+                        {onCancel && <button className="btn-clear" onClick={onCancel}>{t('Anulează')}</button>}
                     </div>
                 </div>
             </div>
@@ -5658,6 +5740,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     onReviewHymn: (hymnId: number) => void;
     initialTab?: 'projection' | 'admin' | 'about' | 'help';
 }) {
+    const t = useT();
     const [activeTab, setActiveTab] = useState<'projection' | 'admin' | 'about' | 'help'>(initialTab ?? 'projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
@@ -5691,48 +5774,61 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     };
 
     return (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-            <div className="modal-dialog">
-                <div className="modal-header">
-                    <h3>Setări & Administrare</h3>
-                    <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
-                </div>
-                <div className="modal-body">
-                    <div className="settings-tabs">
-                        {(['projection', 'admin', 'about', 'help'] as const).map(t => (
+        <div className="modal-overlay settings-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="settings-frame">
+                <aside className="settings-sidebar">
+                    <div className="settings-sidebar-head">
+                        <h3>{t('Setări & Administrare')}</h3>
+                        <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
+                    </div>
+                    <nav className="settings-nav">
+                        {(['projection', 'admin', 'about', 'help'] as const).map(tb => (
                             <button
-                                key={t}
-                                className={`stab ${activeTab === t ? 'active' : ''}`}
-                                onClick={() => setActiveTab(t)}
+                                key={tb}
+                                className={`snav-item ${activeTab === tb ? 'active' : ''}`}
+                                onClick={() => setActiveTab(tb)}
                             >
-                                {t === 'projection' ? 'Proiecție' : t === 'admin' ? 'Administrare' : t === 'about' ? 'Despre' : 'Ajutor'}
+                                {tb === 'projection' ? t('Proiecție') : tb === 'admin' ? t('Administrare') : tb === 'about' ? t('Despre') : t('Ajutor')}
                             </button>
                         ))}
-                    </div>
+                    </nav>
+                </aside>
+                <div className="settings-main">
 
                     {activeTab === 'projection' && (
-                        <div className="settings-content">
+                        <div className="settings-content settings-grid">
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Ecranul de proiecție</h4>
-                                    <p>Pe ce ecran iese proiecția și cât de mare e textul pe el.</p>
+                                    <h4>{t('Ecranul de proiecție')}</h4>
+                                    <p>{t('Pe ce ecran iese proiecția și cât de mare e textul pe el.')}</p>
                                 </div>
                                 <div className="sstack">
                                     <div className="field">
-                                        <label>Ecranul folosit</label>
+                                        <label>{t('Ecranul folosit')}</label>
                                         <DisplayPicker settings={settings} onSave={saveSettings} />
                                     </div>
                                     <div className="field">
-                                        <label>Mărimea textului: {((settings.projectionFontSize ?? 1.2) * 100).toFixed(0)}%</label>
+                                        <label>{t('Mărimea textului la Imnuri: {pct}%', { pct: (((settings.projectionFontSizeByTab?.imnuri ?? settings.projectionFontSize ?? 1.2)) * 100).toFixed(0) })}</label>
                                         <input
                                             type="range" min="0.6" max="2.0" step="0.05"
-                                            value={settings.projectionFontSize ?? 1.2}
-                                            onChange={e => saveSettings({ projectionFontSize: parseFloat(e.target.value) })}
+                                            value={settings.projectionFontSizeByTab?.imnuri ?? settings.projectionFontSize ?? 1.2}
+                                            onChange={e => saveSettings({
+                                                projectionFontSizeByTab: { ...settings.projectionFontSizeByTab, imnuri: parseFloat(e.target.value) },
+                                            })}
+                                        />
+                                    </div>
+                                    <div className="field">
+                                        <label>{t('Mărimea textului la Biblie: {pct}%', { pct: (((settings.projectionFontSizeByTab?.biblia ?? settings.projectionFontSize ?? 1.2)) * 100).toFixed(0) })}</label>
+                                        <input
+                                            type="range" min="0.6" max="2.0" step="0.05"
+                                            value={settings.projectionFontSizeByTab?.biblia ?? settings.projectionFontSize ?? 1.2}
+                                            onChange={e => saveSettings({
+                                                projectionFontSizeByTab: { ...settings.projectionFontSizeByTab, biblia: parseFloat(e.target.value) },
+                                            })}
                                         />
                                         <p className="text-white/40 text-xs mt-1">
-                                            Dacă o strofă lungă nu încape pe ecran, aplicația micșorează textul
-                                            singură, ca să nu fie nevoie de derulare.
+                                            {t('Fiecare tab își ține propria mărime. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.')}
                                         </p>
                                     </div>
                                 </div>
@@ -5740,85 +5836,57 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Fundalul proiecției</h4>
-                                    <p>Ce se vede în spatele textului. Peste imagine sau video se pune automat
-                                        un voal întunecat, ca textul să rămână lizibil.</p>
+                                    <h4>{t('Fundalul proiecției')}</h4>
+                                    <p>{t('Ce se vede în spatele textului la Imnuri (și, implicit, la Biblie — dacă nu-i dai un fundal separat mai jos). Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.')}</p>
                                 </div>
                                 <div className="sstack">
-                                    <div className="field" style={{ maxWidth: 380 }}>
-                                        <label>Tip fundal</label>
-                                        <select
-                                            value={settings.bgType ?? 'color'}
-                                            onChange={e => saveSettings({ bgType: e.target.value as AppSettings['bgType'] })}
-                                        >
-                                            <option value="color">Culoare</option>
-                                            <option value="image">Imagine</option>
-                                            <option value="video">Video</option>
-                                        </select>
-                                    </div>
+                                    <BgFieldsEditor
+                                        value={settings}
+                                        onChange={patch => saveSettings(patch)}
+                                    />
+                                </div>
+                            </section>
 
-                                    {(settings.bgType ?? 'color') === 'color' && (
-                                        <div className="field">
-                                            <label>Culoarea fundalului</label>
-                                            <input
-                                                type="color"
-                                                value={settings.bgColor ?? '#000000'}
-                                                onChange={e => saveSettings({ bgColor: e.target.value })}
-                                            />
-                                        </div>
-                                    )}
-
-                                    {settings.bgType === 'image' && (
-                                        <div className="field">
-                                            <label>Imaginea de fundal</label>
-                                            <div className="field-row">
-                                                <span className="field-value" title={settings.bgImagePath || ''}>
-                                                    {settings.bgImagePath || 'Niciuna aleasă'}
-                                                </span>
-                                                <button className="btn-sm" onClick={async () => {
-                                                    const p = await window.electron.dialog.pickMedia('image');
-                                                    if (p) saveSettings({ bgImagePath: p });
-                                                }}>Alege...</button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {settings.bgType === 'video' && (
-                                        <div className="field">
-                                            <label>Videoul de fundal</label>
-                                            <div className="field-row">
-                                                <span className="field-value" title={settings.bgVideoPath || ''}>
-                                                    {settings.bgVideoPath || 'Niciunul ales'}
-                                                </span>
-                                                <button className="btn-sm" onClick={async () => {
-                                                    const p = await window.electron.dialog.pickMedia('video');
-                                                    if (p) saveSettings({ bgVideoPath: p });
-                                                }}>Alege...</button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {(settings.bgType === 'image' || settings.bgType === 'video') && (
-                                        <div className="field">
-                                            <label>Cât de vizibil e fundalul: {((settings.bgOpacity ?? 1) * 100).toFixed(0)}%</label>
-                                            <input
-                                                type="range" min="0" max="1" step="0.05"
-                                                value={settings.bgOpacity ?? 1}
-                                                onChange={e => saveSettings({ bgOpacity: parseFloat(e.target.value) })}
-                                            />
-                                        </div>
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>{t('Fundal separat pentru Biblie')}</h4>
+                                    <p>{t('Opțional — dacă îl pornești, Biblia primește propriul fundal, diferit de cel de la Imnuri.')}</p>
+                                </div>
+                                <div className="sstack">
+                                    <label className="field-row" style={{ gap: 8 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={!!settings.bgByTab?.biblia}
+                                            onChange={e => saveSettings({
+                                                bgByTab: {
+                                                    ...settings.bgByTab,
+                                                    biblia: e.target.checked
+                                                        ? (settings.bgByTab?.biblia ?? { bgType: settings.bgType, bgColor: settings.bgColor })
+                                                        : undefined,
+                                                },
+                                            })}
+                                        />
+                                        {t('Fundal separat pentru Biblie')}
+                                    </label>
+                                    {settings.bgByTab?.biblia && (
+                                        <BgFieldsEditor
+                                            value={settings.bgByTab.biblia}
+                                            onChange={patch => saveSettings({
+                                                bgByTab: { ...settings.bgByTab, biblia: { ...settings.bgByTab?.biblia, ...patch } },
+                                            })}
+                                        />
                                     )}
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Culorile textului</h4>
-                                    <p>Exemplul de lângă fiecare culoare arată cum se va vedea pe ecran.</p>
+                                    <h4>{t('Culorile textului')}</h4>
+                                    <p>{t('Exemplul de lângă fiecare culoare arată cum se va vedea pe ecran.')}</p>
                                 </div>
                                 <div className="sgrid2">
                                     <div className="field">
-                                        <label>Numărul imnului</label>
+                                        <label>{t('Numărul imnului')}</label>
                                         <div className="field-row">
                                             <input
                                                 type="color"
@@ -5831,7 +5899,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                         </div>
                                     </div>
                                     <div className="field">
-                                        <label>Textul imnului sau al versetului</label>
+                                        <label>{t('Textul imnului sau al versetului')}</label>
                                         <div className="field-row">
                                             <input
                                                 type="color"
@@ -5839,7 +5907,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                                 onChange={e => saveSettings({ contentTextColor: e.target.value })}
                                             />
                                             <span className="color-preview" style={{ color: settings.contentTextColor ?? '#ffffff' }}>
-                                                Exemplu text
+                                                {t('Exemplu text')}
                                             </span>
                                         </div>
                                     </div>
@@ -5848,29 +5916,219 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Sunetul videoclipurilor</h4>
-                                    <p>Pe ce ieșire se aude videoul proiectat — de obicei aceeași cu a
-                                        ecranului mare, dacă e legat prin HDMI.</p>
+                                    <h4>{t('Sunetul videoclipurilor')}</h4>
+                                    <p>{t('Pe ce ieșire se aude videoul proiectat — de obicei aceeași cu a ecranului mare, dacă e legat prin HDMI.')}</p>
                                 </div>
                                 <AudioOutputPicker settings={settings} onSave={saveSettings} />
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Acompaniament</h4>
+                                    <h4>{t('Acompaniament')}</h4>
                                     <p>
-                                        Fiecare imn are o înregistrare instrumentală. Se descarcă
-                                        singură când apeși „Cântă" și rămâne pe calculator. Dacă în
-                                        sală n-ai internet, descarcă-le pe toate din vreme.
+                                        {t('Fiecare imn are o înregistrare instrumentală. Se descarcă singură când apeși „Cântă" și rămâne pe calculator. Dacă în sală n-ai internet, descarcă-le pe toate din vreme.')}
                                     </p>
                                 </div>
                                 <AccompanimentSettings settings={settings} onSave={saveSettings} />
                             </section>
 
+                        </div>
+                    )}
+
+                    {activeTab === 'admin' && (
+                        <div className="settings-content settings-grid">
+
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Descărcări de pe YouTube</h4>
-                                    <p>Unde se salvează videoclipurile descărcate și unealta care le aduce.</p>
+                                    <h4>{t('Interfața aplicației')}</h4>
+                                    <p>{t('Cum arată fereastra principală, pe calculatorul tău — nu ce se proiectează pe ecran.')}</p>
+                                </div>
+                                <div className="sgrid2">
+                                    <div className="field">
+                                        <label>{t('Temă')}</label>
+                                        <div className="field-row" style={{ gap: 8 }}>
+                                            <button
+                                                className={`btn-sm ${(settings.appTheme ?? 'dark') === 'dark' ? 'on' : ''}`}
+                                                onClick={() => {
+                                                    document.documentElement.dataset.theme = 'dark';
+                                                    saveSettings({ appTheme: 'dark' });
+                                                }}
+                                            >
+                                                {t('Închisă')}
+                                            </button>
+                                            <button
+                                                className={`btn-sm ${settings.appTheme === 'light' ? 'on' : ''}`}
+                                                onClick={() => {
+                                                    document.documentElement.dataset.theme = 'light';
+                                                    saveSettings({ appTheme: 'light' });
+                                                }}
+                                            >
+                                                {t('Deschisă')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="field">
+                                        <label>{t('Mărimea textului și a butoanelor')}</label>
+                                        <select
+                                            value={String(settings.uiZoom ?? 1)}
+                                            onChange={e => {
+                                                const f = parseFloat(e.target.value);
+                                                saveSettings({ uiZoom: f });
+                                                window.electron.settings.setUiZoom(f);
+                                            }}
+                                        >
+                                            <option value="1">100%</option>
+                                            <option value="1.15">115%</option>
+                                            <option value="1.3">130%</option>
+                                            <option value="1.5">150%</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>{t('Biserica')}</h4>
+                                    <p>{t('Se trimit autorilor pentru evidența instalărilor și ca să te poată ajuta dacă uiți parola. Modificările pleacă singure.')}</p>
+                                </div>
+                                <div className="sgrid2">
+                                    <div className="field">
+                                        <label>{t('Numele bisericii')}</label>
+                                        <input
+                                            type="text"
+                                            className="timer-text-input"
+                                            placeholder={t('ex: Biserica Adventistă Speranța')}
+                                            value={settings.churchName ?? ''}
+                                            onChange={e => saveSettings({ churchName: e.target.value })}
+                                            onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast(t('Datele bisericii au fost trimise')); }).catch(() => { }); }}
+                                        />
+                                    </div>
+                                    <div className="field">
+                                        <label>{t('Localitatea')}</label>
+                                        <input
+                                            type="text"
+                                            className="timer-text-input"
+                                            placeholder={t('ex: Cluj-Napoca')}
+                                            value={settings.churchCity ?? ''}
+                                            onChange={e => saveSettings({ churchCity: e.target.value })}
+                                            onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast(t('Datele bisericii au fost trimise')); }).catch(() => { }); }}
+                                        />
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>{t('Actualizări')}</h4>
+                                    <p>{t('Pe „beta" primești versiunile noi cu câteva zile înaintea celorlalți. Dacă te întorci la „stabil", următoarea actualizare te readuce pe versiunea stabilă curentă.')}</p>
+                                </div>
+                                <div className="sstack">
+                                    <div className="field" style={{ maxWidth: 380 }}>
+                                        <label>{t('Canalul de actualizare')}</label>
+                                        <select
+                                            className="timer-text-input"
+                                            value={updateChannelValue}
+                                            onChange={async e => {
+                                                const ch = e.target.value as 'stable' | 'beta';
+                                                setUpdateChannelValue(ch);
+                                                await window.electron.update.setChannel(ch);
+                                                showToast(ch === 'beta'
+                                                    ? t('Vei primi versiunile de test, înaintea celorlalți')
+                                                    : t('Vei primi doar versiunile stabile'));
+                                            }}
+                                        >
+                                            <option value="stable">{t('Stabil — recomandat')}</option>
+                                            <option value="beta">{t('Beta — versiuni de test')}</option>
+                                        </select>
+                                    </div>
+                                    <UpdateChecker />
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>{t('Legătura cu autorii')}</h4>
+                                    <p>{t('Corecturile tale la imnuri pleacă singure, după o săptămână de la ultima modificare. Aici vezi ce s-a hotărât cu ele.')}</p>
+                                </div>
+                                <div className="row" style={{ flexWrap: 'wrap' }}>
+                                    <button className="btn-action" onClick={() => setDecisionsOpen(true)}>
+                                        {t('Răspunsuri la ce ai trimis')}
+                                        {pendingDecisions > 0 && <span className="pill-count">{pendingDecisions}</span>}
+                                    </button>
+                                    <button className="btn-clear" onClick={() => setFeedbackKind('bug')}>
+                                        {t('Raportează o problemă')}
+                                    </button>
+                                    <button className="btn-clear" onClick={() => setFeedbackKind('suggestion')}>
+                                        {t('Sugerează o îmbunătățire')}
+                                    </button>
+                                </div>
+                                {pendingFeedback > 0 && (
+                                    <p className="text-white/40 text-xs mt-2">
+                                        {pendingFeedback === 1
+                                            ? t('{n} mesaj așteaptă să plece — nu era internet când le-ai scris. Se trimit automat.', { n: pendingFeedback })
+                                            : t('{n} mesaje așteaptă să plece — nu era internet când le-ai scris. Se trimit automat.', { n: pendingFeedback })}
+                                    </p>
+                                )}
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>{t('Copie de siguranță')}</h4>
+                                    <p>{t('Salvează imnurile într-un fișier, ca să le poți muta pe alt calculator sau să le recuperezi. Încărcarea unei copii adaugă peste ce ai deja.')}</p>
+                                </div>
+                                <div className="row" style={{ flexWrap: 'wrap' }}>
+                                    <button className="btn-action" onClick={async () => {
+                                        const p = await window.electron.dialog.saveJsonFile('backup-imnuri.json');
+                                        if (p) {
+                                            const r = await window.electron.db.exportJsonBackup(p);
+                                            setImportStatus(t('Export reușit: {hymns} imnuri, {sections} secțiuni', { hymns: r.hymns, sections: r.sections }));
+                                        }
+                                    }}>
+                                        <Download className="icon-xs" /> {t('Salvează imnurile')}
+                                    </button>
+                                    <button className="btn-action" onClick={() => adminGate.require(async () => {
+                                        const p = await window.electron.dialog.selectJsonFile();
+                                        if (p) {
+                                            await window.electron.db.importJsonBackup(p);
+                                            onCategoriesChanged();
+                                            onHymnsChanged();
+                                            setImportStatus(t('Import imnuri din JSON reușit!'));
+                                        }
+                                    }, t('Import bază de date (JSON)'))}>
+                                        <Upload className="icon-xs" /> {t('Încarcă dintr-o copie')}
+                                    </button>
+                                    <button className="btn-clear" onClick={async () => {
+                                        const p = await window.electron.dialog.saveFile('hymns-backup.db');
+                                        if (p) {
+                                            await window.electron.db.exportDb(p);
+                                            setImportStatus(t('Baza de date cu imnuri exportată!'));
+                                        }
+                                    }}>
+                                        <Download className="icon-xs" /> {t('Baza de date întreagă')}
+                                    </button>
+                                </div>
+                                {importStatus && <div className="import-msg">{importStatus}</div>}
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>{t('Parola de administrare')}</h4>
+                                    <p>{t('Protejează modificarea imnurilor, importurile și ștergerea șabloanelor.')}</p>
+                                </div>
+                                <div className="row">
+                                    <button className="btn-action" onClick={onChangePassword}>
+                                        <Lock className="icon-xs" /> {t('Schimbă parola')}
+                                    </button>
+                                    <button className="btn-clear" onClick={onForgotPassword}>
+                                        {t('Am uitat parola…')}
+                                    </button>
+                                </div>
+                            </section>
+
+                            <section className="sgroup">
+                                <div className="sgroup-head">
+                                    <h4>{t('Descărcări de pe YouTube')}</h4>
+                                    <p>{t('Unde se salvează videoclipurile descărcate și unealta care le aduce.')}</p>
                                 </div>
                                 <div className="sstack">
                                     <DownloadFolderPicker settings={settings} onSave={saveSettings} />
@@ -5880,32 +6138,8 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Fereastra aceasta</h4>
-                                    <p>Nu are nicio legătură cu ecranul de proiecție.</p>
-                                </div>
-                                <div className="field" style={{ maxWidth: 380 }}>
-                                    <label>Mărimea textului și a butoanelor</label>
-                                    <select
-                                        value={String(settings.uiZoom ?? 1)}
-                                        onChange={e => {
-                                            const f = parseFloat(e.target.value);
-                                            saveSettings({ uiZoom: f });
-                                            window.electron.settings.setUiZoom(f);
-                                        }}
-                                    >
-                                        <option value="1">100%</option>
-                                        <option value="1.15">115%</option>
-                                        <option value="1.3">130%</option>
-                                        <option value="1.5">150%</option>
-                                    </select>
-                                </div>
-                            </section>
-
-                            <section className="sgroup">
-                                <div className="sgroup-head">
-                                    <h4>Depanare</h4>
-                                    <p>Pornește jurnalul doar dacă îți cerem noi, când raportezi o problemă.
-                                        Îl poți opri după aceea.</p>
+                                    <h4>{t('Depanare')}</h4>
+                                    <p>{t('Pornește jurnalul doar dacă îți cerem noi, când raportezi o problemă. Îl poți opri după aceea.')}</p>
                                 </div>
                                 <div className="field">
                                     <label className="flex items-center gap-2 cursor-pointer">
@@ -5914,7 +6148,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                             checked={settings.debugLog ?? false}
                                             onChange={e => saveSettings({ debugLog: e.target.checked })}
                                         />
-                                        Scrie un jurnal detaliat
+                                        {t('Scrie un jurnal detaliat')}
                                     </label>
                                     {settings.debugLog && (
                                         <button
@@ -5922,158 +6156,9 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                             style={{ alignSelf: 'flex-start' }}
                                             onClick={() => window.electron.update.openLogFile()}
                                         >
-                                            Deschide jurnalul
+                                            {t('Deschide jurnalul')}
                                         </button>
                                     )}
-                                </div>
-                            </section>
-
-                        </div>
-                    )}
-
-                    {activeTab === 'admin' && (
-                        <div className="settings-content">
-
-                            <section className="sgroup">
-                                <div className="sgroup-head">
-                                    <h4>Biserica</h4>
-                                    <p>Se trimit autorilor pentru evidența instalărilor și ca să te poată
-                                        ajuta dacă uiți parola. Modificările pleacă singure.</p>
-                                </div>
-                                <div className="sgrid2">
-                                    <div className="field">
-                                        <label>Numele bisericii</label>
-                                        <input
-                                            type="text"
-                                            className="timer-text-input"
-                                            placeholder="ex: Biserica Adventistă Speranța"
-                                            value={settings.churchName ?? ''}
-                                            onChange={e => saveSettings({ churchName: e.target.value })}
-                                            onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
-                                        />
-                                    </div>
-                                    <div className="field">
-                                        <label>Localitatea</label>
-                                        <input
-                                            type="text"
-                                            className="timer-text-input"
-                                            placeholder="ex: Cluj-Napoca"
-                                            value={settings.churchCity ?? ''}
-                                            onChange={e => saveSettings({ churchCity: e.target.value })}
-                                            onBlur={() => { window.electron.registry.submit().then(sent => { if (sent) showToast('Datele bisericii au fost trimise'); }).catch(() => { }); }}
-                                        />
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section className="sgroup">
-                                <div className="sgroup-head">
-                                    <h4>Actualizări</h4>
-                                    <p>Pe „beta" primești versiunile noi cu câteva zile înaintea celorlalți.
-                                        Dacă te întorci la „stabil", următoarea actualizare te readuce pe
-                                        versiunea stabilă curentă.</p>
-                                </div>
-                                <div className="sstack">
-                                    <div className="field" style={{ maxWidth: 380 }}>
-                                        <label>Canalul de actualizare</label>
-                                        <select
-                                            className="timer-text-input"
-                                            value={updateChannelValue}
-                                            onChange={async e => {
-                                                const ch = e.target.value as 'stable' | 'beta';
-                                                setUpdateChannelValue(ch);
-                                                await window.electron.update.setChannel(ch);
-                                                showToast(ch === 'beta'
-                                                    ? 'Vei primi versiunile de test, înaintea celorlalți'
-                                                    : 'Vei primi doar versiunile stabile');
-                                            }}
-                                        >
-                                            <option value="stable">Stabil — recomandat</option>
-                                            <option value="beta">Beta — versiuni de test</option>
-                                        </select>
-                                    </div>
-                                    <UpdateChecker />
-                                </div>
-                            </section>
-
-                            <section className="sgroup">
-                                <div className="sgroup-head">
-                                    <h4>Legătura cu autorii</h4>
-                                    <p>Corecturile tale la imnuri pleacă singure, după o săptămână de la
-                                        ultima modificare. Aici vezi ce s-a hotărât cu ele.</p>
-                                </div>
-                                <div className="row" style={{ flexWrap: 'wrap' }}>
-                                    <button className="btn-action" onClick={() => setDecisionsOpen(true)}>
-                                        Răspunsuri la ce ai trimis
-                                        {pendingDecisions > 0 && <span className="pill-count">{pendingDecisions}</span>}
-                                    </button>
-                                    <button className="btn-clear" onClick={() => setFeedbackKind('bug')}>
-                                        Raportează o problemă
-                                    </button>
-                                    <button className="btn-clear" onClick={() => setFeedbackKind('suggestion')}>
-                                        Sugerează o îmbunătățire
-                                    </button>
-                                </div>
-                                {pendingFeedback > 0 && (
-                                    <p className="text-white/40 text-xs mt-2">
-                                        {pendingFeedback} {pendingFeedback === 1 ? 'mesaj așteaptă' : 'mesaje așteaptă'} să
-                                        plece — nu era internet când le-ai scris. Se trimit automat.
-                                    </p>
-                                )}
-                            </section>
-
-                            <section className="sgroup">
-                                <div className="sgroup-head">
-                                    <h4>Copie de siguranță</h4>
-                                    <p>Salvează imnurile într-un fișier, ca să le poți muta pe alt calculator
-                                        sau să le recuperezi. Încărcarea unei copii adaugă peste ce ai deja.</p>
-                                </div>
-                                <div className="row" style={{ flexWrap: 'wrap' }}>
-                                    <button className="btn-action" onClick={async () => {
-                                        const p = await window.electron.dialog.saveJsonFile('backup-imnuri.json');
-                                        if (p) {
-                                            const r = await window.electron.db.exportJsonBackup(p);
-                                            setImportStatus(`Export reușit: ${r.hymns} imnuri, ${r.sections} secțiuni`);
-                                        }
-                                    }}>
-                                        <Download className="icon-xs" /> Salvează imnurile
-                                    </button>
-                                    <button className="btn-action" onClick={() => adminGate.require(async () => {
-                                        const p = await window.electron.dialog.selectJsonFile();
-                                        if (p) {
-                                            await window.electron.db.importJsonBackup(p);
-                                            onCategoriesChanged();
-                                            onHymnsChanged();
-                                            setImportStatus('Import imnuri din JSON reușit!');
-                                        }
-                                    }, 'Import bază de date (JSON)')}>
-                                        <Upload className="icon-xs" /> Încarcă dintr-o copie
-                                    </button>
-                                    <button className="btn-clear" onClick={async () => {
-                                        const p = await window.electron.dialog.saveFile('hymns-backup.db');
-                                        if (p) {
-                                            await window.electron.db.exportDb(p);
-                                            setImportStatus('Baza de date cu imnuri exportată!');
-                                        }
-                                    }}>
-                                        <Download className="icon-xs" /> Baza de date întreagă
-                                    </button>
-                                </div>
-                                {importStatus && <div className="import-msg">{importStatus}</div>}
-                            </section>
-
-                            <section className="sgroup">
-                                <div className="sgroup-head">
-                                    <h4>Parola de administrare</h4>
-                                    <p>Protejează modificarea imnurilor, importurile și ștergerea șabloanelor.</p>
-                                </div>
-                                <div className="row">
-                                    <button className="btn-action" onClick={onChangePassword}>
-                                        <Lock className="icon-xs" /> Schimbă parola
-                                    </button>
-                                    <button className="btn-clear" onClick={onForgotPassword}>
-                                        Am uitat parola…
-                                    </button>
                                 </div>
                             </section>
 
@@ -6086,25 +6171,25 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                                 {/* Logo + versiune */}
                                 <h2 className="text-3xl font-black text-primary tracking-wide">AdventShow</h2>
-                                <p className="text-white/40 text-xs -mt-3">versiunea {import.meta.env.VITE_APP_VERSION ?? '1.0.0'}</p>
+                                <p className="text-white/40 text-xs -mt-3">{t('versiunea {v}', { v: import.meta.env.VITE_APP_VERSION ?? '1.0.0' })}</p>
 
                                 {/* Descriere */}
                                 <p className="text-white/70 text-sm leading-relaxed max-w-sm">
-                                    Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici.
+                                    {t('Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici.')}
                                 </p>
 
                                 <div className="border-t border-white/10 w-full" />
 
                                 {/* Ce include */}
                                 <div className="text-sm text-white/60 leading-relaxed max-w-sm w-full text-left">
-                                    <p className="font-semibold text-white/80 mb-2 text-center">Ce include</p>
+                                    <p className="font-semibold text-white/80 mb-2 text-center">{t('Ce include')}</p>
                                     <ul className="list-disc list-inside space-y-1">
-                                        <li><strong>1.324 de imnuri și cântări</strong> — Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus</li>
-                                        <li><strong>Biblia Cornilescu</strong> — 66 cărți, 31.102 versete</li>
-                                        <li>Proiecție fullscreen pe ecran secundar</li>
-                                        <li>Redare video — fișiere locale și YouTube</li>
-                                        <li>Editor integrat, import PowerPoint, căutare</li>
-                                        <li>Actualizări automate — descarcă și instalează ultima versiune</li>
+                                        <li><strong>{t('1.324 de imnuri și cântări')}</strong> — {t('Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus')}</li>
+                                        <li><strong>{t('Biblia Cornilescu')}</strong> — {t('66 cărți, 31.102 versete')}</li>
+                                        <li>{t('Proiecție fullscreen pe ecran secundar')}</li>
+                                        <li>{t('Redare video — fișiere locale și YouTube')}</li>
+                                        <li>{t('Editor integrat, import PowerPoint, căutare')}</li>
+                                        <li>{t('Actualizări automate — descarcă și instalează ultima versiune')}</li>
                                     </ul>
                                 </div>
 
@@ -6112,24 +6197,18 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                                 {/* Dezvoltatori */}
                                 <div className="w-full max-w-sm">
-                                    <p className="font-semibold text-white/80 mb-3 text-center text-sm">Dezvoltatori</p>
+                                    <p className="font-semibold text-white/80 mb-3 text-center text-sm">{t('Dezvoltatori')}</p>
                                     <div className="flex flex-col gap-2">
                                         <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
                                             <p className="text-white/90 font-semibold text-sm">Ovidius Zanfir</p>
                                             <p className="text-white/40 text-xs mt-0.5">
-                                                Autor original, interfață, structura aplicației
+                                                {t('Autor original, interfață, structura aplicației')}
                                             </p>
                                         </div>
                                         <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
                                             <p className="text-white/90 font-semibold text-sm">Samy Balasa</p>
                                             <p className="text-white/40 text-xs mt-0.5">
-                                                Dezvoltarea versiunilor recente: colecțiile noi de cântări,
-                                                video &amp; YouTube, căutarea în Biblie, Ceas, Realtime cu
-                                                prezentări și șabloane, acompaniamentul instrumental al
-                                                imnurilor — pentru când nu e pianist la biserică — cu
-                                                trecerea strofelor pe melodie, corecturile care circulă
-                                                între biserici și autori, parola și recuperarea ei,
-                                                actualizarea automată pe canal stabil sau beta
+                                                {t('Dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, acompaniamentul instrumental al imnurilor — pentru când nu e pianist la biserică — cu trecerea strofelor pe melodie, corecturile care circulă între biserici și autori, parola și recuperarea ei, actualizarea automată pe canal stabil sau beta')}
                                             </p>
                                         </div>
                                     </div>
@@ -6153,204 +6232,178 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 <div className="border-t border-white/10 w-full" />
 
                                 <p className="text-white/25 text-xs">
-                                    Distribuit gratuit. Biblia Cornilescu — text în domeniu public.
+                                    {t('Distribuit gratuit. Biblia Cornilescu — text în domeniu public.')}
                                 </p>
                             </div>
                         </div>
                     )}
 
                     {activeTab === 'help' && (
-                        <div className="settings-content">
+                        <div className="settings-content settings-grid">
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Cum ajunge textul pe ecranul mare</h4>
-                                    <p>Doi pași, mereu aceiași: întâi pregătești, apoi trimiți.</p>
+                                    <h4>{t('Cum ajunge textul pe ecranul mare')}</h4>
+                                    <p>{t('Doi pași, mereu aceiași: întâi pregătești, apoi trimiți.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row">
                                         <kbd>1</kbd>
-                                        <span>Alegi imnul sau versetul din listă. Apare în panoul de
-                                            previzualizare, din dreapta. Congregația NU vede încă nimic.</span>
+                                        <span>{t('Alegi imnul sau versetul din listă. Apare în panoul de previzualizare, din dreapta. Congregația NU vede încă nimic.')}</span>
                                     </div>
                                     <div className="help-row">
                                         <kbd>2</kbd>
-                                        <span>Apeși <kbd>Enter</kbd> sau „Proiectează". Abia acum apare pe
-                                            ecranul mare.</span>
+                                        <span>{t('Apeși')} <kbd>Enter</kbd> {t('sau „Proiectează". Abia acum apare pe ecranul mare.')}</span>
                                     </div>
                                     <div className="help-row">
                                         <kbd>3</kbd>
-                                        <span>Treci prin strofe cu <kbd>→</kbd> și <kbd>←</kbd>. Poți pregăti
-                                            următorul imn în timp ce unul e pe ecran: alege-l din listă și
-                                            apasă <kbd>Enter</kbd> când vrei să-l schimbi.</span>
+                                        <span>{t('Treci prin strofe cu')} <kbd>→</kbd> {t('și')} <kbd>←</kbd>. {t('Poți pregăti următorul imn în timp ce unul e pe ecran: alege-l din listă și apasă')} <kbd>Enter</kbd> {t('când vrei să-l schimbi.')}</span>
                                     </div>
                                     <div className="help-row">
                                         <kbd>4</kbd>
-                                        <span><kbd>Esc</kbd> stinge ecranul mare.</span>
+                                        <span><kbd>Esc</kbd> {t('stinge ecranul mare.')}</span>
                                     </div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Taste — când NU proiectezi</h4>
-                                    <p>Pentru pregătit repede, fără mouse.</p>
+                                    <h4>{t('Taste — când NU proiectezi')}</h4>
+                                    <p>{t('Pentru pregătit repede, fără mouse.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>/</kbd>
-                                        <span>Sare în câmpul de căutare și selectează ce era scris — poți tasta direct numărul.</span></div>
+                                        <span>{t('Sare în câmpul de căutare și selectează ce era scris — poți tasta direct numărul.')}</span></div>
                                     <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd>
-                                        <span>Treci prin lista de imnuri sau prin versete; fiecare apăsare le arată în previzualizare.</span></div>
+                                        <span>{t('Treci prin lista de imnuri sau prin versete; fiecare apăsare le arată în previzualizare.')}</span></div>
                                     <div className="help-row"><kbd>Enter</kbd>
-                                        <span>Trimite pe ecran ce e în previzualizare.</span></div>
+                                        <span>{t('Trimite pe ecran ce e în previzualizare.')}</span></div>
                                     <div className="help-row"><kbd>Esc</kbd>
-                                        <span>Golește previzualizarea și câmpurile de căutare.</span></div>
+                                        <span>{t('Golește previzualizarea și câmpurile de căutare.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Taste — în timpul proiecției</h4>
-                                    <p>Merg și din fereastra principală, și din fereastra de control.</p>
+                                    <h4>{t('Taste — în timpul proiecției')}</h4>
+                                    <p>{t('Merg și din fereastra principală, și din fereastra de control.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
-                                    <div className="help-row"><kbd>→</kbd><kbd>PgDn</kbd><kbd>Spațiu</kbd>
-                                        <span>Strofa următoare.</span></div>
+                                    <div className="help-row"><kbd>→</kbd><kbd>PgDn</kbd><kbd>{t('Spațiu')}</kbd>
+                                        <span>{t('Strofa următoare.')}</span></div>
                                     <div className="help-row"><kbd>←</kbd><kbd>PgUp</kbd>
-                                        <span>Strofa anterioară.</span></div>
+                                        <span>{t('Strofa anterioară.')}</span></div>
                                     <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd>
-                                        <span>Mărește sau micșorează textul de pe ecranul mare. Dacă o strofă
-                                            lungă nu încape, aplicația o micșorează oricum singură.</span></div>
+                                        <span>{t('Mărește sau micșorează textul de pe ecranul mare. Dacă o strofă lungă nu încape, aplicația o micșorează oricum singură.')}</span></div>
                                     <div className="help-row"><kbd>Enter</kbd>
-                                        <span>Trece pe ecran imnul pregătit între timp.</span></div>
+                                        <span>{t('Trece pe ecran imnul pregătit între timp.')}</span></div>
                                     <div className="help-row"><kbd>Esc</kbd>
-                                        <span>Stinge ecranul mare.</span></div>
+                                        <span>{t('Stinge ecranul mare.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Taste — la video</h4>
-                                    <p>În fila Video, cu un film încărcat.</p>
+                                    <h4>{t('Taste — la video')}</h4>
+                                    <p>{t('În fila Video, cu un film încărcat.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
-                                    <div className="help-row"><kbd>Spațiu</kbd><span>Pornește sau oprește filmul.</span></div>
+                                    <div className="help-row"><kbd>{t('Spațiu')}</kbd><span>{t('Pornește sau oprește filmul.')}</span></div>
                                     <div className="help-row"><kbd>←</kbd><kbd>→</kbd>
-                                        <span>Înapoi / înainte 5 secunde. Cu <kbd>Shift</kbd> apăsat, 30 de secunde.</span></div>
-                                    <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd><span>Sunetul mai tare sau mai încet.</span></div>
-                                    <div className="help-row"><kbd>M</kbd><span>Taie sau repune sunetul.</span></div>
+                                        <span>{t('Înapoi / înainte 5 secunde. Cu')} <kbd>Shift</kbd> {t('apăsat, 30 de secunde.')}</span></div>
+                                    <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd><span>{t('Sunetul mai tare sau mai încet.')}</span></div>
+                                    <div className="help-row"><kbd>M</kbd><span>{t('Taie sau repune sunetul.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Anunțuri și prezentări</h4>
-                                    <p>Filele Anunțuri și Ceas ocupă singure ecranul mare.</p>
+                                    <h4>{t('Anunțuri și prezentări')}</h4>
+                                    <p>{t('Filele Anunțuri și Ceas ocupă singure ecranul mare.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>←</kbd><kbd>→</kbd>
-                                        <span>Trec prin slide-urile prezentării proiectate.</span></div>
+                                        <span>{t('Trec prin slide-urile prezentării proiectate.')}</span></div>
                                     <div className="help-row"><kbd>Esc</kbd>
-                                        <span>Prima apăsare închide editorul mare, a doua stinge ecranul.</span></div>
+                                        <span>{t('Prima apăsare închide editorul mare, a doua stinge ecranul.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Colecțiile de imnuri</h4>
-                                    <p>Două dintre ele au reguli aparte, și e bine să le știi.</p>
+                                    <h4>{t('Colecțiile de imnuri')}</h4>
+                                    <p>{t('Două dintre ele au reguli aparte, și e bine să le știi.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>1</kbd>
-                                        <span><strong>Cărțile</strong> — Imnuri Creștine, Licurici, Exploratori,
-                                            Companioni, Tineret, Amicus. Le ținem noi la zi. Dacă schimbi ceva
-                                            într-un imn de aici, varianta ta rămâne a ta: o corectură venită de
-                                            la noi nu ți-o mai suprascrie, ci te întreabă.</span></div>
+                                        <span><strong>{t('Cărțile')}</strong> {t('— Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus. Le ținem noi la zi. Dacă schimbi ceva într-un imn de aici, varianta ta rămâne a ta: o corectură venită de la noi nu ți-o mai suprascrie, ci te întreabă.')}</span></div>
                                     <div className="help-row"><kbd>2</kbd>
-                                        <span><strong>Imnuri Speciale</strong> — colecția oficială de cântări
-                                            care nu sunt în cărți. Numerele le dăm noi.</span></div>
+                                        <span><strong>{t('Imnuri Speciale')}</strong> {t('— colecția oficială de cântări care nu sunt în cărți. Numerele le dăm noi.')}</span></div>
                                     <div className="help-row"><kbd>3</kbd>
-                                        <span><strong>Imnurile mele</strong> — a ta. Tot ce adaugi ajunge aici
-                                            și noi nu scriem niciodată în ea. În schimb, ce pui aici pleacă
-                                            spre noi ca propunere, după o săptămână de la ultima modificare;
-                                            dacă o acceptăm, imnul intră în colecția oficială și ești anunțat.</span></div>
+                                        <span><strong>{t('Imnurile mele')}</strong> {t('— a ta. Tot ce adaugi ajunge aici și noi nu scriem niciodată în ea. În schimb, ce pui aici pleacă spre noi ca propunere, după o săptămână de la ultima modificare; dacă o acceptăm, imnul intră în colecția oficială și ești anunțat.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Adăugarea imnurilor</h4>
-                                    <p>Butonul <strong>+</strong> din capul ferestrei, la Imnuri.</p>
+                                    <h4>{t('Adăugarea imnurilor')}</h4>
+                                    <p>{t('Butonul')} <strong>+</strong> {t('din capul ferestrei, la Imnuri.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Scriu eu un imn nou</strong> — editorul gol, cu strofe și refrene.</span></div>
+                                        <span><strong>{t('Scriu eu un imn nou')}</strong> {t('— editorul gol, cu strofe și refrene.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Din fișiere PowerPoint</strong> — un fișier sau mai multe.
-                                            La un singur fișier, imnul se deschide pe loc în editor, ca să-l
-                                            îndrepți imediat.</span></div>
+                                        <span><strong>{t('Din fișiere PowerPoint')}</strong> {t('— un fișier sau mai multe. La un singur fișier, imnul se deschide pe loc în editor, ca să-l îndrepți imediat.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Dintr-un folder întreg</strong> — pentru zeci sau sute
-                                            deodată. Toate rămân marcate cu un punct portocaliu: conversia din
-                                            slide-uri greșește des. Le găsești adunate în butonul de
-                                            avertismente din antet și le citești pe rând.</span></div>
+                                        <span><strong>{t('Dintr-un folder întreg')}</strong> {t('— pentru zeci sau sute deodată. Toate rămân marcate cu un punct portocaliu: conversia din slide-uri greșește des. Le găsești adunate în butonul de avertismente din antet și le citești pe rând.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Butonul de avertismente din antet</h4>
-                                    <p>Apare doar când chiar te așteaptă ceva. Adună trei lucruri:</p>
+                                    <h4>{t('Butonul de avertismente din antet')}</h4>
+                                    <p>{t('Apare doar când chiar te așteaptă ceva. Adună trei lucruri:')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span>Ce au hotărât autorii cu imnurile și corecturile pe care le-ai trimis.</span></div>
+                                        <span>{t('Ce au hotărât autorii cu imnurile și corecturile pe care le-ai trimis.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span>Imnurile aduse din PowerPoint și încă necitite.</span></div>
+                                        <span>{t('Imnurile aduse din PowerPoint și încă necitite.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span>Unealta de descărcare de pe YouTube, dacă lipsește sau a rămas
-                                            în urmă.</span></div>
+                                        <span>{t('Unealta de descărcare de pe YouTube, dacă lipsește sau a rămas în urmă.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Actualizări</h4>
-                                    <p>Setări → Administrare.</p>
+                                    <h4>{t('Actualizări')}</h4>
+                                    <p>{t('Setări → Administrare.')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Stabil</strong> e canalul recomandat. <strong>Beta</strong>
-                                            îți dă versiunile cu câteva zile mai devreme.</span></div>
+                                        <span><strong>{t('Stabil')}</strong> {t('e canalul recomandat.')} <strong>{t('Beta')}</strong> {t('îți dă versiunile cu câteva zile mai devreme.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span>O actualizare marcată obligatorie se descarcă singură, dar
-                                            <strong> nu se instalează peste o proiecție în curs</strong> —
-                                            așteaptă să stingi ecranul.</span></div>
+                                        <span>{t('O actualizare marcată obligatorie se descarcă singură, dar')}
+                                            <strong> {t('nu se instalează peste o proiecție în curs')}</strong> —
+                                            {t('așteaptă să stingi ecranul.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>Când ceva nu merge</h4>
+                                    <h4>{t('Când ceva nu merge')}</h4>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Nu apare nimic pe ecranul mare</strong> — Setări →
-                                            Proiecție → „Detectează ecrane" și alege ecranul corect.</span></div>
+                                        <span><strong>{t('Nu apare nimic pe ecranul mare')}</strong> {t('— Setări → Proiecție → „Detectează ecrane" și alege ecranul corect.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Filmul merge fără sunet</strong> — Setări → Proiecție →
-                                            Sunetul videoclipurilor → „Detectează dispozitive" și alege ieșirea
-                                            pe care e legat ecranul.</span></div>
+                                        <span><strong>{t('Filmul merge fără sunet')}</strong> {t('— Setări → Proiecție → Sunetul videoclipurilor → „Detectează dispozitive" și alege ieșirea pe care e legat ecranul.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Nu se descarcă de pe YouTube</strong> — vezi butonul de
-                                            avertismente; unealta e probabil veche.</span></div>
+                                        <span><strong>{t('Nu se descarcă de pe YouTube')}</strong> {t('— vezi butonul de avertismente; unealta e probabil veche.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Ai pierdut un imn adăugat</strong> — caută-l în
-                                            „Imnurile mele"; tot ce adaugi ajunge acolo.</span></div>
+                                        <span><strong>{t('Ai pierdut un imn adăugat')}</strong> {t('— caută-l în „Imnurile mele"; tot ce adaugi ajunge acolo.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>Altceva</strong> — Setări → Administrare → „Raportează o
-                                            problemă". Mesajul ajunge la noi chiar dacă în clipa aceea nu e
-                                            internet; pleacă mai târziu, singur.</span></div>
+                                        <span><strong>{t('Altceva')}</strong> {t('— Setări → Administrare → „Raportează o problemă". Mesajul ajunge la noi chiar dacă în clipa aceea nu e internet; pleacă mai târziu, singur.')}</span></div>
                                 </div>
                             </section>
 
@@ -6428,6 +6481,7 @@ const timerCtl: {
 } = { timeoutId: null, armed: null, live: null, anchor: {}, sync: null };
 
 function TimerPanel() {
+    const t = useT();
     const [mode, setMode] = useState<'countdown' | 'stopwatch' | 'clock'>(timerCtl.live?.mode ?? 'countdown');
     const [minutes, setMinutes] = useState(5);
     const [seconds, setSeconds] = useState(0);
@@ -6539,8 +6593,10 @@ function TimerPanel() {
     const scheduleAt = useCallback(() => {
         const { epoch, tomorrow } = nextClockOccurrence(atHH, atMM);
         const pad = (n: number) => String(n).padStart(2, '0');
-        const label = `${tomorrow ? 'mâine ' : ''}la ${pad(atHH)}:${pad(atMM)}`;
-        const durMs = durationMs, t = title, z = zeroMessage, az = afterZero, azs = afterZeroStopSec, bg = bgToPayload(bgRef.current);
+        const label = tomorrow
+            ? t('mâine la {hh}:{mm}', { hh: pad(atHH), mm: pad(atMM) })
+            : t('la {hh}:{mm}', { hh: pad(atHH), mm: pad(atMM) });
+        const durMs = durationMs, ttl = title, z = zeroMessage, az = afterZero, azs = afterZeroStopSec, bg = bgToPayload(bgRef.current);
         if (timerCtl.timeoutId) clearTimeout(timerCtl.timeoutId);
         timerCtl.armed = { fireAtEpochMs: epoch, label };
         timerCtl.timeoutId = setTimeout(() => {
@@ -6550,7 +6606,7 @@ function TimerPanel() {
             timerCtl.anchor = { targetEpochMs: target };
             const payload: import('./vite-env').ProjectionTimerData = {
                 mode: 'countdown', targetEpochMs: target, running: true,
-                title: t || undefined, zeroMessage: z || undefined,
+                title: ttl || undefined, zeroMessage: z || undefined,
                 afterZero: az, afterZeroSeconds: azs, background: bg,
             };
             timerCtl.live = payload;
@@ -6559,7 +6615,7 @@ function TimerPanel() {
             liveBus.notify();
         }, Math.max(0, epoch - Date.now()));
         setScheduled(timerCtl.armed);
-    }, [atHH, atMM, durationMs, title, zeroMessage, afterZero, afterZeroStopSec]);
+    }, [atHH, atMM, durationMs, title, zeroMessage, afterZero, afterZeroStopSec, t]);
 
     const cancelSchedule = useCallback(() => {
         if (timerCtl.timeoutId) { clearTimeout(timerCtl.timeoutId); timerCtl.timeoutId = null; }
@@ -6638,7 +6694,7 @@ function TimerPanel() {
     useEffect(() => {
         const liveTick = mode === 'clock' || (projected && running) || !!scheduled;
         if (!liveTick) return;
-        const id = setInterval(() => setNowTick(t => t + 1), 1000);
+        const id = setInterval(() => setNowTick(n => n + 1), 1000);
         return () => clearInterval(id);
     }, [mode, projected, running, scheduled]);
     const previewBg = (() => {
@@ -6674,7 +6730,7 @@ function TimerPanel() {
     })();
     const previewTime = mode === 'clock'
         ? previewClockText
-        : previewAtZero ? (zeroMessage || 'S-a terminat') : fmtTimerMs(previewMs);
+        : previewAtZero ? (zeroMessage || t('S-a terminat')) : fmtTimerMs(previewMs);
     // echivalentul în minute pentru „numără până la ora X" (afișat live)
     const untilEquivMin = Math.max(0, Math.round((nextClockOccurrence(untilHH, untilMM).epoch - Date.now()) / 60_000));
     // cât mai e până pornește numărătoarea programată
@@ -6691,46 +6747,45 @@ function TimerPanel() {
                         className={`timer-mode-btn ${mode === m ? 'active' : ''}`}
                         onClick={() => { setMode(m); setRunning(false); }}
                     >
-                        {m === 'countdown' ? 'Numărătoare inversă' : m === 'stopwatch' ? 'Cronometru' : 'Ceas'}
+                        {m === 'countdown' ? t('Numărătoare inversă') : m === 'stopwatch' ? t('Cronometru') : t('Ceas')}
                     </button>
                 ))}
             </div>
 
             {mode === 'countdown' && (
                 <div className="timer-section">
-                    <label className="timer-label">Presetări</label>
+                    <label className="timer-label">{t('Presetări')}</label>
                     <div className="timer-presets">
                         {presets.map(p => (
                             <button key={p} className="timer-preset-btn" onClick={() => { setMinutes(p); setSeconds(0); }}>
-                                {p} min
+                                {p} {t('min')}
                             </button>
                         ))}
                     </div>
-                    <label className="timer-label">Cât ține</label>
+                    <label className="timer-label">{t('Cât ține')}</label>
                     <div className={`timer-duration ${startMode === 'until' ? 'is-disabled' : ''}`}>
                         <input type="number" min={0} max={599} value={minutes} disabled={startMode === 'until'}
                             onChange={e => setMinutes(Math.max(0, Math.min(599, parseInt(e.target.value) || 0)))} />
-                        <span>min</span>
+                        <span>{t('min')}</span>
                         <input type="number" min={0} max={59} value={seconds} disabled={startMode === 'until'}
                             onChange={e => setSeconds(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
-                        <span>sec</span>
+                        <span>{t('sec')}</span>
                     </div>
                     {startMode === 'until' && (
                         <div className="timer-hint-sm">
-                            Nu o mai stabilești tu: ai ales să se termine la o oră anume, deci durata iese din
-                            calcul singură.
+                            {t('Nu o mai stabilești tu: ai ales să se termine la o oră anume, deci durata iese din calcul singură.')}
                         </div>
                     )}
 
-                    <label className="timer-label">Când pornește</label>
+                    <label className="timer-label">{t('Când pornește')}</label>
                     <div className="timer-start-modes">
                         <label className="timer-radio">
                             <input type="radio" name="startMode" checked={startMode === 'now'} onChange={() => setStartMode('now')} />
-                            <span>Acum — pornește când apeși „Proiectează”</span>
+                            <span>{t('Acum — pornește când apeși „Proiectează”')}</span>
                         </label>
                         <label className="timer-radio">
                             <input type="radio" name="startMode" checked={startMode === 'until'} onChange={() => setStartMode('until')} />
-                            <span>Acum, dar se oprește fix la ora</span>
+                            <span>{t('Acum, dar se oprește fix la ora')}</span>
                             <input className="timer-time-input" type="number" min={0} max={23} value={untilHH}
                                 onFocus={() => setStartMode('until')}
                                 onChange={e => setUntilHH(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))} />
@@ -6741,14 +6796,15 @@ function TimerPanel() {
                         </label>
                         {startMode === 'until' && (
                             <div className="timer-hint-sm">
-                                Pentru „mai avem X minute până începe programul": pui ora de început, iar
-                                aplicația socotește cât mai e. Acum ar fi ≈ {untilEquivMin} min
-                                {nextClockOccurrence(untilHH, untilMM).tomorrow ? ' (mâine)' : ''}.
+                                {t('Pentru „mai avem X minute până începe programul": pui ora de început, iar aplicația socotește cât mai e. Acum ar fi ≈ {n} min{tomorrow}.', {
+                                    n: untilEquivMin,
+                                    tomorrow: nextClockOccurrence(untilHH, untilMM).tomorrow ? t(' (mâine)') : '',
+                                })}
                             </div>
                         )}
                         <label className="timer-radio">
                             <input type="radio" name="startMode" checked={startMode === 'at'} onChange={() => setStartMode('at')} />
-                            <span>Mai târziu, singură, la ora</span>
+                            <span>{t('Mai târziu, singură, la ora')}</span>
                             <input className="timer-time-input" type="number" min={0} max={23} value={atHH}
                                 onFocus={() => setStartMode('at')}
                                 onChange={e => setAtHH(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))} />
@@ -6758,76 +6814,81 @@ function TimerPanel() {
                                 onChange={e => setAtMM(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))} />
                         </label>
                         {startMode === 'at' && (
-                            <div className="timer-hint-sm">Numărătoarea de {fmtTimerMs(durationMs)} pornește singură {nextClockOccurrence(atHH, atMM).tomorrow ? 'mâine ' : ''}la {String(atHH).padStart(2, '0')}:{String(atMM).padStart(2, '0')}.</div>
+                            <div className="timer-hint-sm">{t('Numărătoarea de {dur} pornește singură {tomorrow}la {hh}:{mm}.', {
+                                dur: fmtTimerMs(durationMs),
+                                tomorrow: nextClockOccurrence(atHH, atMM).tomorrow ? t('mâine ') : '',
+                                hh: String(atHH).padStart(2, '0'),
+                                mm: String(atMM).padStart(2, '0'),
+                            })}</div>
                         )}
                     </div>
 
-                    <label className="timer-label">Mesaj la final (opțional)</label>
-                    <input className="timer-text-input" type="text" placeholder="ex: Bine ați venit!"
+                    <label className="timer-label">{t('Mesaj la final (opțional)')}</label>
+                    <input className="timer-text-input" type="text" placeholder={t('ex: Bine ați venit!')}
                         value={zeroMessage} onChange={e => setZeroMessage(e.target.value)} />
 
-                    <label className="timer-label">După terminare</label>
+                    <label className="timer-label">{t('După terminare')}</label>
                     <div className="timer-after-zero">
                         <select className="timer-text-input" value={afterZero}
                             onChange={e => setAfterZero(e.target.value as 'stay' | 'black' | 'stop')}>
-                            <option value="stay">Rămâne mesajul</option>
-                            <option value="black">Ecran negru</option>
-                            <option value="stop">Oprește proiecția</option>
+                            <option value="stay">{t('Rămâne mesajul')}</option>
+                            <option value="black">{t('Ecran negru')}</option>
+                            <option value="stop">{t('Oprește proiecția')}</option>
                         </select>
                         {afterZero === 'stop' && (
                             <span className="timer-after-zero-sec">
-                                după
+                                {t('după')}
                                 <input className="timer-time-input" type="number" min={0} max={600} value={afterZeroStopSec}
                                     onChange={e => setAfterZeroStopSec(Math.max(0, Math.min(600, parseInt(e.target.value) || 0)))} />
-                                sec
+                                {t('sec')}
                             </span>
                         )}
                     </div>
                     {afterZero === 'black' && (
-                        <div className="timer-hint">La zero ecranul devine negru (fără text).</div>
+                        <div className="timer-hint">{t('La zero ecranul devine negru (fără text).')}</div>
                     )}
                     {afterZero === 'stop' && (
-                        <div className="timer-hint">La zero proiecția se închide automat după {afterZeroStopSec} sec.</div>
+                        <div className="timer-hint">{t('La zero proiecția se închide automat după {n} sec.', { n: afterZeroStopSec })}</div>
                     )}
                 </div>
             )}
 
             {mode === 'clock' && (
                 <div className="timer-section">
-                    <label className="timer-label">Tip ceas</label>
+                    <label className="timer-label">{t('Tip ceas')}</label>
                     <div className="timer-mode-switch">
                         <button
                             className={`timer-mode-btn ${!clockAnalog ? 'active' : ''}`}
                             onClick={() => setClockAnalog(false)}
                         >
-                            Digital
+                            {t('Digital')}
                         </button>
                         <button
                             className={`timer-mode-btn ${clockAnalog ? 'active' : ''}`}
                             onClick={() => setClockAnalog(true)}
                         >
-                            Analogic
+                            {t('Analogic')}
                         </button>
                     </div>
                     <label className="timer-checkbox">
                         <input type="checkbox" checked={clockShowSeconds} onChange={e => setClockShowSeconds(e.target.checked)} />
-                        Afișează secundele
+                        {t('Afișează secundele')}
                     </label>
                     {!clockAnalog && (
                         <label className="timer-checkbox">
                             <input type="checkbox" checked={clock24h} onChange={e => setClock24h(e.target.checked)} />
-                            Format 24 de ore
+                            {t('Format 24 de ore')}
                         </label>
                     )}
                 </div>
             )}
 
             <div className="timer-section">
-                <label className="timer-label">Titlu (opțional)</label>
+                <label className="timer-label">{t('Titlu (opțional)')}</label>
                 <input className="timer-text-input" type="text"
-                    placeholder={mode === 'countdown' ? 'ex: Serviciul începe în'
-                        : mode === 'stopwatch' ? 'ex: Timp scurs'
-                            : 'ex: Bine ați venit!'}
+                    placeholder={mode === 'countdown' ? t('ex: Serviciul începe în')
+                        : mode === 'stopwatch' ? t('ex: Timp scurs')
+                            : t('ex: Bine ați venit!')}
                     value={title} onChange={e => setTitle(e.target.value)} />
             </div>
 
@@ -6838,53 +6899,53 @@ function TimerPanel() {
             {scheduled ? (
                 <div className="timer-scheduled">
                     <div className="timer-scheduled-info">
-                        <strong>Programat {scheduled.label}</strong>
-                        <span>Pornește în {fmtTimerMs(scheduledInMs)} — proiecția pornește singură.</span>
+                        <strong>{t('Programat {label}', { label: scheduled.label })}</strong>
+                        <span>{t('Pornește în {dur} — proiecția pornește singură.', { dur: fmtTimerMs(scheduledInMs) })}</span>
                     </div>
-                    <button className="btn-sm timer-stop" onClick={cancelSchedule}>Anulează</button>
+                    <button className="btn-sm timer-stop" onClick={cancelSchedule}>{t('Anulează')}</button>
                 </div>
             ) : (
                 <div className="timer-actions">
                     {!projected || mode === 'clock' ? (
                         <button className="btn-project timer-start" onClick={start}>
-                            {mode === 'clock' ? 'Proiectează ceasul'
-                                : (mode === 'countdown' && startMode === 'at') ? 'Programează'
-                                    : 'Proiectează'}
+                            {mode === 'clock' ? t('Proiectează ceasul')
+                                : (mode === 'countdown' && startMode === 'at') ? t('Programează')
+                                    : t('Proiectează')}
                         </button>
                     ) : running ? (
                         previewAtZero ? (
-                            <button className="btn-project timer-start" onClick={startCountdown}>Repornește</button>
+                            <button className="btn-project timer-start" onClick={startCountdown}>{t('Repornește')}</button>
                         ) : (
-                            <button className="btn-sm timer-pause" onClick={pause}>Pauză</button>
+                            <button className="btn-sm timer-pause" onClick={pause}>{t('Pauză')}</button>
                         )
                     ) : (
-                        <button className="btn-project timer-start" onClick={resume}>Continuă</button>
+                        <button className="btn-project timer-start" onClick={resume}>{t('Continuă')}</button>
                     )}
                     {projected && (
-                        <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
+                        <button className="btn-sm timer-stop" onClick={stop}>{t('Oprește')}</button>
                     )}
                 </div>
             )}
             <p className="timer-hint">
-                {mode === 'countdown' ? 'Numărătoarea inversă apare pe ecranul de proiecție.'
-                    : mode === 'stopwatch' ? 'Cronometrul pornește de la zero și urcă.'
-                        : 'Se afișează ora curentă pe ecranul de proiecție.'}
+                {mode === 'countdown' ? t('Numărătoarea inversă apare pe ecranul de proiecție.')
+                    : mode === 'stopwatch' ? t('Cronometrul pornește de la zero și urcă.')
+                        : t('Se afișează ora curentă pe ecranul de proiecție.')}
             </p>
             </div>
 
             <div className="rt-right">
-                <label className="timer-label">Previzualizare (cum apare pe ecran)</label>
+                <label className="timer-label">{t('Previzualizare (cum apare pe ecran)')}</label>
                 <div className="rt-preview" style={{ background: previewBg }}>
                     <div className="rt-preview-center">
                         {title && <div className="rt-preview-title">{title}</div>}
                         <div className="rt-preview-time" style={{ color: previewWarn ? '#f59e0b' : undefined }}>{previewTime}</div>
-                        {mode === 'clock' && clockAnalog && <div className="rt-preview-note">(pe proiecție: ceas analogic)</div>}
-                        {projected && !running && mode !== 'clock' && <div className="rt-preview-note">⏸ pauză</div>}
+                        {mode === 'clock' && clockAnalog && <div className="rt-preview-note">{t('(pe proiecție: ceas analogic)')}</div>}
+                        {projected && !running && mode !== 'clock' && <div className="rt-preview-note">⏸ {t('pauză')}</div>}
                     </div>
                 </div>
                 {projected
-                    ? <span className="live-indicator">● LIVE pe proiecție{previewAtZero ? ' — s-a terminat' : ''}</span>
-                    : scheduled && <span className="live-indicator scheduled">◷ programat {scheduled.label}</span>}
+                    ? <span className="live-indicator">{t('● LIVE pe proiecție{end}', { end: previewAtZero ? t(' — s-a terminat') : '' })}</span>
+                    : scheduled && <span className="live-indicator scheduled">{t('◷ programat {label}', { label: scheduled.label })}</span>}
             </div>
           </div>
         </div>
@@ -7022,28 +7083,30 @@ function bgToPayload(bg: BgChoice, slide?: { bgColor?: string; bgGradient?: stri
     return null; // fundalul global al aplicației
 }
 
-function BackgroundPicker({ bg, onChange, existingLabel = 'Fundalul aplicației' }: {
+function BackgroundPicker({ bg, onChange, existingLabel }: {
     bg: BgChoice; onChange: (b: BgChoice) => void; existingLabel?: string;
 }) {
+    const t = useT();
+    const resolvedExistingLabel = existingLabel ?? t('Fundalul aplicației');
     const pickImage = async () => {
         const p = await window.electron.dialog.pickMedia('image');
         if (p) onChange({ kind: 'image', path: p });
     };
     return (
         <div className="field">
-            <label className="timer-label">Fundal</label>
+            <label className="timer-label">{t('Fundal')}</label>
             <div className="bg-grid">
                 {/* fundal implicit al aplicației / existent din PPT */}
                 <button
                     type="button"
                     className={`bg-card ${bg.kind === 'preset' && bg.css === '' ? 'active' : ''}`}
-                    title={existingLabel}
+                    title={resolvedExistingLabel}
                     onClick={() => onChange({ kind: 'preset', css: '' })}
                 >
                     <span className="bg-card-swatch bg-card-default">
                         {bg.kind === 'preset' && bg.css === '' && <span className="bg-card-check">✓</span>}
                     </span>
-                    <span className="bg-card-name">{existingLabel}</span>
+                    <span className="bg-card-name">{resolvedExistingLabel}</span>
                 </button>
                 {/* culori / gradient predefinite */}
                 {BG_PRESETS.filter(p => p.css).map(p => {
@@ -7053,13 +7116,13 @@ function BackgroundPicker({ bg, onChange, existingLabel = 'Fundalul aplicației'
                             key={p.name}
                             type="button"
                             className={`bg-card ${active ? 'active' : ''}`}
-                            title={p.name}
+                            title={t(p.name)}
                             onClick={() => onChange({ kind: 'preset', css: p.css })}
                         >
                             <span className="bg-card-swatch" style={{ background: p.css }}>
                                 {active && <span className="bg-card-check">✓</span>}
                             </span>
-                            <span className="bg-card-name">{p.name}</span>
+                            <span className="bg-card-name">{t(p.name)}</span>
                         </button>
                     );
                 })}
@@ -7067,13 +7130,13 @@ function BackgroundPicker({ bg, onChange, existingLabel = 'Fundalul aplicației'
                 <button
                     type="button"
                     className={`bg-card ${bg.kind === 'image' ? 'active' : ''}`}
-                    title="Imagine de pe disc"
+                    title={t('Imagine de pe disc')}
                     onClick={pickImage}
                 >
                     <span className="bg-card-swatch bg-card-image">
                         {bg.kind === 'image' ? <span className="bg-card-check">✓</span> : <ImageIcon className="icon-xs" />}
                     </span>
-                    <span className="bg-card-name">Imagine…</span>
+                    <span className="bg-card-name">{t('Imagine…')}</span>
                 </button>
             </div>
             {bg.kind === 'image' && (
@@ -7084,6 +7147,7 @@ function BackgroundPicker({ bg, onChange, existingLabel = 'Fundalul aplicației'
 }
 
 function MessagePanel() {
+    const t = useT();
     const [mode, setMode] = useState<'text' | 'pres'>('text');
 
     // ── Text simplu ──────────────────────────────────────────────────────────
@@ -7164,9 +7228,9 @@ function MessagePanel() {
 
     // închiderea editorului: dacă există modificări nesalvate, cere confirmare
     const attemptCloseOverlay = useCallback(() => {
-        if (dirty && !window.confirm('Ai modificări nesalvate în acest șablon. Închizi fără să salvezi? (poți edita și proiecta și fără să salvezi)')) return;
+        if (dirty && !window.confirm(t('Ai modificări nesalvate în acest șablon. Închizi fără să salvezi? (poți edita și proiecta și fără să salvezi)'))) return;
         setOverlayOpen(false);
-    }, [dirty]);
+    }, [dirty, t]);
 
     // Esc global: primul închide editorul mare, al doilea oprește proiecția
     useEffect(() => {
@@ -7330,7 +7394,7 @@ function MessagePanel() {
         const sh = p.slides[curSlide]?.shapes[focusedShape];
         if (!sh) return;
         fn(sh);
-        setShapeTick(t => t + 1);
+        setShapeTick(n => n + 1);
         setDirty(true);
         schedulePresUpdate();
     };
@@ -7345,8 +7409,8 @@ function MessagePanel() {
     const addShape = () => {
         const p = presRef.current;
         if (!p) return;
-        p.slides[curSlide].shapes.push({ x: 10, y: 40, w: 80, h: 22, html: '<p>Text nou</p>' });
-        setShapeTick(t => t + 1);
+        p.slides[curSlide].shapes.push({ x: 10, y: 40, w: 80, h: 22, html: `<p>${t('Text nou')}</p>` });
+        setShapeTick(n => n + 1);
         setFocusedShape(p.slides[curSlide].shapes.length - 1);
         setDirty(true);
         schedulePresUpdate();
@@ -7358,7 +7422,7 @@ function MessagePanel() {
         if (!src) return;
         p.slides[curSlide].shapes.push({ ...src, x: Math.min(92, src.x + 3), y: Math.min(92, src.y + 3) });
         setFocusedShape(p.slides[curSlide].shapes.length - 1);
-        setShapeTick(t => t + 1);
+        setShapeTick(n => n + 1);
         setDirty(true);
         schedulePresUpdate();
     };
@@ -7368,7 +7432,7 @@ function MessagePanel() {
         if (p.slides[curSlide].shapes.length <= 1) return;
         p.slides[curSlide].shapes.splice(focusedShape, 1);
         setFocusedShape(null);
-        setShapeTick(t => t + 1);
+        setShapeTick(n => n + 1);
         setDirty(true);
         schedulePresUpdate();
     };
@@ -7387,50 +7451,50 @@ function MessagePanel() {
         setDirty(false);
         setSaveName('');
         refreshTemplates();
-        setPresStatus(`Șablon salvat: ${info.name}`);
+        setPresStatus(t('Șablon salvat: {name}', { name: info.name }));
     };
     // „Salvează" = suprascrie șablonul ÎNCĂRCAT (există deja → cere parola)
     const onSaveOver = () => {
         if (!presRef.current || !loadedFile) return;
-        const cur = templates.find(t => t.file === loadedFile);
-        const name = cur?.name ?? presName ?? 'Șablon';
+        const cur = templates.find(tpl => tpl.file === loadedFile);
+        const name = cur?.name ?? presName ?? t('Șablon');
         adminGate.require(
-            () => writeTemplate(name, loadedFile).catch(() => setPresStatus('Salvarea a eșuat.')),
-            'Salvare șablon',
+            () => writeTemplate(name, loadedFile).catch(() => setPresStatus(t('Salvarea a eșuat.'))),
+            t('Salvare șablon'),
         );
     };
     // „Salvează ca…" = nume nou; dacă există deja un fișier cu acel nume → parolă
     const onSaveAs = () => {
         const name = saveName.trim();
         if (!name || !presRef.current) return;
-        const safe = name.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60) || 'Șablon';
-        const collide = templates.some(t => t.file === `${safe}.json`);
-        const go = () => writeTemplate(name).then(() => setSaveAsOpen(false)).catch(() => setPresStatus('Salvarea a eșuat.'));
-        if (collide) adminGate.require(go, 'Suprascriere șablon'); else go();
+        const safe = name.replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60) || t('Șablon');
+        const collide = templates.some(tpl => tpl.file === `${safe}.json`);
+        const go = () => writeTemplate(name).then(() => setSaveAsOpen(false)).catch(() => setPresStatus(t('Salvarea a eșuat.')));
+        if (collide) adminGate.require(go, t('Suprascriere șablon')); else go();
     };
     // duplicare cu nume nou liber (« (copie) », « (copie 2) »…) — fără parolă
-    const duplicateTemplate = async (t: TemplateInfo) => {
+    const duplicateTemplate = async (tpl: TemplateInfo) => {
         try {
-            const p = await window.electron.templates.load(t.file);
+            const p = await window.electron.templates.load(tpl.file);
             const exists = (nm: string) => templates.some(x => x.name.toLowerCase() === nm.toLowerCase());
-            const base = `${t.name} (copie)`;
+            const base = t('{name} (copie)', { name: tpl.name });
             let name = base, n = 2;
             while (exists(name)) name = `${base} ${n++}`;
             const info = await window.electron.templates.save(name, { ...p, name });
             refreshTemplates();
-            setPresStatus(`Copie creată: ${info.name}`);
-        } catch { setPresStatus('Duplicarea a eșuat.'); }
+            setPresStatus(t('Copie creată: {name}', { name: info.name }));
+        } catch { setPresStatus(t('Duplicarea a eșuat.')); }
     };
     // readucerea unui șablon IMPLICIT la varianta livrată (pierde editările → parolă)
-    const resetBuiltinTpl = (t: TemplateInfo) => {
+    const resetBuiltinTpl = (tpl: TemplateInfo) => {
         adminGate.require(async () => {
             try {
-                const p = await window.electron.templates.resetBuiltin(t.file);
+                const p = await window.electron.templates.resetBuiltin(tpl.file);
                 refreshTemplates();
-                if (loadedFile === t.file || presName === t.name) setPresentation(p, t.file);
-                setPresStatus(`„${t.name}" a fost readus la varianta implicită.`);
-            } catch { setPresStatus('Resetarea a eșuat.'); }
-        }, 'Resetare șablon implicit');
+                if (loadedFile === tpl.file || presName === tpl.name) setPresentation(p, tpl.file);
+                setPresStatus(t('„{name}" a fost readus la varianta implicită.', { name: tpl.name }));
+            } catch { setPresStatus(t('Resetarea a eșuat.')); }
+        }, t('Resetare șablon implicit'));
     };
 
     // mutarea / redimensionarea casetelor cu mouse-ul (mânerele de pe casetă)
@@ -7468,7 +7532,7 @@ function MessagePanel() {
                 shape.w = Math.max(6, Math.min(100 - d.orig.x, d.orig.w + dx));
                 shape.h = Math.max(4, Math.min(100 - d.orig.y, d.orig.h + dy));
             }
-            setShapeTick(t => t + 1);
+            setShapeTick(n => n + 1);
         };
         const onUp = () => {
             document.removeEventListener('mousemove', onMove);
@@ -7502,30 +7566,30 @@ function MessagePanel() {
         <div className="content-inner message-panel rt-host">
             <div className="timer-mode-switch">
                 <button className={`timer-mode-btn ${mode === 'text' ? 'active' : ''}`} onClick={() => setMode('text')}>
-                    Text simplu
+                    {t('Text simplu')}
                 </button>
                 <button className={`timer-mode-btn ${mode === 'pres' ? 'active' : ''}`} onClick={() => setMode('pres')}>
-                    Prezentare
+                    {t('Prezentare')}
                 </button>
             </div>
 
             {mode === 'text' && (
                 <div className="rt-layout">
                     <div className="rt-left">
-                        <label className="timer-label">Text de proiectat</label>
+                        <label className="timer-label">{t('Text de proiectat')}</label>
                         <textarea
                             className="message-textarea"
-                            placeholder="Scrie un mesaj... apare pe proiecție în timp real."
+                            placeholder={t('Scrie un mesaj... apare pe proiecție în timp real.')}
                             value={text}
                             onChange={e => setText(e.target.value)}
                             rows={6}
                         />
                         <label className="timer-checkbox">
                             <input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)} />
-                            Actualizare în timp real (pe măsură ce scrii)
+                            {t('Actualizare în timp real (pe măsură ce scrii)')}
                         </label>
                         <div className="field">
-                            <label className="timer-label">Culoare text</label>
+                            <label className="timer-label">{t('Culoare text')}</label>
                             <div className="color-row">
                                 <input
                                     type="color"
@@ -7539,24 +7603,24 @@ function MessagePanel() {
                         <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
                         <div className="timer-actions">
                             {!projected ? (
-                                <button className="btn-project timer-start" onClick={() => project(text)}>Proiectează</button>
+                                <button className="btn-project timer-start" onClick={() => project(text)}>{t('Proiectează')}</button>
                             ) : (
                                 <>
                                     {live && <span className="live-indicator">● LIVE</span>}
                                     {!live && (
-                                        <button className="btn-project timer-start" onClick={() => update(text)}>Trimite</button>
+                                        <button className="btn-project timer-start" onClick={() => update(text)}>{t('Trimite')}</button>
                                     )}
-                                    <button className="btn-sm timer-stop" onClick={stop}>Oprește</button>
+                                    <button className="btn-sm timer-stop" onClick={stop}>{t('Oprește')}</button>
                                 </>
                             )}
                         </div>
-                        <p className="timer-hint">Bun pentru anunțuri, urări, un verset tastat manual sau „Pauză 10 min".</p>
+                        <p className="timer-hint">{t('Bun pentru anunțuri, urări, un verset tastat manual sau „Pauză 10 min".')}</p>
                     </div>
                     <div className="rt-right">
-                        <label className="timer-label">Previzualizare (cum apare pe ecran)</label>
+                        <label className="timer-label">{t('Previzualizare (cum apare pe ecran)')}</label>
                         <div className="rt-preview" style={{ background: textPreviewBgCss }}>
                             <div className="rt-preview-center rt-preview-text" style={{ color: textColor }}>
-                                {text.trim() || 'Scrie un mesaj…'}
+                                {text.trim() || t('Scrie un mesaj…')}
                             </div>
                         </div>
                     </div>
@@ -7569,7 +7633,7 @@ function MessagePanel() {
                         <button className="btn-sm rt-import-btn" onClick={async () => {
                             const file = await window.electron.presentation.pickFile();
                             if (!file) return;
-                            setPresStatus('Se convertește prezentarea...');
+                            setPresStatus(t('Se convertește prezentarea...'));
                             const res = await window.electron.presentation.parse(file);
                             if (res.ok) {
                                 setPresentation(res.data, null);
@@ -7577,63 +7641,70 @@ function MessagePanel() {
                                 setOverlayOpen(true);
                                 const s = res.summary;
                                 setImportToast(s
-                                    ? `Am adus din PPT: fundal ${s.background ? '✓' : '✗'} · culori text ${s.colors ? '✓' : '✗'} · ${s.images} ${s.images === 1 ? 'imagine' : 'imagini'} · ${s.textBoxes} casete text · ${s.slides} slide-uri`
+                                    ? t('Am adus din PPT: fundal {bg} · culori text {colors} · {imgN} {imgWord} · {tbN} casete text · {slN} slide-uri', {
+                                        bg: s.background ? '✓' : '✗',
+                                        colors: s.colors ? '✓' : '✗',
+                                        imgN: s.images,
+                                        imgWord: s.images === 1 ? t('imagine') : t('imagini'),
+                                        tbN: s.textBoxes,
+                                        slN: s.slides,
+                                    })
                                     : null);
                             }
                             else setPresStatus(res.error);
-                        }}><Upload className="icon-xs" /> Importă din PowerPoint</button>
+                        }}><Upload className="icon-xs" /> {t('Importă din PowerPoint')}</button>
 
                         <div className="tpl-manager">
-                            <label className="timer-label">Șabloane</label>
+                            <label className="timer-label">{t('Șabloane')}</label>
                             {/* PPT importat, încă nesalvat — rând temporar sus, ca să-l poți redeschide */}
                             {presName !== null && loadedFile === null && (
                                 <div className="tpl-row tpl-row-transient">
-                                    <button className="tpl-name" title="Continuă editarea" onClick={() => setOverlayOpen(true)}>
+                                    <button className="tpl-name" title={t('Continuă editarea')} onClick={() => setOverlayOpen(true)}>
                                         <FileText className="icon-xs" /> {presName}
-                                        <span className="tpl-badge tpl-badge-warn">nesalvat</span>
+                                        <span className="tpl-badge tpl-badge-warn">{t('nesalvat')}</span>
                                     </button>
                                 </div>
                             )}
-                            {templates.length === 0 && <p className="timer-hint">Niciun șablon încă — importă un PowerPoint sau salvează unul din editor.</p>}
-                            {templates.map((t, i) => (
-                                <div key={t.file}>
+                            {templates.length === 0 && <p className="timer-hint">{t('Niciun șablon încă — importă un PowerPoint sau salvează unul din editor.')}</p>}
+                            {templates.map((tpl, i) => (
+                                <div key={tpl.file}>
                                     <div className="tpl-row">
                                         <button
                                             className="tpl-name"
-                                            title="Încarcă în previzualizare (apoi «Proiectează» sau «Editează»)"
+                                            title={t('Încarcă în previzualizare (apoi «Proiectează» sau «Editează»)')}
                                             onClick={async () => {
                                                 try {
-                                                    const p = await window.electron.templates.load(t.file);
-                                                    setPresentation(p, t.file);
+                                                    const p = await window.electron.templates.load(tpl.file);
+                                                    setPresentation(p, tpl.file);
                                                     setPresStatus('');
-                                                } catch { setPresStatus('Nu am putut încărca șablonul.'); }
+                                                } catch { setPresStatus(t('Nu am putut încărca șablonul.')); }
                                             }}
-                                        >{t.name}{t.builtin && <span className="tpl-badge">implicit</span>}</button>
-                                        <button className={`tpl-btn ${rowMenu === t.file ? 'active' : ''}`} title="Mai multe" onClick={() => setRowMenu(rowMenu === t.file ? null : t.file)}>
+                                        >{tpl.name}{tpl.builtin && <span className="tpl-badge">{t('implicit')}</span>}</button>
+                                        <button className={`tpl-btn ${rowMenu === tpl.file ? 'active' : ''}`} title={t('Mai multe')} onClick={() => setRowMenu(rowMenu === tpl.file ? null : tpl.file)}>
                                             <MoreHorizontal className="icon-xs" />
                                         </button>
                                     </div>
-                                    {rowMenu === t.file && (
+                                    {rowMenu === tpl.file && (
                                         <div className="tpl-actions">
-                                            <button onClick={() => { setRowMenu(null); duplicateTemplate(t); }}><Copy className="icon-xs" /> Duplică</button>
-                                            {t.builtin && <button onClick={() => { setRowMenu(null); resetBuiltinTpl(t); }}><RotateCcw className="icon-xs" /> Resetează la implicit</button>}
+                                            <button onClick={() => { setRowMenu(null); duplicateTemplate(tpl); }}><Copy className="icon-xs" /> {t('Duplică')}</button>
+                                            {tpl.builtin && <button onClick={() => { setRowMenu(null); resetBuiltinTpl(tpl); }}><RotateCcw className="icon-xs" /> {t('Resetează la implicit')}</button>}
                                             <button disabled={i === 0} onClick={async () => {
                                                 const files = templates.map(x => x.file);
                                                 [files[i - 1], files[i]] = [files[i], files[i - 1]];
                                                 await window.electron.templates.reorder(files); refreshTemplates();
-                                            }}>↑ Mută sus</button>
+                                            }}>↑ {t('Mută sus')}</button>
                                             <button disabled={i === templates.length - 1} onClick={async () => {
                                                 const files = templates.map(x => x.file);
                                                 [files[i + 1], files[i]] = [files[i], files[i + 1]];
                                                 await window.electron.templates.reorder(files); refreshTemplates();
-                                            }}>↓ Mută jos</button>
-                                            {confirmDelete === t.file ? (
+                                            }}>↓ {t('Mută jos')}</button>
+                                            {confirmDelete === tpl.file ? (
                                                 <button className="tpl-act-danger" onClick={() => {
                                                     setConfirmDelete(null); setRowMenu(null);
-                                                    adminGate.require(async () => { await window.electron.templates.delete(t.file); refreshTemplates(); }, 'Ștergere șablon');
-                                                }}>Sigur ștergi?</button>
+                                                    adminGate.require(async () => { await window.electron.templates.delete(tpl.file); refreshTemplates(); }, t('Ștergere șablon'));
+                                                }}>{t('Sigur ștergi?')}</button>
                                             ) : (
-                                                <button className="tpl-act-danger" onClick={() => setConfirmDelete(t.file)}><Trash2 className="icon-xs" /> Șterge</button>
+                                                <button className="tpl-act-danger" onClick={() => setConfirmDelete(tpl.file)}><Trash2 className="icon-xs" /> {t('Șterge')}</button>
                                             )}
                                         </div>
                                     )}
@@ -7645,13 +7716,13 @@ function MessagePanel() {
                         {importToast && (
                             <p className="import-toast">
                                 {importToast}
-                                <button className="import-toast-x" onClick={() => setImportToast(null)} title="Închide">✕</button>
+                                <button className="import-toast-x" onClick={() => setImportToast(null)} title={t('Închide')}>✕</button>
                             </p>
                         )}
                     </div>
 
                     <div className="rt-right">
-                        <label className="timer-label">Previzualizare</label>
+                        <label className="timer-label">{t('Previzualizare')}</label>
                         {presRef.current && slide ? (<>
                             <div className="rt-preview" style={{ background: canvasBgCss ?? projFallbackCss, color: textColor }}>
                                 {slide.shapes.map((sh, i) => sh.imageSrc ? (
@@ -7669,22 +7740,22 @@ function MessagePanel() {
                             </div>
                             <div className="rt-preview-nav">
                                 <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
-                                <span className="text-white/60 text-xs">slide {curSlide + 1} / {slideCount}</span>
+                                <span className="text-white/60 text-xs">{t('slide {cur} / {total}', { cur: curSlide + 1, total: slideCount })}</span>
                                 <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
                             </div>
                             <div className="timer-actions">
-                                <button className="btn-project timer-start" onClick={() => setOverlayOpen(true)}><Edit3 className="icon-xs" /> Editează</button>
+                                <button className="btn-project timer-start" onClick={() => setOverlayOpen(true)}><Edit3 className="icon-xs" /> {t('Editează')}</button>
                                 {!presProjected ? (
-                                    <button className="btn-project" onClick={() => projectSlide(curSlide, true)}>Proiectează</button>
+                                    <button className="btn-project" onClick={() => projectSlide(curSlide, true)}>{t('Proiectează')}</button>
                                 ) : (<>
                                     <span className="live-indicator">● LIVE</span>
-                                    <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>Oprește</button>
+                                    <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>{t('Oprește')}</button>
                                 </>)}
                             </div>
                         </>) : (
                             <div className="rt-preview rt-preview-empty">
                                 <div className="rt-preview-center rt-preview-hint">
-                                    Alege un șablon din stânga sau importă un PowerPoint ca să vezi previzualizarea aici.
+                                    {t('Alege un șablon din stânga sau importă un PowerPoint ca să vezi previzualizarea aici.')}
                                 </div>
                             </div>
                         )}
@@ -7696,71 +7767,71 @@ function MessagePanel() {
                 <div className="pres-overlay" onKeyDown={onOverlayKeyDown}>
                     <div className="pres-overlay-header">
                         <span className="pres-overlay-title">
-                            {presName}{dirty && <span className="pres-dirty"> • nesalvat</span>}
+                            {presName}{dirty && <span className="pres-dirty"> • {t('nesalvat')}</span>}
                         </span>
                         <div className="pres-toolbar">
                             {/* istoric */}
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('undo'); }} title="Anulează (Ctrl+Z)"><Undo2 className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('redo'); }} title="Refă (Ctrl+Y)"><Redo2 className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('undo'); }} title={t('Anulează (Ctrl+Z)')}><Undo2 className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('redo'); }} title={t('Refă (Ctrl+Y)')}><Redo2 className="icon-xs" /></button>
                             <span className="pres-toolbar-sep" />
                             {/* mărime + culoare text (pe selecție) */}
-                            <select className="pres-tb-select" title="Mărime text (selecție)" value="" onMouseDown={() => { /* selecția e deja memorată */ }}
+                            <select className="pres-tb-select" title={t('Mărime text (selecție)')} value="" onMouseDown={() => { /* selecția e deja memorată */ }}
                                 onChange={e => { const v = e.target.value; if (v) withSavedSelection(() => applyFontSize(v)); }}>
-                                <option value="" disabled>Mărime</option>
-                                <option value="1">Foarte mic</option>
-                                <option value="2">Mic</option>
-                                <option value="3">Normal</option>
-                                <option value="4">Mediu</option>
-                                <option value="5">Mare</option>
-                                <option value="6">Foarte mare</option>
-                                <option value="7">Uriaș</option>
+                                <option value="" disabled>{t('Mărime')}</option>
+                                <option value="1">{t('Foarte mic')}</option>
+                                <option value="2">{t('Mic')}</option>
+                                <option value="3">{t('Normal')}</option>
+                                <option value="4">{t('Mediu')}</option>
+                                <option value="5">{t('Mare')}</option>
+                                <option value="6">{t('Foarte mare')}</option>
+                                <option value="7">{t('Uriaș')}</option>
                             </select>
-                            <label className="pres-tb-btn pres-tb-color" title="Culoare text (selecție)">
+                            <label className="pres-tb-btn pres-tb-color" title={t('Culoare text (selecție)')}>
                                 <Baseline className="icon-xs" />
                                 <input type="color" onChange={e => withSavedSelection(() => applyColor(e.target.value))} />
                             </label>
                             <span className="pres-toolbar-sep" />
                             {/* stil text */}
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('bold'); }} title="Îngroșat (Ctrl+B)"><Bold className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('italic'); }} title="Înclinat (Ctrl+I)"><Italic className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('underline'); }} title="Subliniat (Ctrl+U)"><Underline className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('strikeThrough'); }} title="Tăiat"><Strikethrough className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }} title="Șterge formatarea"><Eraser className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('bold'); }} title={t('Îngroșat (Ctrl+B)')}><Bold className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('italic'); }} title={t('Înclinat (Ctrl+I)')}><Italic className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('underline'); }} title={t('Subliniat (Ctrl+U)')}><Underline className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('strikeThrough'); }} title={t('Tăiat')}><Strikethrough className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('removeFormat'); }} title={t('Șterge formatarea')}><Eraser className="icon-xs" /></button>
                             <span className="pres-toolbar-sep" />
                             {/* paragraf */}
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }} title="Aliniere stânga (Ctrl+L)"><AlignLeft className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }} title="Centrat (Ctrl+E)"><AlignCenter className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyRight'); }} title="Aliniere dreapta (Ctrl+R)"><AlignRight className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyFull'); }} title="Aliniere stânga-dreapta"><AlignJustify className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title="Listă cu buline"><List className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title="Listă numerotată"><ListOrdered className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('outdent'); }} title="Micșorează indentarea"><IndentDecrease className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('indent'); }} title="Mărește indentarea"><IndentIncrease className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyLeft'); }} title={t('Aliniere stânga (Ctrl+L)')}><AlignLeft className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyCenter'); }} title={t('Centrat (Ctrl+E)')}><AlignCenter className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyRight'); }} title={t('Aliniere dreapta (Ctrl+R)')}><AlignRight className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('justifyFull'); }} title={t('Aliniere stânga-dreapta')}><AlignJustify className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }} title={t('Listă cu buline')}><List className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }} title={t('Listă numerotată')}><ListOrdered className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('outdent'); }} title={t('Micșorează indentarea')}><IndentDecrease className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); execCss('indent'); }} title={t('Mărește indentarea')}><IndentIncrease className="icon-xs" /></button>
                             <span className="pres-toolbar-sep" />
                             {/* casetă (pe cea selectată) */}
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('top'); }} disabled={focusedShape == null} title="Text sus în casetă"><AlignVerticalJustifyStart className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('middle'); }} disabled={focusedShape == null} title="Text la mijloc"><AlignVerticalJustifyCenter className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('bottom'); }} disabled={focusedShape == null} title="Text jos în casetă"><AlignVerticalJustifyEnd className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); cycleColumns(); }} disabled={focusedShape == null} title="Coloane (1 → 2 → 3)"><Columns3 className="icon-xs" />{focusedShape != null && (slide?.shapes[focusedShape]?.columns ?? 1) > 1 ? slide?.shapes[focusedShape]?.columns : ''}</button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); bumpFont(0.15); }} disabled={focusedShape == null} title="Casetă: text mai mare">A+</button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); bumpFont(-0.15); }} disabled={focusedShape == null} title="Casetă: text mai mic">A−</button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('top'); }} disabled={focusedShape == null} title={t('Text sus în casetă')}><AlignVerticalJustifyStart className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('middle'); }} disabled={focusedShape == null} title={t('Text la mijloc')}><AlignVerticalJustifyCenter className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); setAnchor('bottom'); }} disabled={focusedShape == null} title={t('Text jos în casetă')}><AlignVerticalJustifyEnd className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); cycleColumns(); }} disabled={focusedShape == null} title={t('Coloane (1 → 2 → 3)')}><Columns3 className="icon-xs" />{focusedShape != null && (slide?.shapes[focusedShape]?.columns ?? 1) > 1 ? slide?.shapes[focusedShape]?.columns : ''}</button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); bumpFont(0.15); }} disabled={focusedShape == null} title={t('Casetă: text mai mare')}>A+</button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); bumpFont(-0.15); }} disabled={focusedShape == null} title={t('Casetă: text mai mic')}>A−</button>
                             <span className="pres-toolbar-sep" />
                             {/* casete */}
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); addShape(); }} title="Casetă de text nouă"><Plus className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); duplicateShape(); }} disabled={focusedShape == null} title="Duplică caseta"><Copy className="icon-xs" /></button>
-                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); deleteShape(); }} disabled={focusedShape == null || (slide?.shapes.length ?? 0) <= 1} title="Șterge caseta"><Trash2 className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); addShape(); }} title={t('Casetă de text nouă')}><Plus className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); duplicateShape(); }} disabled={focusedShape == null} title={t('Duplică caseta')}><Copy className="icon-xs" /></button>
+                            <button className="pres-tb-btn" onMouseDown={e => { e.preventDefault(); deleteShape(); }} disabled={focusedShape == null || (slide?.shapes.length ?? 0) <= 1} title={t('Șterge caseta')}><Trash2 className="icon-xs" /></button>
                         </div>
                         <div className="pres-overlay-actions">
                             {!presProjected ? (
-                                <button className="btn-project timer-start" onClick={() => projectSlide(curSlide, true)}>Proiectează</button>
+                                <button className="btn-project timer-start" onClick={() => projectSlide(curSlide, true)}>{t('Proiectează')}</button>
                             ) : (
                                 <>
                                     <span className="live-indicator">● LIVE</span>
-                                    <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>Oprește</button>
+                                    <button className="btn-sm timer-stop" onClick={() => { setPresProjected(false); window.electron.projection.close(); }}>{t('Oprește')}</button>
                                 </>
                             )}
-                            <button className="btn-sm" onClick={attemptCloseOverlay} title="Închide editorul (Esc)">
-                                Închide
+                            <button className="btn-sm" onClick={attemptCloseOverlay} title={t('Închide editorul (Esc)')}>
+                                {t('Închide')}
                             </button>
                         </div>
                     </div>
@@ -7770,13 +7841,13 @@ function MessagePanel() {
                             className="pres-arrow pres-arrow-left"
                             disabled={curSlide === 0}
                             onClick={() => goSlide(curSlide - 1)}
-                            title="Slide anterior"
+                            title={t('Slide anterior')}
                         >‹</button>
                         <button
                             className="pres-arrow pres-arrow-right"
                             disabled={curSlide >= slideCount - 1}
                             onClick={() => goSlide(curSlide + 1)}
-                            title="Slide următor"
+                            title={t('Slide următor')}
                         >›</button>
                         <div
                             className="pres-canvas pres-canvas-big"
@@ -7795,12 +7866,12 @@ function MessagePanel() {
                                     {/* mânerele NU sunt în interiorul zonei editabile */}
                                     <div
                                         className="pres-grip pres-grip-move"
-                                        title="Trage pentru a muta caseta"
+                                        title={t('Trage pentru a muta caseta')}
                                         onMouseDown={e => onGripDown(i, 'move', e)}
                                     >⠿</div>
                                     <div
                                         className="pres-grip pres-grip-resize"
-                                        title="Trage pentru a redimensiona"
+                                        title={t('Trage pentru a redimensiona')}
                                         onMouseDown={e => onGripDown(i, 'resize', e)}
                                     />
                                     {sh.imageSrc ? (
@@ -7832,15 +7903,15 @@ function MessagePanel() {
                     <div className="pres-overlay-footer">
                         <div className="pres-nav">
                             <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
-                            <span className="text-white/60 text-xs">slide {curSlide + 1} / {slideCount}</span>
+                            <span className="text-white/60 text-xs">{t('slide {cur} / {total}', { cur: curSlide + 1, total: slideCount })}</span>
                             <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
                             <button className="btn-sm" onClick={() => {
                                 const p = presRef.current!;
-                                p.slides.splice(curSlide + 1, 0, { shapes: [{ x: 8, y: 12, w: 84, h: 76, html: '<p style="text-align:center">Text nou</p>' }] });
+                                p.slides.splice(curSlide + 1, 0, { shapes: [{ x: 8, y: 12, w: 84, h: 76, html: `<p style="text-align:center">${t('Text nou')}</p>` }] });
                                 setSlideCount(p.slides.length);
                                 setDirty(true);
                                 goSlide(curSlide + 1);
-                            }}>+ Slide</button>
+                            }}>+ {t('Slide')}</button>
                             <button className="btn-sm" disabled={slideCount <= 1} onClick={() => {
                                 const p = presRef.current!;
                                 p.slides.splice(curSlide, 1);
@@ -7849,18 +7920,18 @@ function MessagePanel() {
                                 const next = Math.min(curSlide, p.slides.length - 1);
                                 goSlide(next);
                                 if (presProjected) projectSlide(next, false);
-                            }}>Șterge slide</button>
+                            }}>{t('Șterge slide')}</button>
                         </div>
 
                         {/* fundal + culoare text (afectează ce iese pe ecran) */}
                         <div className="pres-settings">
                             <BackgroundPicker
                                 bg={bgChoice}
-                                existingLabel="Existent"
+                                existingLabel={t('Existent')}
                                 onChange={b => { setBgChoice(b); if (presProjected) setTimeout(() => projectSlide(curSlide, false), 0); }}
                             />
                             <div className="field">
-                                <label className="timer-label">Culoare text</label>
+                                <label className="timer-label">{t('Culoare text')}</label>
                                 <div className="color-row">
                                     <input
                                         type="color"
@@ -7870,18 +7941,18 @@ function MessagePanel() {
                                     />
                                     <span className="color-hex">{textColor}</span>
                                 </div>
-                                <span className="timer-hint">Se aplică textului fără culoare proprie (cele colorate din PPT rămân).</span>
+                                <span className="timer-hint">{t('Se aplică textului fără culoare proprie (cele colorate din PPT rămân).')}</span>
                             </div>
                         </div>
 
                         <div className="pres-save">
                             {loadedFile && (
-                                <button className="btn-project" disabled={!dirty} title="Salvează peste șablonul curent (cere parola)" onClick={onSaveOver}>
-                                    Salvează
+                                <button className="btn-project" disabled={!dirty} title={t('Salvează peste șablonul curent (cere parola)')} onClick={onSaveOver}>
+                                    {t('Salvează')}
                                 </button>
                             )}
-                            <button className="btn-sm" title="Salvează o copie cu un nume nou" onClick={() => { setSaveName(loadedFile ? '' : (presName ?? '')); setSaveAsOpen(true); }}>
-                                Salvează ca șablon nou…
+                            <button className="btn-sm" title={t('Salvează o copie cu un nume nou')} onClick={() => { setSaveName(loadedFile ? '' : (presName ?? '')); setSaveAsOpen(true); }}>
+                                {t('Salvează ca șablon nou…')}
                             </button>
                         </div>
                     </div>
@@ -7889,19 +7960,19 @@ function MessagePanel() {
                     {saveAsOpen && (
                         <div className="pres-saveas" onMouseDown={e => { if (e.target === e.currentTarget) setSaveAsOpen(false); }}>
                             <div className="pres-saveas-box">
-                                <label className="timer-label">Nume pentru noul șablon</label>
+                                <label className="timer-label">{t('Nume pentru noul șablon')}</label>
                                 <input
                                     className="timer-text-input"
                                     autoFocus
                                     type="text"
-                                    placeholder="ex: Anunțuri duminică"
+                                    placeholder={t('ex: Anunțuri duminică')}
                                     value={saveName}
                                     onChange={e => setSaveName(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') onSaveAs(); if (e.key === 'Escape') setSaveAsOpen(false); }}
                                 />
                                 <div className="editor-actions" style={{ marginTop: 10 }}>
-                                    <button className="btn-project" disabled={!saveName.trim()} onClick={onSaveAs}>Salvează</button>
-                                    <button className="btn-clear" onClick={() => setSaveAsOpen(false)}>Anulează</button>
+                                    <button className="btn-project" disabled={!saveName.trim()} onClick={onSaveAs}>{t('Salvează')}</button>
+                                    <button className="btn-clear" onClick={() => setSaveAsOpen(false)}>{t('Anulează')}</button>
                                 </div>
                             </div>
                         </div>
@@ -7913,6 +7984,7 @@ function MessagePanel() {
 }
 
 function UpdateChecker() {
+    const t = useT();
     const [checking, setChecking] = useState(false)
     const [downloading, setDownloading] = useState(false)
     const [progress, setProgress] = useState(0)
@@ -7943,7 +8015,7 @@ function UpdateChecker() {
             const info = await window.electron.update.check()
             setResult(info)
         } catch {
-            setError('Nu s-a putut verifica. Verifică conexiunea la internet.')
+            setError(t('Nu s-a putut verifica. Verifică conexiunea la internet.'))
         }
         setChecking(false)
     }
@@ -7956,7 +8028,7 @@ function UpdateChecker() {
             await window.electron.update.download()
         } catch {
             setDownloading(false)
-            setError('Descărcarea a eșuat.')
+            setError(t('Descărcarea a eșuat.'))
         }
     }
 
@@ -7969,32 +8041,32 @@ function UpdateChecker() {
             <div className="flex flex-col items-start gap-2">
                 {!result && !checking && !downloading && !ready && (
                     <button className="btn-sm" onClick={doCheck}>
-                        Verifică actualizări
+                        {t('Verifică actualizări')}
                     </button>
                 )}
 
                 {checking && (
-                    <p className="text-white/40 text-xs">Se verifică...</p>
+                    <p className="text-white/40 text-xs">{t('Se verifică...')}</p>
                 )}
 
                 {result && !result.available && !downloading && !ready && (
-                    <p className="text-green-400 text-xs">✓ Ai cea mai recentă versiune.</p>
+                    <p className="text-green-400 text-xs">✓ {t('Ai cea mai recentă versiune.')}</p>
                 )}
 
                 {result && result.available && !downloading && !ready && (
                     <div className="flex flex-col items-start gap-2">
                         <p className="text-yellow-400 text-xs">
-                            Versiune nouă disponibilă: <strong>{result.version}</strong>
+                            {t('Versiune nouă disponibilă:')} <strong>{result.version}</strong>
                         </p>
                         <button className="btn-sm" onClick={doDownloadAndInstall}>
-                            Descarcă și instalează
+                            {t('Descarcă și instalează')}
                         </button>
                     </div>
                 )}
 
                 {downloading && (
                     <div className="flex flex-col items-start gap-2 w-full max-w-xs">
-                        <p className="text-white/40 text-xs">Se descarcă... {progress.toFixed(0)}%</p>
+                        <p className="text-white/40 text-xs">{t('Se descarcă... {pct}%', { pct: progress.toFixed(0) })}</p>
                         <div className="w-full bg-white/10 rounded-full h-2">
                             <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
                         </div>
@@ -8003,9 +8075,9 @@ function UpdateChecker() {
 
                 {ready && (
                     <div className="flex flex-col items-start gap-2">
-                        <p className="text-green-400 text-xs">Actualizare descărcată! Aplicația va reporni.</p>
+                        <p className="text-green-400 text-xs">{t('Actualizare descărcată! Aplicația va reporni.')}</p>
                         <button className="btn-sm" onClick={doInstall}>
-                            Instalează și repornește
+                            {t('Instalează și repornește')}
                         </button>
                     </div>
                 )}
@@ -8019,6 +8091,7 @@ function UpdateChecker() {
 }
 
 function YtDlpSettings() {
+    const t = useT();
     const [installed, setInstalled] = useState<boolean | null>(null);
     const [version, setVersion] = useState('');
     const [loading, setLoading] = useState(false);
@@ -8037,58 +8110,58 @@ function YtDlpSettings() {
 
     const install = async () => {
         setLoading(true);
-        setStatus('Se descarcă yt-dlp...');
+        setStatus(t('Se descarcă yt-dlp...'));
         try {
             await window.electron.ytdlp.install();
             setInstalled(true);
             const v = await window.electron.ytdlp.version();
             setVersion(v);
-            setStatus('yt-dlp instalat cu succes!');
+            setStatus(t('yt-dlp instalat cu succes!'));
         } catch (err: any) {
-            setStatus('Eroare: ' + (err.message ?? 'necunoscută'));
+            setStatus(t('Eroare: {msg}', { msg: err.message ?? t('necunoscută') }));
         }
         setLoading(false);
     };
 
     const update = async () => {
         setLoading(true);
-        setStatus('Se actualizează yt-dlp...');
+        setStatus(t('Se actualizează yt-dlp...'));
         try {
             await window.electron.ytdlp.update();
             const v = await window.electron.ytdlp.version();
             setVersion(v);
-            setStatus('yt-dlp actualizat!');
+            setStatus(t('yt-dlp actualizat!'));
         } catch (err: any) {
-            setStatus('Eroare: ' + (err.message ?? 'necunoscută'));
+            setStatus(t('Eroare: {msg}', { msg: err.message ?? t('necunoscută') }));
         }
         setLoading(false);
     };
 
     return (
         <div className="field">
-            <label>Unealta de descărcare (yt-dlp)</label>
-            {installed === null && <p className="text-white/40 text-xs">Se verifică...</p>}
+            <label>{t('Unealta de descărcare (yt-dlp)')}</label>
+            {installed === null && <p className="text-white/40 text-xs">{t('Se verifică...')}</p>}
             {installed === false && (
                 <div className="flex flex-col items-start gap-2">
-                    <p className="text-white/40 text-xs">Nu e instalată — fără ea nu se poate descărca de pe YouTube.</p>
+                    <p className="text-white/40 text-xs">{t('Nu e instalată — fără ea nu se poate descărca de pe YouTube.')}</p>
                     <button
                         className="btn-sm"
                         onClick={install}
                         disabled={loading}
                     >
-                        {loading ? 'Se instalează...' : 'Instalează yt-dlp'}
+                        {loading ? t('Se instalează...') : t('Instalează yt-dlp')}
                     </button>
                 </div>
             )}
             {installed === true && (
                 <div className="flex flex-col items-start gap-2">
-                    <p className="text-white/40 text-xs">Instalată, versiunea {version || 'se verifică…'}</p>
+                    <p className="text-white/40 text-xs">{t('Instalată, versiunea {v}', { v: version || t('se verifică…') })}</p>
                     <button
                         className="btn-sm"
                         onClick={update}
                         disabled={loading}
                     >
-                        {loading ? 'Se actualizează...' : 'Actualizează yt-dlp'}
+                        {loading ? t('Se actualizează...') : t('Actualizează yt-dlp')}
                     </button>
                 </div>
             )}
@@ -8101,6 +8174,7 @@ function AudioOutputPicker({ settings, onSave }: {
     settings: AppSettings;
     onSave: (p: Partial<AppSettings>) => void;
 }) {
+    const t = useT();
     const [devices, setDevices] = useState<{ deviceId: string; label: string }[]>([]);
     const [loaded, setLoaded] = useState(false);
 
@@ -8109,7 +8183,7 @@ function AudioOutputPicker({ settings, onSave }: {
             const allDevices = await navigator.mediaDevices.enumerateDevices();
             const outputs = allDevices
                 .filter(d => d.kind === 'audiooutput')
-                .map(d => ({ deviceId: d.deviceId, label: d.label || `Dispozitiv ${d.deviceId.slice(0, 8)}` }));
+                .map(d => ({ deviceId: d.deviceId, label: d.label || t('Dispozitiv {id}', { id: d.deviceId.slice(0, 8) }) }));
             setDevices(outputs);
             setLoaded(true);
         } catch {
@@ -8120,16 +8194,16 @@ function AudioOutputPicker({ settings, onSave }: {
 
     return (
         <div className="field">
-            <label>Unde iese sunetul (video și acompaniament)</label>
+            <label>{t('Unde iese sunetul (video și acompaniament)')}</label>
             <div className="display-picker">
-                <button className="btn-sm" onClick={loadDevices}>Detectează dispozitive</button>
+                <button className="btn-sm" onClick={loadDevices}>{t('Detectează dispozitive')}</button>
                 {loaded && (
                     <div className="display-list">
                         <button
                             className={`display-btn ${!settings.audioOutputDeviceId ? 'active' : ''}`}
                             onClick={() => onSave({ audioOutputDeviceId: '' })}
                         >
-                            Implicit (sistem)
+                            {t('Implicit (sistem)')}
                         </button>
                         {devices.map(d => (
                             <button
@@ -8151,6 +8225,7 @@ function AccompanimentSettings({ settings, onSave }: {
     settings: AppSettings;
     onSave: (p: Partial<AppSettings>) => void;
 }) {
+    const t = useT();
     const [stats, setStats] = useState<AccompanimentStats | null>(null);
     const [bulk, setBulk] = useState<{ facute: number; total: number } | null>(null);
     const [mesaj, setMesaj] = useState('');
@@ -8165,17 +8240,19 @@ function AccompanimentSettings({ settings, onSave }: {
         window.electron.accompaniment.onBulkDone(r => {
             setBulk(null);
             reincarca();
-            setMesaj(r.oprit
-                ? `Oprit. ${r.ok} descărcate până acum.`
-                : r.esuate
-                    ? `${r.ok} descărcate, ${r.esuate} n-au putut fi aduse. Încearcă din nou mai târziu.`
-                    : 'Gata — toate acompaniamentele sunt pe calculator.');
+            setMesaj(r.discPlin
+                ? t('Discul e plin — descărcarea s-a oprit după {n} fișiere. Eliberează spațiu pe disc și încearcă din nou.', { n: r.ok })
+                : r.oprit
+                    ? t('Oprit. {n} descărcate până acum.', { n: r.ok })
+                    : r.esuate
+                        ? t('{ok} descărcate, {esuate} n-au putut fi aduse. Încearcă din nou mai târziu.', { ok: r.ok, esuate: r.esuate })
+                        : t('Gata — toate acompaniamentele sunt pe calculator.'));
         });
         return () => {
             window.electron.accompaniment.offBulk();
             window.electron.accompaniment.offBulkDone();
         };
-    }, [reincarca]);
+    }, [reincarca, t]);
 
     const gb = (o: number) => (o / 1_000_000_000).toFixed(2).replace('.', ',');
     const lipsa = stats ? stats.total - stats.have : 0;
@@ -8183,23 +8260,22 @@ function AccompanimentSettings({ settings, onSave }: {
     return (
         <div className="sstack">
             <div className="field">
-                <label>Ce ai pe calculator</label>
+                <label>{t('Ce ai pe calculator')}</label>
                 {!stats || stats.total === 0 ? (
                     <p className="field-hint">
-                        Lista de acompaniamente n-a putut fi adusă. Verifică internetul —
-                        se reîncearcă singură mai târziu.
+                        {t('Lista de acompaniamente n-a putut fi adusă. Verifică internetul — se reîncearcă singură mai târziu.')}
                     </p>
                 ) : (
                     <p className="field-hint">
-                        <strong>{stats.have}</strong> din {stats.total} descărcate
+                        {t('{have} din {total} descărcate', { have: stats.have, total: stats.total })}
                         {stats.have > 0 && <> ({gb(stats.bytes)} GB)</>}.
-                        {lipsa > 0 && <> Restul ocupă încă {gb(stats.totalBytes - stats.bytes)} GB.</>}
+                        {lipsa > 0 && <> {t('Restul ocupă încă {gb} GB.', { gb: gb(stats.totalBytes - stats.bytes) })}</>}
                     </p>
                 )}
             </div>
 
             <div className="field">
-                <label>Volum</label>
+                <label>{t('Volum')}</label>
                 <div className="field-row">
                     <input
                         type="range" min="0" max="100" step="5"
@@ -8213,15 +8289,15 @@ function AccompanimentSettings({ settings, onSave }: {
             </div>
 
             <div className="field">
-                <label>Descarcă tot dinainte</label>
+                <label>{t('Descarcă tot dinainte')}</label>
                 <div className="field-row">
                     {bulk ? (
                         <>
                             <button className="btn-sm" onClick={() => window.electron.accompaniment.stopAll()}>
-                                Oprește
+                                {t('Oprește')}
                             </button>
                             <span className="field-hint">
-                                Se descarcă… {bulk.facute} din {bulk.total}
+                                {t('Se descarcă… {facute} din {total}', { facute: bulk.facute, total: bulk.total })}
                             </span>
                         </>
                     ) : (
@@ -8232,8 +8308,8 @@ function AccompanimentSettings({ settings, onSave }: {
                                 onClick={() => { setMesaj(''); window.electron.accompaniment.downloadAll(); }}
                             >
                                 {stats && lipsa > 0
-                                    ? `Descarcă cele ${lipsa} rămase (${gb(stats.totalBytes - stats.bytes)} GB)`
-                                    : 'Toate sunt descărcate'}
+                                    ? t('Descarcă cele {n} rămase ({gb} GB)', { n: lipsa, gb: gb(stats.totalBytes - stats.bytes) })
+                                    : t('Toate sunt descărcate')}
                             </button>
                             {stats && stats.have > 0 && (
                                 <button
@@ -8241,10 +8317,10 @@ function AccompanimentSettings({ settings, onSave }: {
                                     onClick={async () => {
                                         const r = await window.electron.accompaniment.removeAll();
                                         setStats(r.stats);
-                                        setMesaj(`Șterse ${r.sterse} fișiere.`);
+                                        setMesaj(t('Șterse {n} fișiere.', { n: r.sterse }));
                                     }}
                                 >
-                                    Șterge tot
+                                    {t('Șterge tot')}
                                 </button>
                             )}
                         </>
@@ -8252,8 +8328,7 @@ function AccompanimentSettings({ settings, onSave }: {
                 </div>
                 {mesaj && <p className="field-hint">{mesaj}</p>}
                 <p className="field-hint">
-                    Descărcarea se oprește singură cât timp proiecția e pe ecran, ca să nu-ți
-                    încarce internetul în timpul serviciului.
+                    {t('Descărcarea se oprește singură cât timp proiecția e pe ecran, ca să nu-ți încarce internetul în timpul serviciului.')}
                 </p>
             </div>
         </div>
@@ -8264,6 +8339,7 @@ function DownloadFolderPicker({ settings, onSave }: {
     settings: AppSettings;
     onSave: (p: Partial<AppSettings>) => void;
 }) {
+    const t = useT();
     const [defaultFolder, setDefaultFolder] = useState('');
 
     useEffect(() => {
@@ -8274,23 +8350,23 @@ function DownloadFolderPicker({ settings, onSave }: {
 
     return (
         <div className="field">
-            <label>Folder Descărcări YouTube</label>
+            <label>{t('Folder Descărcări YouTube')}</label>
             <div className="field-row">
                 <span className="field-value" title={currentFolder}>
-                    {currentFolder ? currentFolder.split('/').slice(-2).join('/') : 'Se detectează...'}
+                    {currentFolder ? currentFolder.split('/').slice(-2).join('/') : t('Se detectează...')}
                 </span>
                 <button className="btn-sm" onClick={async () => {
                     const p = await window.electron.dialog.selectFolder();
                     if (p) onSave({ downloadFolder: p });
-                }}>Schimbă...</button>
+                }}>{t('Schimbă...')}</button>
                 {settings.downloadFolder && (
                     <button className="btn-sm" onClick={() => onSave({ downloadFolder: undefined })}>
-                        Resetează
+                        {t('Resetează')}
                     </button>
                 )}
             </div>
             <p className="text-white/40 text-xs mt-1">
-                Folderul în care se salvează videoclipurile descărcate de pe YouTube.
+                {t('Folderul în care se salvează videoclipurile descărcate de pe YouTube.')}
             </p>
         </div>
     );
@@ -8300,6 +8376,7 @@ function DisplayPicker({ settings, onSave }: {
     settings: AppSettings;
     onSave: (p: Partial<AppSettings>) => void;
 }) {
+    const t = useT();
     const [displays, setDisplays] = useState<any[]>([]);
     const [loaded, setLoaded] = useState(false);
 
@@ -8309,7 +8386,7 @@ function DisplayPicker({ settings, onSave }: {
                 const d = await window.electron.screen.getDisplays();
                 setDisplays(d);
                 setLoaded(true);
-            }}>Detectează ecrane</button>
+            }}>{t('Detectează ecrane')}</button>
             {loaded && (
                 <div className="display-list">
                     {displays.map((d: any) => (
@@ -8324,6 +8401,156 @@ function DisplayPicker({ settings, onSave }: {
                 </div>
             )}
         </div>
+    );
+}
+
+/**
+ * Selector rapid de ecran, direct în bara principală — nu doar în Setări.
+ * Complet independent (își ia și-și salvează singur setarea), ca să poată
+ * sta în header fără să depindă de starea de settings a restului paginii.
+ * Reîncarcă lista la fiecare deschidere (Electron o poate schimba la orice
+ * conectare/deconectare de monitor), fără să facă nimic dacă nu se atinge.
+ */
+function ScreenQuickPicker() {
+    const t = useT();
+    const [displays, setDisplays] = useState<{ id: number; label: string; isPrimary: boolean; width: number; height: number }[]>([]);
+    const [current, setCurrent] = useState<number | undefined>(undefined);
+
+    useEffect(() => {
+        let cancelled = false;
+        Promise.all([window.electron.screen.getDisplays(), window.electron.settings.get()]).then(([d, s]) => {
+            if (cancelled) return;
+            setDisplays(d);
+            setCurrent(s.projectionDisplayId ?? d.find((x: { isPrimary: boolean }) => !x.isPrimary)?.id ?? d[0]?.id);
+        });
+        return () => { cancelled = true; };
+    }, []);
+
+    if (displays.length < 2) return null; // un singur ecran → nimic de ales
+
+    return (
+        <select
+            className="screen-quick-picker header-btn"
+            title={t('Ecranul pe care iese proiecția')}
+            value={current}
+            onChange={e => {
+                const id = Number(e.target.value);
+                setCurrent(id);
+                window.electron.settings.set({ projectionDisplayId: id });
+            }}
+        >
+            {displays.map(d => (
+                <option key={d.id} value={d.id}>
+                    {d.label} ({d.width}×{d.height}){d.isPrimary ? t(' — principal') : ''}
+                </option>
+            ))}
+        </select>
+    );
+}
+
+/**
+ * Selector discret de limbă — un buton mic RO/EN în header, nu un meniu
+ * separat. Complet independent, ca ScreenQuickPicker: își ia și-și salvează
+ * singur setarea, ca să poată sta în header fără props din restul paginii.
+ */
+function LanguageQuickPicker() {
+    const lang = useLang();
+    return (
+        <button
+            className="header-btn"
+            title={lang === 'en' ? 'Switch to Romanian' : 'Trece pe engleză'}
+            onClick={async () => {
+                const next = lang === 'en' ? 'ro' : 'en';
+                setLang(next);
+                await window.electron.settings.set({ uiLanguage: next });
+            }}
+        >
+            {lang === 'en' ? 'EN' : 'RO'}
+        </button>
+    );
+}
+
+type BgFields = {
+    bgType?: 'color' | 'image' | 'video';
+    bgColor?: string;
+    bgImagePath?: string;
+    bgVideoPath?: string;
+    bgOpacity?: number;
+};
+
+/** Blocul complet tip/culoare/imagine/video/opacitate — folosit atât pentru
+ * fundalul general cât și pentru un override per tab. */
+function BgFieldsEditor({ value, onChange }: {
+    value: BgFields;
+    onChange: (patch: Partial<BgFields>) => void;
+}) {
+    const t = useT();
+    return (
+        <>
+            <div className="field" style={{ maxWidth: 380 }}>
+                <label>{t('Tip fundal')}</label>
+                <select
+                    value={value.bgType ?? 'color'}
+                    onChange={e => onChange({ bgType: e.target.value as BgFields['bgType'] })}
+                >
+                    <option value="color">{t('Culoare')}</option>
+                    <option value="image">{t('Imagine')}</option>
+                    <option value="video">{t('Video')}</option>
+                </select>
+            </div>
+
+            {(value.bgType ?? 'color') === 'color' && (
+                <div className="field">
+                    <label>{t('Culoarea fundalului')}</label>
+                    <input
+                        type="color"
+                        value={value.bgColor ?? '#000000'}
+                        onChange={e => onChange({ bgColor: e.target.value })}
+                    />
+                </div>
+            )}
+
+            {value.bgType === 'image' && (
+                <div className="field">
+                    <label>{t('Imaginea de fundal')}</label>
+                    <div className="field-row">
+                        <span className="field-value" title={value.bgImagePath || ''}>
+                            {value.bgImagePath || t('Niciuna aleasă')}
+                        </span>
+                        <button className="btn-sm" onClick={async () => {
+                            const p = await window.electron.dialog.pickMedia('image');
+                            if (p) onChange({ bgImagePath: p });
+                        }}>{t('Alege...')}</button>
+                    </div>
+                </div>
+            )}
+
+            {value.bgType === 'video' && (
+                <div className="field">
+                    <label>{t('Videoul de fundal')}</label>
+                    <div className="field-row">
+                        <span className="field-value" title={value.bgVideoPath || ''}>
+                            {value.bgVideoPath || t('Niciunul ales')}
+                        </span>
+                        <button className="btn-sm" onClick={async () => {
+                            const p = await window.electron.dialog.pickMedia('video');
+                            if (p) onChange({ bgVideoPath: p });
+                        }}>{t('Alege...')}</button>
+                    </div>
+                </div>
+            )}
+
+            {(value.bgType === 'image' || value.bgType === 'video') && (
+                <div className="field">
+                    <label>{t('Cât de vizibil e fundalul: {pct}%', { pct: ((value.bgOpacity ?? 1) * 100).toFixed(0) })}</label>
+                    <input
+                        type="range" min="0" max="1" step="0.05"
+                        value={value.bgOpacity ?? 1}
+                        onChange={e => onChange({ bgOpacity: parseFloat(e.target.value) })}
+                    />
+                </div>
+            )}
+        </>
     );
 }
 

@@ -35,6 +35,12 @@ export interface BibleBook {
   testament: 'VT' | 'NT';
   book_order: number;
   chapter_count: number;
+  translation?: string;
+}
+
+export interface BibleTranslationInfo {
+  id: string;        // 'cornilescu' | 'web'
+  verseCount: number;
 }
 
 export interface BibleVerse {
@@ -200,6 +206,19 @@ export interface AppSettings {
   contentTextColor?: string; // hex, e.g. '#ffffff'
   adminPasswordHash?: string; // bcrypt-like hash or empty
   projectionFontSize?: number; // font size multiplier, default 1.2
+  /** Mărime separată per tab; lipsă pentru un tab → se folosește `projectionFontSize`. */
+  projectionFontSizeByTab?: { imnuri?: number; biblia?: number };
+  /** Fundal separat per tab, PESTE fundalul general de mai sus. Fără override → moștenește. */
+  bgByTab?: {
+    imnuri?: { bgType?: BgType; bgColor?: string; bgImagePath?: string; bgVideoPath?: string; bgOpacity?: number };
+    biblia?: { bgType?: BgType; bgColor?: string; bgImagePath?: string; bgVideoPath?: string; bgOpacity?: number };
+  };
+  /** Tema interfeței PROPRII a aplicației (nu a proiecției); implicit 'dark'. */
+  appTheme?: 'dark' | 'light';
+  /** Limba interfeței proprii a aplicației. */
+  uiLanguage?: 'ro' | 'en';
+  /** Traducerea Bibliei; implicit 'cornilescu'. */
+  bibleTranslation?: string;
   audioOutputDeviceId?: string; // unde iese sunetul: video proiectat + acompaniament
   // ── Acompaniament instrumental ──
   accompanimentFolder?: string; // unde se salvează MP3-urile; implicit userData/acompaniament
@@ -283,12 +302,13 @@ export interface IElectronAPI {
     reorder: (sections: { id: number; order_index: number }[]) => Promise<void>;
   };
   bible: {
-    getBooks: () => Promise<BibleBook[]>;
+    getBooks: (translation?: string) => Promise<BibleBook[]>;
     getChapters: (bookId: number) => Promise<number[]>;
     getVerses: (bookId: number, chapter: number) => Promise<BibleVerse[]>;
-    search: (query: string, bookId?: number, chapter?: number) => Promise<BibleVerse[]>;
+    search: (query: string, bookId?: number, chapter?: number, translation?: string) => Promise<BibleVerse[]>;
     getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) => Promise<BibleVerse[]>;
     hasData: () => Promise<boolean>;
+    getTranslations: () => Promise<BibleTranslationInfo[]>;
   };
   dialog: {
     selectFolder: () => Promise<string | undefined>;
@@ -311,7 +331,7 @@ export interface IElectronAPI {
     info: (numar: number) => Promise<AccompanimentInfo | null>;
     /** Descarcă dacă lipsește; null când nu există fișier sau nu e internet. */
     ensure: (numar: number) => Promise<{ path: string; ms: number; bytes: number } | null>;
-    downloadAll: () => Promise<{ ok: number; esuate: number; oprit: boolean }>;
+    downloadAll: () => Promise<{ ok: number; esuate: number; oprit: boolean; discPlin?: boolean }>;
     stopAll: () => Promise<void>;
     removeAll: () => Promise<{ sterse: number; stats: AccompanimentStats }>;
     folder: () => Promise<string>;
@@ -327,7 +347,7 @@ export interface IElectronAPI {
     offProgress: () => void;
     onBulk: (cb: (facute: number, total: number, numar: number, procent: number) => void) => void;
     offBulk: () => void;
-    onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean }) => void) => void;
+    onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean; discPlin?: boolean }) => void) => void;
     offBulkDone: () => void;
   };
   registry: {

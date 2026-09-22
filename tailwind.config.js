@@ -11,7 +11,7 @@ export default {
     require('daisyui'),
   ],
   daisyui: {
-    themes: ['night'],   // dark, premium theme
+    themes: ['night', 'light'],   // night = implicit (întunecat); light = tema deschisă din Setări
     darkTheme: 'night',
     base: true,
     styled: true,

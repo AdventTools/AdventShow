@@ -106,7 +106,7 @@ contextBridge.exposeInMainWorld('electron', {
     onBulk: (cb: (facute: number, total: number, numar: number, procent: number) => void) =>
       ipcRenderer.on('accompaniment:bulk', (_e, f, t, n, p) => cb(f, t, n, p)),
     offBulk: () => ipcRenderer.removeAllListeners('accompaniment:bulk'),
-    onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean }) => void) =>
+    onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean; discPlin?: boolean }) => void) =>
       ipcRenderer.on('accompaniment:bulk-done', (_e, r) => cb(r)),
     offBulkDone: () => ipcRenderer.removeAllListeners('accompaniment:bulk-done'),
   },
@@ -157,15 +157,16 @@ contextBridge.exposeInMainWorld('electron', {
   openExternal: (url: string) => ipcRenderer.invoke('shell:open-external', url),
 
   bible: {
-    getBooks: () => ipcRenderer.invoke('bible:get-books'),
+    getBooks: (translation?: string) => ipcRenderer.invoke('bible:get-books', translation),
     getChapters: (bookId: number) => ipcRenderer.invoke('bible:get-chapters', bookId),
     getVerses: (bookId: number, chapter: number) =>
       ipcRenderer.invoke('bible:get-verses', bookId, chapter),
-    search: (query: string, bookId?: number, chapter?: number) =>
-      ipcRenderer.invoke('bible:search', query, bookId, chapter),
+    search: (query: string, bookId?: number, chapter?: number, translation?: string) =>
+      ipcRenderer.invoke('bible:search', query, bookId, chapter, translation),
     getVerseRange: (bookId: number, chapter: number, startVerse: number, endVerse: number) =>
       ipcRenderer.invoke('bible:get-verse-range', bookId, chapter, startVerse, endVerse),
     hasData: () => ipcRenderer.invoke('bible:has-data'),
+    getTranslations: () => ipcRenderer.invoke('bible:get-translations'),
   },
 
   projection: {
