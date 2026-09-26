@@ -1,5 +1,22 @@
 # Changelog — AdventShow
 
+## v1.6.2 (26 Septembrie 2026)
+
+### Modificări
+- Tema deschisă se poate folosi acum peste tot: textele din Setări, Ajutor, Despre, ferestrele de raportare și de răspunsuri, bara de proiecție de jos și fila Video nu mai rămân albe pe alb, iar bara de jos nu mai rămâne închisă la culoare. Accentele (LIVE, „de rezolvat", etichetele strofelor) au variante care se văd pe alb. Tema închisă a rămas neschimbată.
+- Butonul „Setări" din bara de sus își cuprinde acum eticheta, care ieșea din chenar.
+- În bara de proiecție, punctul pentru slide-ul de titlu se vede și când nu e cel curent.
+- Pe Windows, listele care se deschid din selectoare (drop-down) nu mai au opțiunile albe pe alb — se vede toată lista, nu doar opțiunea aleasă.
+- Imnurile pot avea acum și ele un fundal separat, ca Biblia (Setări → Proiecție). Fundalul general rămâne pentru ce nu are unul separat, inclusiv Ceasul și Anunțurile.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.6.1 (26 Septembrie 2026)
 
 ### Modificări
@@ -17,14 +34,6 @@
 - O corectură a ta la un imn oficial care n-a fost acceptată îți e anunțată o dată, cu motivul; varianta ta rămâne doar pe calculatorul tău, fără nimic de ales.
 - După o actualizare, aplicația îți arată ce s-a schimbat — toate versiunile peste care ai sărit, pe rând, începând cu cea mai nouă. Istoricul întreg e oricând în Setări → Despre, iar bannerul de versiune nouă arată pe scurt ce aduce, înainte de instalare.
 - O dată pe zi, aplicația trimite autorilor lista imnurilor din „Imnurile mele" (număr și titlu), ca să știe și ce a fost scos de acolo, nu doar ce s-a adăugat.
-
----
-
-## Nepublicat
-
-- Tema deschisă se poate folosi acum peste tot: textele din Setări, Ajutor, Despre, ferestrele de raportare și de răspunsuri, bara de proiecție de jos și fila Video nu mai rămân albe pe alb, iar bara de jos nu mai rămâne închisă la culoare. Accentele (LIVE, „de rezolvat", etichetele strofelor) au variante care se văd pe alb. Tema închisă a rămas neschimbată.
-- Butonul „Setări" din bara de sus își cuprinde acum eticheta, care ieșea din chenar.
-- În bara de proiecție, punctul pentru slide-ul de titlu se vede și când nu e cel curent.
 
 ---
 
