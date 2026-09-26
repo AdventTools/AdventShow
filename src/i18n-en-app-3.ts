@@ -17,9 +17,12 @@ export const EN_APP_3: Record<string, string> = {
     'Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu ↑↓ sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.':
         'Each tab keeps its own size; you can also change it while projecting, with ↑↓ or A−/A+, and it stays that way. If a long stanza or passage does not fit the screen, the app shrinks the text on its own, so scrolling is never needed.',
     'Fundalul proiecției': 'Projection background',
-    'Ce se vede în spatele textului la Imnuri (și, implicit, la Biblie — dacă nu-i dai un fundal separat mai jos). Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.':
-        'What shows behind the text for Hymns (and, by default, for Bible too — unless you give it a separate background below). A dark overlay is added automatically over images or video, so the text stays readable.',
+    'Fundalul general: se vede peste tot unde nu alegi altul — la Imnuri și la Biblie, dacă nu le dai mai jos un fundal separat, și la Ceas și Anunțuri. Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.':
+        'The general background: it shows everywhere you don\'t pick another one — for Hymns and Bible, unless you give them a separate background below, and for Clock and Announcements. A dark overlay is added automatically over images or video, so the text stays readable.',
     'Fundal separat pentru Biblie': 'Separate background for Bible',
+    'Fundal separat pentru Imnuri': 'Separate background for Hymns',
+    'Opțional — dacă îl pornești, Imnurile primesc propriul fundal, diferit de cel general.':
+        'Optional — if you turn it on, Hymns get their own background, different from the general one.',
     'Culorile textului': 'Text colors',
     'Exemplul de lângă fiecare culoare arată cum se va vedea pe ecran.': 'The sample next to each color shows how it will look on screen.',
     'Numărul imnului': 'Hymn number',
@@ -190,8 +193,8 @@ export const EN_APP_3: Record<string, string> = {
     'Altceva': 'Something else',
     '— gândacul din bara de sus, pentru o problemă, sau becul, pentru o sugestie.':
         '— the bug icon in the top bar for a problem, or the light bulb for a suggestion.',
-    'Opțional — dacă îl pornești, Biblia primește propriul fundal, diferit de cel de la Imnuri.':
-        'Optional — if you turn it on, the Bible gets its own background, different from the one for Hymns.',
+    'Opțional — dacă îl pornești, Biblia primește propriul fundal, diferit de cel general.':
+        'Optional — if you turn it on, the Bible gets its own background, different from the general one.',
     'Taste — când NU proiectezi': 'Keys — when NOT projecting',
     'Pentru pregătit repede, fără mouse.': 'For quick preparation, without the mouse.',
     'Sare în câmpul de căutare și selectează ce era scris — poți tasta direct numărul.':

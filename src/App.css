@@ -2582,6 +2582,15 @@
     outline: none;
 }
 
+/* Lista deschisă a unui selector: pe Windows, Chromium o desenează cu fundalul
+   selectorului, iar unul semi-transparent iese alb opac — cu textul tot alb, deci
+   se vedea doar opțiunea selectată. Opțiunile primesc culori opace, din temă. */
+select option,
+select optgroup {
+    background-color: var(--bg-sidebar);
+    color: rgb(var(--fg-rgb));
+}
+
 .field select:focus,
 .field input:focus {
     border-color: var(--accent);

@@ -5947,7 +5947,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                             <section className="sgroup">
                                 <div className="sgroup-head">
                                     <h4>{t('Fundalul proiecției')}</h4>
-                                    <p>{t('Ce se vede în spatele textului la Imnuri (și, implicit, la Biblie — dacă nu-i dai un fundal separat mai jos). Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.')}</p>
+                                    <p>{t('Fundalul general: se vede peste tot unde nu alegi altul — la Imnuri și la Biblie, dacă nu le dai mai jos un fundal separat, și la Ceas și Anunțuri. Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.')}</p>
                                 </div>
                                 <div className="sstack">
                                     <BgFieldsEditor
@@ -5957,37 +5957,42 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 </div>
                             </section>
 
-                            <section className="sgroup">
-                                <div className="sgroup-head">
-                                    <h4>{t('Fundal separat pentru Biblie')}</h4>
-                                    <p>{t('Opțional — dacă îl pornești, Biblia primește propriul fundal, diferit de cel de la Imnuri.')}</p>
-                                </div>
-                                <div className="sstack">
-                                    <label className="field-row" style={{ gap: 8 }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={!!settings.bgByTab?.biblia}
-                                            onChange={e => saveSettings({
-                                                bgByTab: {
-                                                    ...settings.bgByTab,
-                                                    biblia: e.target.checked
-                                                        ? (settings.bgByTab?.biblia ?? { bgType: settings.bgType, bgColor: settings.bgColor })
-                                                        : undefined,
-                                                },
-                                            })}
-                                        />
-                                        {t('Fundal separat pentru Biblie')}
-                                    </label>
-                                    {settings.bgByTab?.biblia && (
-                                        <BgFieldsEditor
-                                            value={settings.bgByTab.biblia}
-                                            onChange={patch => saveSettings({
-                                                bgByTab: { ...settings.bgByTab, biblia: { ...settings.bgByTab?.biblia, ...patch } },
-                                            })}
-                                        />
-                                    )}
-                                </div>
-                            </section>
+                            {([
+                                ['imnuri', t('Fundal separat pentru Imnuri'), t('Opțional — dacă îl pornești, Imnurile primesc propriul fundal, diferit de cel general.')],
+                                ['biblia', t('Fundal separat pentru Biblie'), t('Opțional — dacă îl pornești, Biblia primește propriul fundal, diferit de cel general.')],
+                            ] as const).map(([tab, titlu, descriere]) => (
+                                <section key={tab} className="sgroup">
+                                    <div className="sgroup-head">
+                                        <h4>{titlu}</h4>
+                                        <p>{descriere}</p>
+                                    </div>
+                                    <div className="sstack">
+                                        <label className="field-row" style={{ gap: 8 }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={!!settings.bgByTab?.[tab]}
+                                                onChange={e => saveSettings({
+                                                    bgByTab: {
+                                                        ...settings.bgByTab,
+                                                        [tab]: e.target.checked
+                                                            ? (settings.bgByTab?.[tab] ?? { bgType: settings.bgType, bgColor: settings.bgColor })
+                                                            : undefined,
+                                                    },
+                                                })}
+                                            />
+                                            {titlu}
+                                        </label>
+                                        {settings.bgByTab?.[tab] && (
+                                            <BgFieldsEditor
+                                                value={settings.bgByTab[tab]!}
+                                                onChange={patch => saveSettings({
+                                                    bgByTab: { ...settings.bgByTab, [tab]: { ...settings.bgByTab?.[tab], ...patch } },
+                                                })}
+                                            />
+                                        )}
+                                    </div>
+                                </section>
+                            ))}
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
