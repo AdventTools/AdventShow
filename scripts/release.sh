@@ -30,6 +30,7 @@
 #   4. Notary submit   5. Sync sursă VM   6. Build Windows detașat   7. Pull EXE
 #   8. Notary poll + staple   9. Git push main   10. Upload în hangar + verificare
 #   11. Tag + note pe GitHub (declanșează CI-ul de Linux)
+#   La final: oglinda corecturilor din hangar pe GitHub, pentru instalările de sub 1.4.0
 #
 # Usage:
 #   ./scripts/release.sh "descriere modificări" [patch|minor|major]
@@ -711,6 +712,37 @@ aplicația se actualizează singură."
   fi
   touch "$STATE/gh.done"
   ok "tag ${TAG} + note publicate, CI Linux pornit"
+fi
+
+# ── Oglinda corecturilor pentru instalările de sub 1.4.0 ─────────────────────
+#
+# Ele citesc corecturile de pe GitHub (content/corrections.json din main), nu din
+# hangar. Pasul se uita când era manual: pe 26 sep 2026 oglinda era la seq 9, iar
+# hangarul la 22 — cine nu se actualizase rămânea cu baza înghețată. Rulează după
+# build-uri, deci nu atinge binarele; commit-ul conține doar fișierul ăsta.
+if [ ! -f "$STATE/mirror.done" ]; then
+  step "Oglinda corecturilor pe GitHub"
+  mirror_fetch() { curl -sfL https://hangar.it4all.ro/d/ba3166b608233a30/corrections.json -o content/corrections.json; }
+  retry "descărcare corecturi" 10 10 -- mirror_fetch || fail "nu am putut descărca corecturile din hangar"
+  node -e 'if (!Array.isArray(JSON.parse(require("fs").readFileSync("content/corrections.json", "utf8")).entries)) process.exit(1)' \
+    || { git checkout -- content/corrections.json; fail "corrections.json descărcat nu e valid"; }
+  # Contează doar intrările: hangarul rescrie fișierul cu altă dată („generated") la
+  # fiecare publicare, iar un commit doar pentru dată ar fi zgomot.
+  if git show HEAD:content/corrections.json | node -e '
+      const fs = require("fs");
+      const vechi = JSON.parse(fs.readFileSync(0, "utf8")).entries;
+      const nou = JSON.parse(fs.readFileSync("content/corrections.json", "utf8")).entries;
+      process.exit(JSON.stringify(vechi) === JSON.stringify(nou) ? 0 : 1)'; then
+    git checkout -- content/corrections.json
+    ok "oglinda era deja la zi"
+  else
+    git add content/corrections.json
+    git commit -q -m "content: corecturile din hangar, oglindite pentru instalările de sub 1.4.0" \
+      || fail "commit oglindă"
+    retry "git push oglindă" 10 15 -- git push -q origin main || fail "git push oglindă"
+    ok "oglinda actualizată și urcată"
+  fi
+  mark_done mirror
 fi
 
 step "GATA — v${NEW_VERSION} urcat"

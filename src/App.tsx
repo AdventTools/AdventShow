@@ -2296,7 +2296,7 @@ function App() {
                             {updateDownloading ? (
                                 <div style={{ width: '100%' }}>
                                     <div style={{
-                                        height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.15)',
+                                        height: 6, borderRadius: 3, background: 'rgb(var(--fg-rgb) / 0.15)',
                                         overflow: 'hidden', marginBottom: 4,
                                     }}>
                                         <div style={{
@@ -3508,7 +3508,7 @@ function VideoController({
                                     {entry.status === 'ready' && !isLocal && (
                                         deleteConfirm === entry.id ? (
                                             <div className="yt-delete-confirm">
-                                                <span className="text-white/60 text-xs">{t('Ștergi fișierul de pe disc?')}</span>
+                                                <span className="text-fg/60 text-xs">{t('Ștergi fișierul de pe disc?')}</span>
                                                 <button
                                                     className="video-btn yt-btn-small yt-btn-danger"
                                                     onClick={() => { onYoutubeDelete(entry.id); setDeleteConfirm(null); }}
@@ -3542,7 +3542,7 @@ function VideoController({
             {filteredPlaylist.length === 0 && !videoLoading && (
                 <div className="empty-state" style={{ padding: '2rem 0' }}>
                     <Film className="icon-lg opacity-20" />
-                    <p className="text-white/30 text-sm">
+                    <p className="text-fg/30 text-sm">
                         {youtubePlaylist.length === 0
                             ? t('Playlist-ul este gol. Adaugă un fișier local sau un link YouTube.')
                             : t('Niciun videoclip în această categorie.')}
@@ -5154,7 +5154,7 @@ function PasswordSetupModal({ onSave }: {
                             placeholder={t('ex: Cluj-Napoca')}
                         />
                     </div>
-                    <p className="text-white/40 text-xs mt-1">
+                    <p className="text-fg/40 text-xs mt-1">
                         {t('Biserica și localitatea se trimit autorilor pentru evidența instalărilor și pentru ajutor la recuperarea parolei. Nu se trimit alte date.')}
                     </p>
                     <div className="field" style={{ marginTop: 8 }}>
@@ -5168,7 +5168,7 @@ function PasswordSetupModal({ onSave }: {
                                 if (p) setDownloadFolder(p);
                             }}>{t('Schimbă...')}</button>
                         </div>
-                        <p className="text-white/40 text-xs mt-1">
+                        <p className="text-fg/40 text-xs mt-1">
                             {t('Aici se vor salva videoclipurile descărcate de pe YouTube.')}
                         </p>
                     </div>
@@ -5236,7 +5236,7 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
                             placeholder={t('ex: Cluj-Napoca')}
                         />
                     </div>
-                    <p className="text-white/40 text-xs mt-1">
+                    <p className="text-fg/40 text-xs mt-1">
                         {t('Se trimit doar aceste două câmpuri și versiunea aplicației. Nimic altceva.')}
                     </p>
                     {error && <div className="editor-error">{error}</div>}
@@ -5328,7 +5328,7 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                 <div className="modal-body">
                     {items.length === 0 && states.length === 0 && deVerificat.length === 0
                         && !ytCereAtentie(yt) && (
-                        <div className="text-white/50 text-sm py-6 text-center">
+                        <div className="text-fg/50 text-sm py-6 text-center">
                             {t('Nu te așteaptă nimic. Tot ce era de rezolvat e rezolvat.')}
                         </div>
                     )}
@@ -5480,7 +5480,7 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                         </div>
                     ))}
 
-                    <p className="text-white/40 text-xs mt-3">
+                    <p className="text-fg/40 text-xs mt-3">
                         {t('Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.')}
                     </p>
                 </div>
@@ -5595,7 +5595,7 @@ function FeedbackModal({ initialKind, onClose, onSent }: {
                             value={contact} onChange={e => setContact(e.target.value)}
                             placeholder={t('telefon sau e-mail, dacă vreți răspuns')} />
                     </div>
-                    <label className="flex items-center gap-2 text-white/70 text-xs mt-1 cursor-pointer">
+                    <label className="flex items-center gap-2 text-fg/70 text-xs mt-1 cursor-pointer">
                         <input type="checkbox" checked={attachLog}
                             onChange={e => setAttachLog(e.target.checked)} />
                         {t('Atașează ultimele 200 de linii din jurnalul aplicației')}
@@ -5604,7 +5604,7 @@ function FeedbackModal({ initialKind, onClose, onSent }: {
                         </button>
                     </label>
                     {showLog && (
-                        <pre className="text-white/50 text-[10px] mt-2 p-2 rounded bg-black/40 max-h-40 overflow-auto whitespace-pre-wrap">
+                        <pre className="text-fg/50 text-[10px] mt-2 p-2 rounded bg-sunk/40 max-h-40 overflow-auto whitespace-pre-wrap">
                             {logPreview || t('(jurnalul e gol — depanarea nu e pornită)')}
                         </pre>
                     )}
@@ -5722,7 +5722,7 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
                                     autoCapitalize="characters"
                                 />
                             </div>
-                            <p className="text-white/40 text-xs mt-1">
+                            <p className="text-fg/40 text-xs mt-1">
                                 {t('Codul e valabil 7 zile și poate fi folosit o singură dată.')}
                             </p>
                             {error && <div className="editor-error">{error}</div>}
@@ -5937,7 +5937,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                             value={settings.projectionFontSizeByTab?.biblia ?? settings.projectionFontSize ?? 1.2}
                                             onChange={e => saveFontSize('biblia', parseFloat(e.target.value))}
                                         />
-                                        <p className="text-white/40 text-xs mt-1">
+                                        <p className="text-fg/40 text-xs mt-1">
                                             {t('Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu ↑↓ sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.')}
                                         </p>
                                     </div>
@@ -6190,7 +6190,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     </button>
                                 </div>
                                 {pendingFeedback > 0 && (
-                                    <p className="text-white/40 text-xs mt-2">
+                                    <p className="text-fg/40 text-xs mt-2">
                                         {pendingFeedback === 1
                                             ? t('{n} mesaj așteaptă să plece — nu era internet când le-ai scris. Se trimit automat.', { n: pendingFeedback })
                                             : t('{n} mesaje așteaptă să plece — nu era internet când le-ai scris. Se trimit automat.', { n: pendingFeedback })}
@@ -6298,21 +6298,21 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                                 {/* Logo + versiune */}
                                 <h2 className="text-3xl font-black text-primary tracking-wide">AdventShow</h2>
-                                <p className="text-white/40 text-xs -mt-3">{t('versiunea {v}', { v: import.meta.env.VITE_APP_VERSION ?? '1.0.0' })}</p>
+                                <p className="text-fg/40 text-xs -mt-3">{t('versiunea {v}', { v: import.meta.env.VITE_APP_VERSION ?? '1.0.0' })}</p>
                                 <button className="btn-clear" onClick={onShowHistory}>
                                     {t('Ce s-a schimbat în fiecare versiune')}
                                 </button>
 
                                 {/* Descriere */}
-                                <p className="text-white/70 text-sm leading-relaxed max-w-sm">
+                                <p className="text-fg/70 text-sm leading-relaxed max-w-sm">
                                     {t('Aplicație gratuită și open-source pentru proiecția imnurilor și versetelor biblice în biserici.')}
                                 </p>
 
-                                <div className="border-t border-white/10 w-full" />
+                                <div className="border-t border-fg/10 w-full" />
 
                                 {/* Ce include */}
-                                <div className="text-sm text-white/60 leading-relaxed max-w-sm w-full text-left">
-                                    <p className="font-semibold text-white/80 mb-2 text-center">{t('Ce include')}</p>
+                                <div className="text-sm text-fg/60 leading-relaxed max-w-sm w-full text-left">
+                                    <p className="font-semibold text-fg/80 mb-2 text-center">{t('Ce include')}</p>
                                     <ul className="list-disc list-inside space-y-1">
                                         <li><strong>{t('1.324 de imnuri și cântări')}</strong> — {t('Imnuri Creștine, Licurici, Exploratori, Companioni, Tineret, Amicus')}</li>
                                         <li><strong>{t('Biblia Cornilescu')}</strong> — {t('66 cărți, 31.102 versete')}</li>
@@ -6323,28 +6323,28 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     </ul>
                                 </div>
 
-                                <div className="border-t border-white/10 w-full" />
+                                <div className="border-t border-fg/10 w-full" />
 
                                 {/* Dezvoltatori */}
                                 <div className="w-full max-w-sm">
-                                    <p className="font-semibold text-white/80 mb-3 text-center text-sm">{t('Dezvoltatori')}</p>
+                                    <p className="font-semibold text-fg/80 mb-3 text-center text-sm">{t('Dezvoltatori')}</p>
                                     <div className="flex flex-col gap-2">
-                                        <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
-                                            <p className="text-white/90 font-semibold text-sm">Ovidius Zanfir</p>
-                                            <p className="text-white/40 text-xs mt-0.5">
+                                        <div className="rounded-lg bg-fg/5 px-4 py-3 text-left">
+                                            <p className="text-fg/90 font-semibold text-sm">Ovidius Zanfir</p>
+                                            <p className="text-fg/40 text-xs mt-0.5">
                                                 {t('Autor original, interfață, structura aplicației')}
                                             </p>
                                         </div>
-                                        <div className="rounded-lg bg-white/5 px-4 py-3 text-left">
-                                            <p className="text-white/90 font-semibold text-sm">Samy Balasa</p>
-                                            <p className="text-white/40 text-xs mt-0.5">
+                                        <div className="rounded-lg bg-fg/5 px-4 py-3 text-left">
+                                            <p className="text-fg/90 font-semibold text-sm">Samy Balasa</p>
+                                            <p className="text-fg/40 text-xs mt-0.5">
                                                 {t('Dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, acompaniamentul instrumental al imnurilor — pentru când nu e pianist la biserică — cu trecerea strofelor pe melodie, corecturile care circulă între biserici și autori, parola și recuperarea ei, actualizarea automată pe canal stabil sau beta')}
                                             </p>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="border-t border-white/10 w-full" />
+                                <div className="border-t border-fg/10 w-full" />
 
                                 {/* Link GitHub */}
                                 <a
@@ -6359,9 +6359,9 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     github.com/AdventTools
                                 </a>
 
-                                <div className="border-t border-white/10 w-full" />
+                                <div className="border-t border-fg/10 w-full" />
 
-                                <p className="text-white/25 text-xs">
+                                <p className="text-fg/25 text-xs">
                                     {t('Distribuit gratuit. Biblia Cornilescu — text în domeniu public.')}
                                 </p>
                             </div>
@@ -7870,7 +7870,7 @@ function MessagePanel() {
                             </div>
                             <div className="rt-preview-nav">
                                 <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
-                                <span className="text-white/60 text-xs">{t('slide {cur} / {total}', { cur: curSlide + 1, total: slideCount })}</span>
+                                <span className="text-fg/60 text-xs">{t('slide {cur} / {total}', { cur: curSlide + 1, total: slideCount })}</span>
                                 <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
                             </div>
                             <div className="timer-actions">
@@ -8033,7 +8033,7 @@ function MessagePanel() {
                     <div className="pres-overlay-footer">
                         <div className="pres-nav">
                             <button className="btn-sm" disabled={curSlide === 0} onClick={() => goSlide(curSlide - 1)}>‹</button>
-                            <span className="text-white/60 text-xs">{t('slide {cur} / {total}', { cur: curSlide + 1, total: slideCount })}</span>
+                            <span className="text-fg/60 text-xs">{t('slide {cur} / {total}', { cur: curSlide + 1, total: slideCount })}</span>
                             <button className="btn-sm" disabled={curSlide >= slideCount - 1} onClick={() => goSlide(curSlide + 1)}>›</button>
                             <button className="btn-sm" onClick={() => {
                                 const p = presRef.current!;
@@ -8167,7 +8167,7 @@ function UpdateChecker() {
     }
 
     return (
-        <div className="text-sm text-white/60 leading-relaxed w-full">
+        <div className="text-sm text-fg/60 leading-relaxed w-full">
             <div className="flex flex-col items-start gap-2">
                 {!result && !checking && !downloading && !ready && (
                     <button className="btn-sm" onClick={doCheck}>
@@ -8176,7 +8176,7 @@ function UpdateChecker() {
                 )}
 
                 {checking && (
-                    <p className="text-white/40 text-xs">{t('Se verifică...')}</p>
+                    <p className="text-fg/40 text-xs">{t('Se verifică...')}</p>
                 )}
 
                 {result && !result.available && !downloading && !ready && (
@@ -8196,8 +8196,8 @@ function UpdateChecker() {
 
                 {downloading && (
                     <div className="flex flex-col items-start gap-2 w-full max-w-xs">
-                        <p className="text-white/40 text-xs">{t('Se descarcă... {pct}%', { pct: progress.toFixed(0) })}</p>
-                        <div className="w-full bg-white/10 rounded-full h-2">
+                        <p className="text-fg/40 text-xs">{t('Se descarcă... {pct}%', { pct: progress.toFixed(0) })}</p>
+                        <div className="w-full bg-fg/10 rounded-full h-2">
                             <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
                         </div>
                     </div>
@@ -8270,10 +8270,10 @@ function YtDlpSettings() {
     return (
         <div className="field">
             <label>{t('Unealta de descărcare (yt-dlp)')}</label>
-            {installed === null && <p className="text-white/40 text-xs">{t('Se verifică...')}</p>}
+            {installed === null && <p className="text-fg/40 text-xs">{t('Se verifică...')}</p>}
             {installed === false && (
                 <div className="flex flex-col items-start gap-2">
-                    <p className="text-white/40 text-xs">{t('Nu e instalată — fără ea nu se poate descărca de pe YouTube.')}</p>
+                    <p className="text-fg/40 text-xs">{t('Nu e instalată — fără ea nu se poate descărca de pe YouTube.')}</p>
                     <button
                         className="btn-sm"
                         onClick={install}
@@ -8285,7 +8285,7 @@ function YtDlpSettings() {
             )}
             {installed === true && (
                 <div className="flex flex-col items-start gap-2">
-                    <p className="text-white/40 text-xs">{t('Instalată, versiunea {v}', { v: version || t('se verifică…') })}</p>
+                    <p className="text-fg/40 text-xs">{t('Instalată, versiunea {v}', { v: version || t('se verifică…') })}</p>
                     <button
                         className="btn-sm"
                         onClick={update}
@@ -8295,7 +8295,7 @@ function YtDlpSettings() {
                     </button>
                 </div>
             )}
-            {status && <p className="text-white/50 text-xs mt-1">{status}</p>}
+            {status && <p className="text-fg/50 text-xs mt-1">{status}</p>}
         </div>
     );
 }
@@ -8495,7 +8495,7 @@ function DownloadFolderPicker({ settings, onSave }: {
                     </button>
                 )}
             </div>
-            <p className="text-white/40 text-xs mt-1">
+            <p className="text-fg/40 text-xs mt-1">
                 {t('Folderul în care se salvează videoclipurile descărcate de pe YouTube.')}
             </p>
         </div>
