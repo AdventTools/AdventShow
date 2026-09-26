@@ -425,3 +425,35 @@ export async function fetchProposalVerdicts(
   const items = Array.isArray(out.json.items) ? out.json.items : [];
   return items as ProposalVerdict[];
 }
+
+/** Un imn din colecția proprie a instalării, așa cum îl vede inventarul din hub. */
+export interface LocalInventoryItem {
+  number: string;
+  title: string;
+  hash: string;
+}
+
+/**
+ * Lista COMPLETĂ a colecției proprii („Imnurile mele"). Propunerile spun doar ce
+ * s-a adăugat; lista întreagă e singurul drum pe care o ștergere locală ajunge la
+ * autori — hub-ul marchează ca dispărut ce lipsește față de data trecută. De aceea
+ * nu se trimite niciodată trunchiată: o listă tăiată ar raporta ștergeri care nu
+ * s-au întâmplat. Doar număr, titlu și amprentă — cererea nu e autentificată.
+ */
+export async function sendLocalInventory(
+  deps: HangarDeps, category: string, items: LocalInventoryItem[],
+): Promise<boolean> {
+  const out = await postJson(`${CONTENT_URL}?do=inventory`, {
+    project: HANGAR_KEY,
+    install: installId(deps),
+    kind: 'hymn',
+    category,
+    items,
+  }, 15000);
+  if (!out) return false;
+  if (hubStatus(out.res) !== 200 || !out.json.ok) {
+    deps.log(`[Hangar] inventar refuzat (${hubStatus(out.res)}):`, String(out.json.error ?? ''));
+    return false;
+  }
+  return true;
+}

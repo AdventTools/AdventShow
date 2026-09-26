@@ -29,7 +29,7 @@ export const EN_CONTROLLER: Record<string, string> = {
     'Doar acompaniamentul — strofele le schimbi tu': 'Accompaniment only — you change the verses',
     'Zoom text proiecție': 'Projection text zoom',
     'Micșorează textul (↓)': 'Shrink the text (↓)',
-    'Resetează la 100%': 'Reset to 100%',
+    'Înapoi la mărimea implicită (120%)': 'Back to the default size (120%)',
     'Mărește textul (↑)': 'Enlarge the text (↑)',
     'Text: {pct}%': 'Text: {pct}%',
     '←→ Space: navigare · ↑↓: font': '←→ Space: navigate · ↑↓: font size',

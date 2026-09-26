@@ -14,8 +14,8 @@ export const EN_APP_3: Record<string, string> = {
     'Ecranul folosit': 'Screen in use',
     'Mărimea textului la Imnuri: {pct}%': 'Text size for Hymns: {pct}%',
     'Mărimea textului la Biblie: {pct}%': 'Text size for Bible: {pct}%',
-    'Fiecare tab își ține propria mărime. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.':
-        'Each tab keeps its own size. If a long stanza or passage does not fit the screen, the app shrinks the text on its own, so scrolling is never needed.',
+    'Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu ↑↓ sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.':
+        'Each tab keeps its own size; you can also change it while projecting, with ↑↓ or A−/A+, and it stays that way. If a long stanza or passage does not fit the screen, the app shrinks the text on its own, so scrolling is never needed.',
     'Fundalul proiecției': 'Projection background',
     'Ce se vede în spatele textului la Imnuri (și, implicit, la Biblie — dacă nu-i dai un fundal separat mai jos). Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.':
         'What shows behind the text for Hymns (and, by default, for Bible too — unless you give it a separate background below). A dark overlay is added automatically over images or video, so the text stays readable.',
@@ -36,6 +36,13 @@ export const EN_APP_3: Record<string, string> = {
     'Fereastra aceasta': 'This window',
     'Nu are nicio legătură cu ecranul de proiecție.': 'This has nothing to do with the projection screen.',
     'Mărimea textului și a butoanelor': 'Text and button size',
+    'Limba interfeței': 'Interface language',
+    'Imnul tău «{title}» a fost acceptat și s-a mutat în {category}, nr. {number}.':
+        'Your hymn «{title}» was accepted and moved to {category}, no. {number}.',
+    'Imnul tău «{title}» a fost acceptat în {category}, nr. {number}.':
+        'Your hymn «{title}» was accepted into {category}, no. {number}.',
+    'Corectura ta la {category} {number} «{title}» nu a fost acceptată; varianta ta rămâne doar la tine.':
+        'Your correction to {category} {number} «{title}» was not accepted; your version stays on this computer only.',
     'Depanare': 'Troubleshooting',
     'Pornește jurnalul doar dacă îți cerem noi, când raportezi o problemă. Îl poți opri după aceea.':
         'Only turn the log on if we ask you to, when reporting a problem. You can turn it off afterwards.',
@@ -181,8 +188,8 @@ export const EN_APP_3: Record<string, string> = {
     'Ai pierdut un imn adăugat': 'Lost a hymn you added',
     '— caută-l în „Imnurile mele"; tot ce adaugi ajunge acolo.': '— look for it in "My Hymns"; everything you add ends up there.',
     'Altceva': 'Something else',
-    '— Setări → Administrare → „Raportează o problemă". Mesajul ajunge la noi chiar dacă în clipa aceea nu e internet; pleacă mai târziu, singur.':
-        '— Settings → Administration → "Report a problem". The message reaches us even if there is no internet at that moment; it is sent later, on its own.',
+    '— gândacul din bara de sus, pentru o problemă, sau becul, pentru o sugestie.':
+        '— the bug icon in the top bar for a problem, or the light bulb for a suggestion.',
     'Opțional — dacă îl pornești, Biblia primește propriul fundal, diferit de cel de la Imnuri.':
         'Optional — if you turn it on, the Bible gets its own background, different from the one for Hymns.',
     'Taste — când NU proiectezi': 'Keys — when NOT projecting',
@@ -418,6 +425,4 @@ export const EN_APP_3: Record<string, string> = {
     'Videoul de fundal': 'Background video',
     'Niciunul ales': 'None chosen',
     'Cât de vizibil e fundalul: {pct}%': 'How visible the background is: {pct}%',
-    'Ecranul pe care iese proiecția': 'The screen the projection goes to',
-    ' — principal': ' — primary',
 };

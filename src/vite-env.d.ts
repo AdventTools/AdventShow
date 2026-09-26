@@ -217,6 +217,8 @@ export interface AppSettings {
   appTheme?: 'dark' | 'light';
   /** Limba interfeței proprii a aplicației. */
   uiLanguage?: 'ro' | 'en';
+  /** Versiunea pornită ultima dată — după o actualizare, de aici știm ce e nou. */
+  lastRunVersion?: string;
   /** Traducerea Bibliei; implicit 'cornilescu'. */
   bibleTranslation?: string;
   audioOutputDeviceId?: string; // unde iese sunetul: video proiectat + acompaniament
@@ -322,6 +324,9 @@ export interface IElectronAPI {
     get: () => Promise<AppSettings>;
     set: (patch: Partial<AppSettings>) => Promise<void>;
     setUiZoom: (factor: number) => Promise<void>;
+    /** Doar în fereastra de proiecție: setările salvate, după fiecare schimbare. */
+    onChanged: (cb: (settings: AppSettings) => void) => void;
+    offChanged: () => void;
   };
   accompaniment: {
     stats: () => Promise<AccompanimentStats>;
@@ -358,9 +363,12 @@ export interface IElectronAPI {
   contrib: {
     status: () => Promise<{ pending: number; sent: number }>;
     decisions: () => Promise<PendingDecision[]>;
+    notices: () => Promise<{
+      kind: 'acceptat' | 'respins'; title: string; category: string; number: string; moved: boolean; note: string;
+    }[]>;
     refreshDecisions: () => Promise<number>;
-    resolveDecision: (hash: string, alegere: 'pastrat' | 'revenit' | 'sters')
-      => Promise<{ ok: boolean; error?: string }>;
+    /** „Am înțeles" la o decizie de citit. */
+    resolveDecision: (hash: string) => Promise<{ ok: boolean; error?: string }>;
     hymnStates: () => Promise<HymnState[]>;
     applyHymnState: (key: string, alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu')
       => Promise<{ ok: boolean; error?: string }>;
@@ -413,7 +421,8 @@ export interface IElectronAPI {
     offText: () => void;
   };
   update: {
-    check: () => Promise<{ available: boolean; version?: string }>;
+    /** `notes` = nota publică din hangar a versiunii noi (doar a ei, nu și a celor sărite). */
+    check: () => Promise<{ available: boolean; version?: string; notes?: string }>;
     download: () => Promise<void>;
     install: () => void;
     openLogFile: () => void;

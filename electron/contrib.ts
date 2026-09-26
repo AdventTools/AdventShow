@@ -3,7 +3,8 @@ import crypto from 'crypto';
 import { createRequire } from 'module';
 import { getDb, MY_HYMNS_CATEGORY } from './db';
 import {
-  HANGAR_CORRECTIONS_URL, HangarDeps, HangarSettings, fetchProposalVerdicts, sendProposals,
+  HANGAR_CORRECTIONS_URL, HangarDeps, HangarSettings, LocalInventoryItem, fetchProposalVerdicts,
+  sendLocalInventory, sendProposals,
 } from './hangar';
 
 const require = createRequire(import.meta.url);
@@ -48,6 +49,9 @@ interface ContribSettings extends HangarSettings {
   forceReplaced?: Record<string, ReplacedText>;
   // hash-ul propunerii -> ce s-a hotărât cu ea și ce a ales utilizatorul mai departe
   decisions?: Record<string, StoredDecision>;
+  // inventarul „Imnurilor mele" trimis în hub: când și câte au fost
+  inventoryLastSentAt?: string;
+  inventoryLastCount?: number;
 }
 
 export interface ContribDeps extends HangarDeps {
@@ -193,15 +197,17 @@ interface CorrectionEntry {
   onlyIfAbsent?: boolean;
 }
 
+// La FIECARE pornire, nu o dată pe zi: e un fișier static, mic. Cu o verificare pe zi,
+// un imn acceptat dimineața ajungea abia a doua zi, deși verdictul (întrebat la fiecare
+// pornire) sosise deja — iar fără imnul oficial pe disc, copia din „Imnurile mele" nu
+// avea unde să se mute.
 export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
   const settings = deps.getSettings();
-  if (!onceADay(settings.correctionsLastCheckAt)) return;
 
   const res = await fetchWithTimeout(HANGAR_CORRECTIONS_URL);
   // Offline sau timeout: reîncercăm la următoarea pornire, fără să marcăm nimic.
   if (!res) return;
-  // 404 = autorii n-au publicat încă nicio corectură. Nu e o eroare; marcăm
-  // verificarea, altfel am bate la ușă la fiecare pornire.
+  // 404 = autorii n-au publicat încă nicio corectură. Nu e o eroare.
   if (res.status === 404) {
     deps.patchSettings({ correctionsLastCheckAt: new Date().toISOString() });
     return;
@@ -240,6 +246,9 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
   const seedHashes = seedTextHashes(deps.seedDbPath);
   const tx = db.transaction(() => {
     for (const entry of fresh) {
+      // „Imnurile mele" e a omului: nimic publicat de noi nu scrie acolo, nici dintr-o
+      // greșeală a hangarului — un număr ocupat i-ar fi înlocuit imnul propriu.
+      if (String(entry.category).trim() === MY_HYMNS_CATEGORY) { skipped++; continue; }
       // Colecția lipsește? O facem. Până acum intrarea era sărită în tăcere, iar
       // seq-ul mergea înainte — deci o colecție nouă publicată de autori s-ar fi
       // pierdut pentru totdeauna la oricine n-o avea deja.
@@ -531,6 +540,45 @@ export async function maybeSendContributions(deps: ContribDeps): Promise<void> {
     + ` ${res.duplicates} deja cunoscute (carantină ${QUARANTINE_HOURS} ore)`);
 }
 
+/** Cât primește hub-ul într-o cerere de inventar. Peste atât nu trimitem nimic: o listă tăiată ar raporta ștergeri false. */
+const INVENTORY_MAX = 2000;
+
+/**
+ * O dată pe zi, lista întreagă a „Imnurilor mele" către hub. Propunerile spun doar
+ * ce s-a adăugat; lista completă e singurul drum pe care autorii află și ce a șters
+ * biserica. Amprenta e aceeași cu a propunerii, ca imnul să se lege de ea în hub.
+ */
+export async function maybeSendInventory(deps: ContribDeps): Promise<void> {
+  const settings = deps.getSettings();
+  if (!onceADay(settings.inventoryLastSentAt)) return;
+
+  const db = getDb();
+  const cat = db.prepare('SELECT id FROM categories WHERE name = ?').get(MY_HYMNS_CATEGORY) as { id: number } | undefined;
+  const hymns = cat
+    ? db.prepare('SELECT id, number, title FROM hymns WHERE category_id = ? ORDER BY id').all(cat.id) as
+      { id: number; number: string; title: string }[]
+    : [];
+  // Nimic acum și nimic nici data trecută: nu e nimic de spus.
+  if (hymns.length === 0 && !settings.inventoryLastCount) return;
+  if (hymns.length > INVENTORY_MAX) {
+    deps.log(`[Contrib] inventar netrimis: ${hymns.length} imnuri, peste limita de ${INVENTORY_MAX}`);
+    return;
+  }
+
+  const items: LocalInventoryItem[] = hymns.map(h => {
+    const sections = db.prepare(
+      'SELECT type, text FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
+    ).all(h.id) as SectionRow[];
+    return {
+      number: normalizeHymnNumber(h.number),
+      title: h.title,
+      hash: contentHash('adaugat', { title: h.title, sections }),
+    };
+  });
+  if (!(await sendLocalInventory(deps, MY_HYMNS_CATEGORY, items))) return;
+  deps.patchSettings({ inventoryLastSentAt: new Date().toISOString(), inventoryLastCount: items.length });
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Ce s-a hotărât cu propunerile lui
 //
@@ -558,6 +606,8 @@ export interface PendingDecision {
 
 interface StoredDecision extends PendingDecision {
   resolved?: 'pastrat' | 'revenit' | 'sters';
+  /** false = de anunțat, true = anunțat; lipsă = decizie veche, nu se mai anunță. */
+  announced?: boolean;
 }
 
 /** Imnul dintr-o colecție, cu textul lui, gata de comparat. */
@@ -601,28 +651,42 @@ export async function refreshProposalDecisions(deps: ContribDeps): Promise<numbe
     if (!row) continue;
 
     const inainte = known[v.hash];
+    // De anunțat (`false`): tot ce e nou, plus imnurile proprii acceptate care încă
+    // așteaptă — verdict venit înainte să existe mesajul. Deciziile vechi, deja
+    // închise, rămân fără marcaj și nu se mai anunță niciodată.
+    const anuntat = inainte?.announced !== undefined ? inainte.announced
+      : (!inainte || (v.status === 'accepted' && category === MY_HYMNS_CATEGORY)) ? false : undefined;
     known[v.hash] = {
       hash: v.hash, key, category, number, title: row.title,
       status: v.status, note: v.note ?? '',
       fel: category === MY_HYMNS_CATEGORY ? 'imn' : 'corectura',
       ...(v.category && v.number ? { publishedAs: { category: v.category, number: v.number } } : {}),
+      ...(anuntat !== undefined ? { announced: anuntat } : {}),
     };
 
-    // Imnul lui a intrat oficial. Dacă textul oficial ajuns la el e IDENTIC cu ce are
-    // în „Imnurile mele", întrebarea „ștergi copia?" e degeaba — sunt același lucru.
-    // Ștergem copia și doar îl anunțăm. Când textele diferă, întrebarea rămâne: între
-    // trimitere și publicare noi umblăm des la text, iar o ștergere tăcută i-ar
-    // schimba imnul fără să vadă cu ce.
+    // Respins = respins, fără nimic de ales: varianta lui rămâne doar la el. Un imn
+    // propriu respins nici nu se anunță; o corectură respinsă la un imn oficial se
+    // anunță o dată (`takeDecisionNotices`), cu motivul, dacă l-am scris.
+    if (v.status === 'rejected') {
+      known[v.hash].resolved = 'pastrat';
+      continue;
+    }
+
+    // Imnul lui a intrat oficial: copia din „Imnurile mele" se șterge de îndată ce
+    // imnul oficial e pe disc, chiar dacă l-am corectat înainte de publicare — textul
+    // oficial e cel care rămâne. Cine vrea varianta lui o poate modifica din nou, pe
+    // calculatorul lui. Până ajunge imnul oficial (de pildă cu următorul installer),
+    // copia rămâne și verdictul se reîntreabă la fiecare pornire.
     const publicat = known[v.hash].publishedAs;
     if (v.status === 'accepted' && publicat && category === MY_HYMNS_CATEGORY) {
       const lui = hymnByKey(db, category, number);
       const oficial = hymnByKey(db, publicat.category, normalizeHymnNumber(publicat.number));
-      if (lui && oficial && lui.id !== oficial.id
-        && textHash(lui.continut) === textHash(oficial.continut)) {
+      if (lui && oficial && lui.id !== oficial.id) {
         db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(lui.id);
         db.prepare('DELETE FROM hymns WHERE id = ?').run(lui.id);
         known[v.hash].autoCleaned = true;
-        deps.log(`[Contrib] copia din „${MY_HYMNS_CATEGORY}" era identică cu ${publicat.category} ${publicat.number} — am șters-o`);
+        known[v.hash].resolved = 'sters';
+        deps.log(`[Contrib] „${MY_HYMNS_CATEGORY}" ${number} s-a mutat în ${publicat.category} ${publicat.number}`);
       }
     }
     if (!inainte) noi++;
@@ -730,8 +794,9 @@ export function listPendingDecisions(deps: ContribDeps): PendingDecision[] {
   const all = deps.getSettings().decisions ?? {};
   return Object.values(all)
     .filter(d => !d.resolved)
-    // Un imn acceptat cere o alegere doar dacă mai are copia locală; o corectură
-    // respinsă, doar dacă omul chiar are altceva decât varianta oficială.
+    // Un imn propriu acceptat nu cere nimic: se mută singur când ajunge imnul oficial.
+    // Rămân doar cele de citit — mutări vechi și refuzuri încă neconfirmate.
+    .filter(d => !(d.fel === 'imn' && d.status === 'accepted' && !d.autoCleaned))
     .map(d => {
       const copie: PendingDecision & { resolved?: string } = { ...d };
       delete copie.resolved;
@@ -740,61 +805,51 @@ export function listPendingDecisions(deps: ContribDeps): PendingDecision[] {
 }
 
 /**
- * Aplică alegerea omului.
- *
- * • `pastrat`  — nu atingem nimic; doar nu-l mai întrebăm despre asta.
- * • `revenit`  — punem la loc varianta oficială din baza livrată cu aplicația și
- *                ștergem urma editării lui, ca de-acum să primească normal
- *                corecturile la imnul ăsta.
- * • `sters`    — ștergem copia lui locală (imnul a intrat oficial în colecție).
+ * O veste despre ce s-a hotărât, spusă o singură dată:
+ * • `acceptat` — imnul lui din „Imnurile mele" a intrat oficial (și, dacă `moved`,
+ *   s-a și mutat acolo);
+ * • `respins` — corectura lui la un imn oficial n-a fost primită; varianta lui rămâne
+ *   doar la el. Un imn propriu respins nu se anunță deloc.
  */
-export function resolveDecision(
-  deps: ContribDeps, hash: string, alegere: 'pastrat' | 'revenit' | 'sters',
-): { ok: boolean; error?: string } {
+export interface DecisionNotice {
+  kind: 'acceptat' | 'respins';
+  title: string;
+  category: string;
+  number: string;
+  moved: boolean;
+  note: string;
+}
+
+export function takeDecisionNotices(deps: ContribDeps): DecisionNotice[] {
+  const all: Record<string, StoredDecision> = { ...(deps.getSettings().decisions ?? {}) };
+  const out: DecisionNotice[] = [];
+  for (const [hash, d] of Object.entries(all)) {
+    if (d.announced !== false) continue;
+    if (d.fel === 'imn' && d.status === 'accepted' && d.publishedAs) {
+      out.push({
+        kind: 'acceptat', title: d.title, category: d.publishedAs.category,
+        number: d.publishedAs.number, moved: !!d.autoCleaned, note: '',
+      });
+    } else if (d.fel === 'corectura' && d.status === 'rejected') {
+      out.push({ kind: 'respins', title: d.title, category: d.category, number: d.number, moved: false, note: d.note });
+    } else continue;
+    all[hash] = { ...d, announced: true };
+  }
+  if (out.length > 0) deps.patchSettings({ decisions: all });
+  return out;
+}
+
+/**
+ * „Am înțeles": o decizie de citit iese din listă. Nu mai există alegeri — un imn
+ * propriu acceptat se mută singur, iar o corectură respinsă rămâne respinsă, cu
+ * varianta omului doar pe calculatorul lui.
+ */
+export function resolveDecision(deps: ContribDeps, hash: string): { ok: boolean; error?: string } {
   const all: Record<string, StoredDecision> = { ...(deps.getSettings().decisions ?? {}) };
   const d = all[hash];
   if (!d) return { ok: false, error: 'Decizia nu mai există.' };
-
-  const db = getDb();
-  const row = db.prepare(`SELECT h.id FROM hymns h JOIN categories c ON c.id = h.category_id
-    WHERE c.name = ? AND h.number = ? LIMIT 1`).get(d.category, d.number) as { id: number } | undefined;
-
-  if (alegere === 'sters') {
-    if (row) db.prepare('DELETE FROM hymns WHERE id = ?').run(row.id);   // secțiunile pleacă în cascadă
-  } else if (alegere === 'revenit') {
-    if (!fs.existsSync(deps.seedDbPath)) return { ok: false, error: 'Nu găsesc baza oficială.' };
-    const seed = new Database(deps.seedDbPath, { readonly: true });
-    try {
-      const oficial = seed.prepare(`SELECT h.id, h.title, h.search_text FROM hymns h
-        JOIN categories c ON c.id = h.category_id WHERE c.name = ? AND h.number = ? LIMIT 1`)
-        .get(d.category, d.number) as { id: number; title: string; search_text: string } | undefined;
-      if (!oficial || !row) return { ok: false, error: 'Imnul nu mai există în baza oficială.' };
-      const sections = seed.prepare(
-        'SELECT order_index, type, text FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index'
-      ).all(oficial.id) as { order_index: number; type: string; text: string }[];
-      const tx = db.transaction(() => {
-        // updated_at gol = „neatins de utilizator", deci corecturile viitoare intră
-        // fără să mai fie nevoie să întrebăm pe nimeni.
-        db.prepare('UPDATE hymns SET title = ?, search_text = ?, updated_at = ? WHERE id = ?')
-          .run(oficial.title, oficial.search_text, '', row.id);
-        db.prepare('DELETE FROM hymn_sections WHERE hymn_id = ?').run(row.id);
-        for (const s of sections) {
-          db.prepare('INSERT INTO hymn_sections (hymn_id, order_index, type, text, updated_at) VALUES (?,?,?,?,?)')
-            .run(row.id, s.order_index, s.type, s.text, '');
-        }
-      });
-      tx();
-    } finally {
-      seed.close();
-    }
-  }
-
-  all[hash] = { ...d, resolved: alegere };
-  // Scoatem imnul din lista „trimise", ca o eventuală editare viitoare să plece din nou.
-  const sent = { ...(deps.getSettings().contribSentHashes ?? {}) };
-  if (alegere !== 'pastrat') delete sent[d.key];
-  deps.patchSettings({ decisions: all, contribSentHashes: sent });
-  deps.log(`[Contrib] decizie „${alegere}" pentru ${d.category} #${d.number}`);
+  all[hash] = { ...d, resolved: 'pastrat' };
+  deps.patchSettings({ decisions: all });
   return { ok: true };
 }
 

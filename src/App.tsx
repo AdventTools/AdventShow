@@ -54,10 +54,14 @@ import {
     Headphones,
     HelpCircle,
     Mail,
+    Bug,
+    Lightbulb,
 } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { initLang, setLang, useLang, useT } from './i18n';
+import { versionsBetween } from './changelog';
+import { WhatsNewModal } from './WhatsNew';
 import { ProjectorController } from './ProjectorController';
 import type { AccompanimentControl } from './ProjectorController';
 import { accTitle } from './accompaniment-ui';
@@ -331,6 +335,10 @@ function App() {
     const [verses, setVerses] = useState<BibleVerse[]>([]);
     const [selectedVerseIdx, setSelectedVerseIdx] = useState(0);
     const [bibleSearchResults, setBibleSearchResults] = useState<BibleVerse[] | null>(null);
+    // Căutarea în text merge în toată Biblia. Doar în capitolul (sau cartea) deschis(ă)
+    // numai dacă omul alege asta explicit din rezultate — altfel un clic pe un rezultat
+    // din Ioan 3 lega pe tăcute toate căutările următoare de Ioan 3.
+    const [bibleSearchScope, setBibleSearchScope] = useState<{ bookId: number; chapter: number | null; label: string } | null>(null);
     // pasaj biblic activ (interval ex: gen 1:3-5) — contorul n/N și săgețile rămân în pasaj
     const [biblePassage, setBiblePassage] = useState<{ bookId: number; chapter: number; endVerse: number } | null>(null);
     // eroare referință nerezolvată sub câmpul de căutare (dispare la tastare)
@@ -357,6 +365,13 @@ function App() {
     const [projSlideIndex, setProjSlideIndex] = useState(0);
     // true = previzualizarea reflectă EXACT ce e pe proiector; false (în proiecție) = imn PREGĂTIT, încă neproiectat
     const [previewLive, setPreviewLive] = useState(false);
+    // Mărimea textului raportată de proiecție. Stă aici, nu în bara de control: bara
+    // se demontează cât e ceva „pregătit" și ar fi pornit iar de la 100%.
+    const [marimeProiectie, setMarimeProiectie] = useState<number | null>(null);
+    useEffect(() => {
+        window.electron.projection.onZoomLevel(setMarimeProiectie);
+        return () => { window.electron.projection.offZoomLevel(); };
+    }, []);
     // eticheta a ceea ce e LIVE pe ecran (capturată la proiectare) — ca badge-ul global
     // să arate imnul de pe proiector, nu previzualizarea „pregătită" a altui imn
     const [liveLabel, setLiveLabel] = useState('');
@@ -404,7 +419,7 @@ function App() {
 
     // ── Update state ──
     const [updateInfo, setUpdateInfo] = useState<{
-        available: boolean; version?: string;
+        available: boolean; version?: string; notes?: string;
     } | null>(null);
     const [updateDownloading, setUpdateDownloading] = useState(false);
     const [updateProgress, setUpdateProgress] = useState(0);
@@ -446,6 +461,9 @@ function App() {
 
     // ── Modal state ──
     const [modalOpen, setModalOpen] = useState<string | null>(null);
+    const [feedbackKind, setFeedbackKind] = useState<'bug' | 'suggestion' | null>(null);
+    // „Ce e nou" după o actualizare (from→to) sau tot istoricul (all), din Setări → Despre
+    const [whatsNew, setWhatsNew] = useState<{ from: string | null; to: string; all?: boolean } | null>(null);
 
     // meniul butonului „+" — imn scris de mână sau adus din PowerPoint
     const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -556,6 +574,7 @@ function App() {
         setChapters([]);
         setVerses([]);
         setBibleSearchResults(null);
+        setBibleSearchScope(null);
     }, []);
 
     // Load admin password on mount
@@ -563,6 +582,18 @@ function App() {
         window.electron.settings.get().then(s => {
             document.documentElement.dataset.theme = s.appTheme === 'light' ? 'light' : 'dark';
             initLang(s.uiLanguage);
+            // „Ce e nou": o dată după fiecare actualizare. O instalare proaspătă n-are ce
+            // vedea. Una venită de sub 1.6.1 nu știe de unde vine, deci vede doar versiunea
+            // de acum. Versiunea se marchează văzută abia la închiderea ferestrei.
+            const acum = import.meta.env.VITE_APP_VERSION;
+            if (acum && s.lastRunVersion !== acum) {
+                const deUnde = s.lastRunVersion ?? null;
+                if ((deUnde || s.adminPasswordHash) && versionsBetween(deUnde, acum).length > 0) {
+                    setWhatsNew({ from: deUnde, to: acum });
+                } else {
+                    window.electron.settings.set({ lastRunVersion: acum });
+                }
+            }
             if (s.adminPasswordHash) {
                 setAdminPasswordHash(s.adminPasswordHash);
                 // instalări de dinainte de registru: biserica + localitatea se
@@ -639,7 +670,22 @@ function App() {
         )).catch(() => { });
         numaraRaspunsuriRef.current = numaraRaspunsuri;
         numaraRaspunsuri();
-        window.electron.contrib.onDecisions(() => { numaraRaspunsuri(); });
+        // Vești despre decizii, fiecare o singură dată, pe loc: imnul propriu acceptat și
+        // corectura respinsă la un imn oficial. Un imn propriu respins nu se anunță.
+        const vestiDecizii = () => window.electron.contrib.notices().then(list => {
+            for (const n of list) {
+                const p = { title: n.title, category: n.category, number: n.number };
+                showToast(n.kind === 'respins'
+                    ? t('Corectura ta la {category} {number} «{title}» nu a fost acceptată; varianta ta rămâne doar la tine.', p)
+                        + (n.note ? ` ${n.note}` : '')
+                    : n.moved
+                        ? t('Imnul tău «{title}» a fost acceptat și s-a mutat în {category}, nr. {number}.', p)
+                        : t('Imnul tău «{title}» a fost acceptat în {category}, nr. {number}.', p),
+                12000);
+            }
+        }).catch(() => { });
+        vestiDecizii();
+        window.electron.contrib.onDecisions(() => { numaraRaspunsuri(); vestiDecizii(); });
         window.electron.update.forcedState()
             .then(s => { if (s.required) setForcedUpdate({ version: s.version, reason: s.reason, waitingForProjection: false }); })
             .catch(() => { /* fără rețea, se reia la următoarea pornire */ });
@@ -653,7 +699,7 @@ function App() {
             window.electron.update.offForcedWaiting();
             window.electron.contrib.offDecisions();
         };
-    }, []);
+    }, [t]);
 
     // Badge LIVE global: registrele de modul (Ceas/Anunțuri) cer re-randare prin liveBus
     useEffect(() => {
@@ -736,22 +782,31 @@ function App() {
         return () => clearTimeout(tm);
     }, [loadHymns, tab]);
 
-    // ── Bible content search (triggered on Enter, not real-time) ──
+    // ── Bible content search (pornește singură, la ≥3 litere) ──
+    const bibleSearchReq = useRef(0);
     const doBibleContentSearch = useCallback(async () => {
         if (tab !== 'biblia') return;
         const cq = contentSearch.trim();
+        const req = ++bibleSearchReq.current;
         if (cq.length >= 3) {
             const results = await window.electron.bible.search(
                 cq,
-                selectedBookId ?? undefined,
-                selectedChapter ?? undefined,
+                bibleSearchScope?.bookId,
+                bibleSearchScope?.chapter ?? undefined,
                 bibleTranslation,
             );
-            setBibleSearchResults(results);
+            // un răspuns întârziat al unei căutări mai vechi nu-l calcă pe cel nou
+            if (req === bibleSearchReq.current) setBibleSearchResults(results);
         } else {
             setBibleSearchResults(null);
         }
-    }, [contentSearch, tab, selectedBookId, selectedChapter, bibleTranslation]);
+    }, [contentSearch, tab, bibleSearchScope, bibleTranslation]);
+
+    useEffect(() => {
+        if (tab !== 'biblia') return;
+        const tm = setTimeout(() => { void doBibleContentSearch(); }, 250);
+        return () => clearTimeout(tm);
+    }, [doBibleContentSearch, tab]);
 
     // ── Preview hymn ──
     const previewHymn = useCallback(async (id: number) => {
@@ -790,6 +845,9 @@ function App() {
         setPreviewNumber(book?.abbreviation ?? verse.abbreviation ?? '');
         setProjSlideIndex(safeIdx);
         setSelectedVerseIdx(safeIdx);
+        // Ca la imnuri: în timpul proiecției rezultatul doar se pregătește. Fără asta,
+        // previzualizarea rămânea „LIVE" pe textul nou, iar ecranul pe cel vechi.
+        setPreviewLive(false);
         // Also sync sidebar to this chapter
         setSelectedBookId(verse.book_id);
         setSelectedBookName(book?.name ?? verse.book_name ?? '');
@@ -1222,6 +1280,7 @@ function App() {
         setRefSearch('');
         setContentSearch('');
         setBibleSearchResults(null);
+        setBibleSearchScope(null);
         setBiblePassage(null);
         setBibleRefError(null);
         if (!projecting) clearPreview();
@@ -1268,6 +1327,7 @@ function App() {
             setPreviewNumber(book?.abbreviation ?? '');
             setProjSlideIndex(0);
             setSelectedVerseIdx(0);
+            setPreviewLive(false);
         }
     }, [verses, selectedChapter, books, selectedBookId]);
 
@@ -1279,6 +1339,8 @@ function App() {
     const alegeVersetul = useCallback((idx: number) => {
         setSelectedVerseIdx(idx);
         setProjSlideIndex(idx);
+        // Alt verset ales în timpul proiecției = pregătit; Enter îl trimite pe ecran.
+        setPreviewLive(false);
         if (previewType === 'bible' && previewSections.length > 0) return;
         if (!verses.length || !selectedChapter) return;
         const book = books.find(b => b.id === selectedBookId);
@@ -1621,7 +1683,7 @@ function App() {
         const handler = (e: KeyboardEvent) => {
             const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
                 || (e.target instanceof HTMLElement && e.target.isContentEditable);
-            if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup
+            if (modalOpen || feedbackKind || whatsNew || hymnEditor || passwordModal || needsPasswordSetup
                 || needsChurchInfo || forgotPwOpen || setPwOpen) return;
 
             if (e.key === 'Escape') {
@@ -1759,7 +1821,7 @@ function App() {
         };
         window.addEventListener('keydown', handler, true);
         return () => window.removeEventListener('keydown', handler, true);
-    }, [projecting, previewSections, modalOpen, hymnEditor, passwordModal, needsPasswordSetup,
+    }, [projecting, previewSections, modalOpen, feedbackKind, whatsNew, hymnEditor, passwordModal, needsPasswordSetup,
         needsChurchInfo, forgotPwOpen, setPwOpen,
         stopProjection, clearPreview, startProjection, tab, hymns, selectedHymnId, previewHymn,
         previewLive, goLivePreview,
@@ -1843,9 +1905,11 @@ function App() {
                 }
                 // source === 'ref' → referință biblică / proiecție
                 if (isNewSearch) {
-                    if (projecting) await stopProjection();
+                    // Ca la imnuri: în timpul proiecției NU oprim. Trimiterea doar se
+                    // pregătește, iar versetul de pe ecran rămâne până confirmi cu Enter.
                     const loaded = await loadBibleReference();
                     if (loaded) {
+                        setPreviewLive(false);
                         searchConsumedRef.current = true;
                         setBibleRefError(null);
                     } else {
@@ -1853,6 +1917,8 @@ function App() {
                     }
                 } else if (previewSections.length > 0 && !projecting) {
                     startProjection(projSlideIndex);
+                } else if (previewSections.length > 0 && !previewLive) {
+                    await goLivePreview();
                 } else if (!projecting && verses.length > 0) {
                     // Previzualizarea a fost golită cu Esc, dar capitolul e tot deschis:
                     // o aducem înapoi pe versetul ales, ca Enter să nu pară mort.
@@ -1920,7 +1986,7 @@ function App() {
             return;
         }
     }, [projecting, previewSections, projSlideIndex, startProjection, tab,
-        selectedHymnId, hymns, previewHymn, loadBibleReference, stopProjection,
+        selectedHymnId, hymns, previewHymn, loadBibleReference,
         navigateSlide, contentSearch, doBibleContentSearch, refSearch, biblePassage,
         previewLive, goLivePreview,
         verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul, t]);
@@ -2069,23 +2135,24 @@ function App() {
                                 onKeyDown={e => onSearchKeydown(e, 'content')}
                                 placeholder={tab === 'imnuri' ? t('Caută în text...') : t('Caută în Biblie...')}
                             />
-                            {tab === 'biblia' && (
-                                <div className="search-msg">{t('Scrie cel puțin 3 litere și apasă Enter.')}</div>
+                            {tab === 'biblia' && contentSearch.trim().length > 0 && contentSearch.trim().length < 3 && (
+                                <div className="search-msg">{t('Scrie cel puțin 3 litere.')}</div>
                             )}
                         </div>
                         {tab === 'biblia' && availableTranslations.length > 1 && (
-                            <select
-                                className="screen-quick-picker"
-                                title={t('Traducerea Bibliei')}
-                                value={bibleTranslation}
-                                onChange={e => changeBibleTranslation(e.target.value)}
-                            >
+                            // Scurt, lângă căutare: numele întregi stau în titlu, la hover.
+                            <div className="translation-toggle" role="group" aria-label={t('Traducerea Bibliei')}>
                                 {availableTranslations.map(tr => (
-                                    <option key={tr.id} value={tr.id}>
-                                        {tr.id === 'cornilescu' ? t('Cornilescu (română)') : tr.id === 'web' ? t('World English Bible (engleză)') : tr.id}
-                                    </option>
+                                    <button
+                                        key={tr.id}
+                                        className={tr.id === bibleTranslation ? 'on' : ''}
+                                        title={tr.id === 'cornilescu' ? t('Cornilescu (română)') : tr.id === 'web' ? t('World English Bible (engleză)') : tr.id}
+                                        onClick={() => { if (tr.id !== bibleTranslation) changeBibleTranslation(tr.id); }}
+                                    >
+                                        {tr.id === 'cornilescu' ? 'RO' : tr.id === 'web' ? 'EN' : tr.id.toUpperCase()}
+                                    </button>
                                 ))}
-                            </select>
+                            </div>
                         )}
                     </>)}
                 </div>
@@ -2134,11 +2201,13 @@ function App() {
                     </button>
                 )}
 
-                {/* Ecranul de proiecție — selector rapid, fără să intri în Setări */}
-                <ScreenQuickPicker />
-
-                {/* Limba interfeței — discret, un singur buton */}
-                <LanguageQuickPicker />
+                {/* O problemă sau o sugestie, trimisă autorilor — la un clic, nu în Setări */}
+                <button className="header-btn" onClick={() => setFeedbackKind('bug')} title={t('Raportează o problemă')}>
+                    <Bug className="icon-sm" />
+                </button>
+                <button className="header-btn" onClick={() => setFeedbackKind('suggestion')} title={t('Sugerează o îmbunătățire')}>
+                    <Lightbulb className="icon-sm" />
+                </button>
 
                 {/* Ajutor */}
                 <button className="header-btn" onClick={() => setModalOpen('help')} title={t('Ajutor — scurtături')}>
@@ -2216,6 +2285,9 @@ function App() {
                                     ? t('Actualizare {v} descărcată', { v: updateInfo?.version ?? '' })
                                     : t('Versiune nouă: {v}', { v: updateInfo?.version ?? '' })}
                             </div>
+                            {updateInfo?.notes && (
+                                <div className="update-banner-changelog">{updateInfo.notes}</div>
+                            )}
                             {updateError && (
                                 <div className="update-banner-changelog" style={{ color: '#f87171' }}>
                                     {t('Eroare: {err}', { err: updateError })}
@@ -2333,13 +2405,23 @@ function App() {
                         <BibleSearchResultsList
                             results={bibleSearchResults}
                             selectedIdx={selectedVerseIdx}
-                            searchScope={
+                            searchScope={bibleSearchScope?.label}
+                            openScope={
                                 selectedBookName
                                     ? selectedChapter
                                         ? `${selectedBookName} ${selectedChapter}`
                                         : selectedBookName
                                     : undefined
                             }
+                            onScopeOpen={() => {
+                                if (!selectedBookId) return;
+                                setBibleSearchScope({
+                                    bookId: selectedBookId,
+                                    chapter: selectedChapter,
+                                    label: selectedChapter ? `${selectedBookName} ${selectedChapter}` : selectedBookName,
+                                });
+                            }}
+                            onScopeAll={() => setBibleSearchScope(null)}
                             onSelect={(idx) => {
                                 setSelectedVerseIdx(idx);
                                 const verse = bibleSearchResults[idx];
@@ -2454,6 +2536,7 @@ function App() {
                     onNavigate={navigateSlide}
                     videoActive={!!videoStatus}
                     accompaniment={accControl}
+                    zoomLevel={marimeProiectie}
                 />
             )}
 
@@ -2488,6 +2571,31 @@ function App() {
                     onChangePassword={() => { setModalOpen(null); setSetPwOpen('change'); }}
                     onForgotPassword={() => { setModalOpen(null); setForgotPwOpen(true); }}
                     onReviewHymn={deschideEditorul}
+                    onShowHistory={() => {
+                        setModalOpen(null);
+                        setWhatsNew({ from: null, to: import.meta.env.VITE_APP_VERSION ?? '', all: true });
+                    }}
+                />
+            )}
+
+            {feedbackKind && (
+                <FeedbackModal
+                    initialKind={feedbackKind}
+                    onClose={() => setFeedbackKind(null)}
+                    onSent={msg => showToast(msg)}
+                />
+            )}
+
+            {/* După ecranele de la prima pornire (parolă, biserică), nu peste ele */}
+            {whatsNew && !needsPasswordSetup && !needsChurchInfo && (
+                <WhatsNewModal
+                    from={whatsNew.from}
+                    to={whatsNew.to}
+                    all={whatsNew.all}
+                    onClose={() => {
+                        if (!whatsNew.all) window.electron.settings.set({ lastRunVersion: whatsNew.to });
+                        setWhatsNew(null);
+                    }}
                 />
             )}
 
@@ -2909,29 +3017,46 @@ function BibleContentArea({
 // Bible Search Results
 // ═════════════════════════════════════════════════════════════════════════════
 
+/** Câte rezultate arată lista; baza trimite unul în plus ca să știm că mai sunt. */
+const BIBLE_RESULTS_SHOWN = 100;
+
 function BibleSearchResultsList({
-    results, selectedIdx, onSelect, searchScope,
+    results, selectedIdx, onSelect, searchScope, openScope, onScopeOpen, onScopeAll,
 }: {
     results: BibleVerse[];
     selectedIdx: number;
     onSelect: (idx: number) => void;
+    /** Unde s-a căutat, dacă nu în toată Biblia. */
     searchScope?: string;
+    /** Capitolul sau cartea deschisă în stânga, dacă există — ca să poți căuta doar acolo. */
+    openScope?: string;
+    onScopeOpen: () => void;
+    onScopeAll: () => void;
 }) {
     const t = useT();
+    const more = results.length > BIBLE_RESULTS_SHOWN;
+    const shown = more ? results.slice(0, BIBLE_RESULTS_SHOWN) : results;
     return (
         <div className="content-inner">
             <div className="content-status">
-                {t('{n} rezultate', { n: results.length })}
-                {searchScope
-                    ? <span className="search-scope-badge">{t('în {scope}', { scope: searchScope })}</span>
-                    : <span className="search-scope-badge">{t('în toată Biblia')}</span>
-                }
+                {more ? t('primele {n} rezultate', { n: BIBLE_RESULTS_SHOWN }) : t('{n} rezultate', { n: results.length })}
+                <span className="search-scope-badge">
+                    {searchScope ? t('în {scope}', { scope: searchScope }) : t('în toată Biblia')}
+                </span>
+                {searchScope ? (
+                    <button className="search-scope-toggle" onClick={onScopeAll}>{t('caută în toată Biblia')}</button>
+                ) : openScope ? (
+                    <button className="search-scope-toggle" onClick={onScopeOpen}>{t('doar în {scope}', { scope: openScope })}</button>
+                ) : null}
             </div>
+            {more && (
+                <p className="search-more-hint">{t('Mai sunt și altele — adaugă un cuvânt ca să restrângi căutarea.')}</p>
+            )}
             {results.length === 0 ? (
                 <div className="empty-state"><p>{t('Niciun rezultat')}</p></div>
             ) : (
                 <div className="verse-list">
-                    {results.map((v, i) => (
+                    {shown.map((v, i) => (
                         <div
                             key={i}
                             className={`verse-item ${selectedIdx === i ? 'selected' : ''}`}
@@ -3685,7 +3810,7 @@ function PreviewPanel({
                     <><kbd>Enter</kbd> {t('pregătește versetul →')} <kbd>Enter</kbd> {t('îl pune pe ecran')}</>,
                     <><kbd>↑↓</kbd> {t('verset cu verset, fără să ieși din capitol')}</>,
                     <>{t('scrie scurt:')} <em>ioa 3 16</em>, <em>ps 23</em>, <em>1cor 13 4-7</em></>,
-                    <>{t('sau caută un cuvânt din Biblie și apasă')} <kbd>Enter</kbd></>,
+                    <>{t('sau caută câteva cuvinte din verset, fără virgule sau diacritice')}</>,
                     <><kbd>Esc</kbd> {t('oprește proiecția')}</>,
                 ],
             },
@@ -5183,10 +5308,10 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
         onChanged();
     };
 
-    const alege = async (hash: string, alegere: 'pastrat' | 'revenit' | 'sters') => {
+    const amInteles = async (hash: string) => {
         setBusy(hash);
         setError('');
-        const res = await window.electron.contrib.resolveDecision(hash, alegere);
+        const res = await window.electron.contrib.resolveDecision(hash);
         setBusy(null);
         if (!res.ok) { setError(res.error ?? t('Nu am putut aplica alegerea.')); return; }
         load();
@@ -5334,25 +5459,8 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                                     </p>
                                     <div className="row">
                                         <button className="btn-action" disabled={busy === d.hash}
-                                            onClick={() => alege(d.hash, 'pastrat')}>
+                                            onClick={() => amInteles(d.hash)}>
                                             {t('Am înțeles')}
-                                        </button>
-                                    </div>
-                                </>
-                            ) : d.status === 'accepted' && d.publishedAs ? (
-                                <>
-                                    <p className="decision-text">
-                                        {t('Imnul tău a intrat în colecția oficială, la')} <strong>
-                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>. {t('Textul de acolo diferă puțin de al tău, așa că nu am atins nimic — alegi tu.')}
-                                    </p>
-                                    <div className="row">
-                                        <button className="btn-action" disabled={busy === d.hash}
-                                            onClick={() => alege(d.hash, 'sters')}>
-                                            {t('Șterge copia mea')}
-                                        </button>
-                                        <button className="btn-clear" disabled={busy === d.hash}
-                                            onClick={() => alege(d.hash, 'pastrat')}>
-                                            {t('Le păstrez pe amândouă')}
                                         </button>
                                     </div>
                                 </>
@@ -5363,12 +5471,8 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                                     </p>
                                     <div className="row">
                                         <button className="btn-action" disabled={busy === d.hash}
-                                            onClick={() => alege(d.hash, 'revenit')}>
-                                            {t('Revino la varianta oficială')}
-                                        </button>
-                                        <button className="btn-clear" disabled={busy === d.hash}
-                                            onClick={() => alege(d.hash, 'pastrat')}>
-                                            {t('Păstrez varianta mea')}
+                                            onClick={() => amInteles(d.hash)}>
+                                            {t('Am înțeles')}
                                         </button>
                                     </div>
                                 </>
@@ -5731,16 +5835,19 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
 // Settings Modal
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword, onReviewHymn, initialTab }: {
+function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword, onReviewHymn, onShowHistory, initialTab }: {
     onClose: () => void;
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
     onChangePassword: () => void;
     onForgotPassword: () => void;
     onReviewHymn: (hymnId: number) => void;
+    /** Istoricul versiunilor — se deschide în locul Setărilor. */
+    onShowHistory: () => void;
     initialTab?: 'projection' | 'admin' | 'about' | 'help';
 }) {
     const t = useT();
+    const lang = useLang();
     const [activeTab, setActiveTab] = useState<'projection' | 'admin' | 'about' | 'help'>(initialTab ?? 'projection');
     const [settings, setSettings] = useState<AppSettings>({});
     const [importStatus, setImportStatus] = useState('');
@@ -5766,6 +5873,13 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, [onClose]);
+
+    // Doar tabul atins pleacă spre salvare: cealaltă mărime o poate schimba chiar acum
+    // proiecția (↑↓ / A±), iar valoarea ținută aici ar fi deja veche.
+    const saveFontSize = async (tab: 'imnuri' | 'biblia', value: number) => {
+        setSettings(s => ({ ...s, projectionFontSizeByTab: { ...s.projectionFontSizeByTab, [tab]: value } }));
+        await window.electron.settings.set({ projectionFontSizeByTab: { [tab]: value } });
+    };
 
     const saveSettings = async (patch: Partial<AppSettings>) => {
         const updated = { ...settings, ...patch };
@@ -5811,24 +5925,20 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     <div className="field">
                                         <label>{t('Mărimea textului la Imnuri: {pct}%', { pct: (((settings.projectionFontSizeByTab?.imnuri ?? settings.projectionFontSize ?? 1.2)) * 100).toFixed(0) })}</label>
                                         <input
-                                            type="range" min="0.6" max="2.0" step="0.05"
+                                            type="range" min="0.6" max="3.0" step="0.05"
                                             value={settings.projectionFontSizeByTab?.imnuri ?? settings.projectionFontSize ?? 1.2}
-                                            onChange={e => saveSettings({
-                                                projectionFontSizeByTab: { ...settings.projectionFontSizeByTab, imnuri: parseFloat(e.target.value) },
-                                            })}
+                                            onChange={e => saveFontSize('imnuri', parseFloat(e.target.value))}
                                         />
                                     </div>
                                     <div className="field">
                                         <label>{t('Mărimea textului la Biblie: {pct}%', { pct: (((settings.projectionFontSizeByTab?.biblia ?? settings.projectionFontSize ?? 1.2)) * 100).toFixed(0) })}</label>
                                         <input
-                                            type="range" min="0.6" max="2.0" step="0.05"
+                                            type="range" min="0.6" max="3.0" step="0.05"
                                             value={settings.projectionFontSizeByTab?.biblia ?? settings.projectionFontSize ?? 1.2}
-                                            onChange={e => saveSettings({
-                                                projectionFontSizeByTab: { ...settings.projectionFontSizeByTab, biblia: parseFloat(e.target.value) },
-                                            })}
+                                            onChange={e => saveFontSize('biblia', parseFloat(e.target.value))}
                                         />
                                         <p className="text-white/40 text-xs mt-1">
-                                            {t('Fiecare tab își ține propria mărime. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.')}
+                                            {t('Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu ↑↓ sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.')}
                                         </p>
                                     </div>
                                 </div>
@@ -5982,6 +6092,23 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                             <option value="1.3">130%</option>
                                             <option value="1.5">150%</option>
                                         </select>
+                                    </div>
+                                    <div className="field">
+                                        <label>{t('Limba interfeței')}</label>
+                                        <div className="field-row" style={{ gap: 8 }}>
+                                            {(['ro', 'en'] as const).map(l => (
+                                                <button
+                                                    key={l}
+                                                    className={`btn-sm ${lang === l ? 'on' : ''}`}
+                                                    onClick={() => {
+                                                        setLang(l);
+                                                        saveSettings({ uiLanguage: l });
+                                                    }}
+                                                >
+                                                    {l === 'ro' ? 'Română' : 'English'}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -6172,6 +6299,9 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 {/* Logo + versiune */}
                                 <h2 className="text-3xl font-black text-primary tracking-wide">AdventShow</h2>
                                 <p className="text-white/40 text-xs -mt-3">{t('versiunea {v}', { v: import.meta.env.VITE_APP_VERSION ?? '1.0.0' })}</p>
+                                <button className="btn-clear" onClick={onShowHistory}>
+                                    {t('Ce s-a schimbat în fiecare versiune')}
+                                </button>
 
                                 {/* Descriere */}
                                 <p className="text-white/70 text-sm leading-relaxed max-w-sm">
@@ -6403,7 +6533,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     <div className="help-row"><kbd>·</kbd>
                                         <span><strong>{t('Ai pierdut un imn adăugat')}</strong> {t('— caută-l în „Imnurile mele"; tot ce adaugi ajunge acolo.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>{t('Altceva')}</strong> {t('— Setări → Administrare → „Raportează o problemă". Mesajul ajunge la noi chiar dacă în clipa aceea nu e internet; pleacă mai târziu, singur.')}</span></div>
+                                        <span><strong>{t('Altceva')}</strong> {t('— gândacul din bara de sus, pentru o problemă, sau becul, pentru o sugestie.')}</span></div>
                                 </div>
                             </section>
 
@@ -6995,18 +7125,18 @@ const liveBus: { notify: () => void } = { notify: () => { /* setat de App */ } }
 // ── Toast global (registru la nivel de MODUL, în stilul realtimeCtl) ──────────
 // Un singur ToastHost e montat în App(); showToast() poate fi apelat de oriunde
 // din acest modul (editor imn, setări, salvări) fără prop-drilling.
-const toastCtl: { show: (msg: string) => void } = {
+const toastCtl: { show: (msg: string, ms?: number) => void } = {
     show: () => { /* setat de ToastHost la montare */ },
 };
-function showToast(msg: string) { toastCtl.show(msg); }
+function showToast(msg: string, ms?: number) { toastCtl.show(msg, ms); }
 
 function ToastHost() {
     const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
     useEffect(() => {
-        toastCtl.show = (msg: string) => {
+        toastCtl.show = (msg: string, ms = 2600) => {
             const id = Date.now() + Math.random();
             setToasts(t => [...t, { id, msg }]);
-            setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2600);
+            setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), ms);
         };
         return () => { toastCtl.show = () => { /* demontat */ }; };
     }, []);
@@ -8401,72 +8531,6 @@ function DisplayPicker({ settings, onSave }: {
                 </div>
             )}
         </div>
-    );
-}
-
-/**
- * Selector rapid de ecran, direct în bara principală — nu doar în Setări.
- * Complet independent (își ia și-și salvează singur setarea), ca să poată
- * sta în header fără să depindă de starea de settings a restului paginii.
- * Reîncarcă lista la fiecare deschidere (Electron o poate schimba la orice
- * conectare/deconectare de monitor), fără să facă nimic dacă nu se atinge.
- */
-function ScreenQuickPicker() {
-    const t = useT();
-    const [displays, setDisplays] = useState<{ id: number; label: string; isPrimary: boolean; width: number; height: number }[]>([]);
-    const [current, setCurrent] = useState<number | undefined>(undefined);
-
-    useEffect(() => {
-        let cancelled = false;
-        Promise.all([window.electron.screen.getDisplays(), window.electron.settings.get()]).then(([d, s]) => {
-            if (cancelled) return;
-            setDisplays(d);
-            setCurrent(s.projectionDisplayId ?? d.find((x: { isPrimary: boolean }) => !x.isPrimary)?.id ?? d[0]?.id);
-        });
-        return () => { cancelled = true; };
-    }, []);
-
-    if (displays.length < 2) return null; // un singur ecran → nimic de ales
-
-    return (
-        <select
-            className="screen-quick-picker header-btn"
-            title={t('Ecranul pe care iese proiecția')}
-            value={current}
-            onChange={e => {
-                const id = Number(e.target.value);
-                setCurrent(id);
-                window.electron.settings.set({ projectionDisplayId: id });
-            }}
-        >
-            {displays.map(d => (
-                <option key={d.id} value={d.id}>
-                    {d.label} ({d.width}×{d.height}){d.isPrimary ? t(' — principal') : ''}
-                </option>
-            ))}
-        </select>
-    );
-}
-
-/**
- * Selector discret de limbă — un buton mic RO/EN în header, nu un meniu
- * separat. Complet independent, ca ScreenQuickPicker: își ia și-și salvează
- * singur setarea, ca să poată sta în header fără props din restul paginii.
- */
-function LanguageQuickPicker() {
-    const lang = useLang();
-    return (
-        <button
-            className="header-btn"
-            title={lang === 'en' ? 'Switch to Romanian' : 'Trece pe engleză'}
-            onClick={async () => {
-                const next = lang === 'en' ? 'ro' : 'en';
-                setLang(next);
-                await window.electron.settings.set({ uiLanguage: next });
-            }}
-        >
-            {lang === 'en' ? 'EN' : 'RO'}
-        </button>
     );
 }
 
