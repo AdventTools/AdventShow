@@ -543,8 +543,10 @@ export function ProjectionPage() {
     dynamicFontSize = `calc(clamp(2rem, min(${maxVw}vw, ${maxVh}vh), 8rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   }
 
-  // Resolve background styles — override per tab, PESTE fundalul general
-  const bgOverride = bg.bgByTab?.[tabKey];
+  // Resolve background styles — override per tab, PESTE fundalul general. Doar cât e
+  // un imn sau un verset pe ecran: Ceasul, Anunțurile și video-ul au fundalul general
+  // (fără `data`, tabKey ar cădea pe „imnuri" și le-ar da fundalul imnurilor).
+  const bgOverride = data ? bg.bgByTab?.[tabKey] : undefined;
   const bgType = bgOverride?.bgType ?? bg.bgType ?? 'color';
   const bgColor = bgOverride?.bgColor ?? bg.bgColor ?? '#000000';
   const bgImagePath = bgOverride?.bgImagePath ?? bg.bgImagePath;
