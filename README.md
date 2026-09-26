@@ -181,7 +181,7 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 
 ### 🤝 Corecturi care circulă singure
 
-- Dacă **corectezi un imn** sau **adaugi unul propriu**, aplicația trimite modificarea autorilor, ca să o verifice și — dacă e corectă — să o includă în baza oficială, pentru toată lumea. Trimiterea se face automat și abia după ce modificarea a rămas neschimbată 7 zile: pleacă doar forma finală, nu și încercările intermediare.
+- Dacă **corectezi un imn** sau **adaugi unul propriu**, aplicația trimite modificarea autorilor, ca să o verifice și — dacă e corectă — să o includă în baza oficială, pentru toată lumea. Trimiterea se face automat și abia după ce modificarea a rămas neschimbată două zile: pleacă doar forma finală, nu și încercările intermediare.
 - În sens invers, **corecturile oficiale** publicate de autori ajung automat la toate instalațiile, la pornirea aplicației — fără să aștepți o versiune nouă.
 - **Dacă ți-ai adaptat un imn, varianta ta rămâne a ta.** O corectură oficială nu ți-o mai suprascrie: ești întrebat, cu ambele texte în față, și alegi. Singura excepție e când textul oficial chiar era greșit — atunci îl înlocuim, dar îți păstrăm varianta și îți dăm butonul de pus la loc.
 - Un **imn nou** publicat de autori nu poate lua locul unuia de-al tău, chiar dacă nimerește același număr.

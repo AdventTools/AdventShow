@@ -17,7 +17,7 @@ const Database = require('better-sqlite3');
 // din baza locală.
 //
 // • Contribuții: modificările utilizatorului față de baza oficială (seed), aflate
-//   în „carantină" de cel puțin 7 zile de la ultima editare, se trimit AUTOMAT
+//   în „carantină" de cel puțin 48 de ore de la ultima editare, se trimit AUTOMAT
 //   în hangar, ca propuneri de conținut. DOAR autorii decid manual ce se acceptă;
 //   nimic nu se aplică programatic. (Până la v1.3.14 mergeau într-un formular
 //   Google.) `hash`-ul fiecărei propuneri e cheia de idempotență PE SERVER:
@@ -29,7 +29,7 @@ const Database = require('better-sqlite3');
 //   altfel modificările proprii ale utilizatorului au prioritate.
 // ═════════════════════════════════════════════════════════════════════════════
 
-const QUARANTINE_DAYS = 7;
+const QUARANTINE_HOURS = 48;
 const MAX_HYMNS_PER_SUBMISSION = 20; // restul pleacă la verificarea următoare
 const FETCH_TIMEOUT_MS = 4000;
 
@@ -409,7 +409,7 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
       (db.prepare('SELECT id, name FROM categories').all() as { id: number; name: string }[])
         .map(c => [c.id, c.name]));
 
-    const cutoff = new Date(Date.now() - QUARANTINE_DAYS * 24 * 3600 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - QUARANTINE_HOURS * 3600 * 1000).toISOString();
     const otaApplied = deps.getSettings().otaApplied ?? {};
     const out: Candidate[] = [];
 
@@ -469,7 +469,7 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
         continue;
       }
 
-      // carantină: cea mai NOUĂ atingere trebuie să fie mai veche de 7 zile.
+      // carantină: cea mai NOUĂ atingere trebuie să fie mai veche de 48 de ore.
       // ('' = atingere veche, dinainte de v1.3.0 — considerată trecută de carantină)
       const newest = [h.updated_at || '', h.created_at || '', ...sections.map(s => s.updated_at || '')]
         .reduce((a, b) => (a > b ? a : b), '');
@@ -528,7 +528,7 @@ export async function maybeSendContributions(deps: ContribDeps): Promise<void> {
     contribLastCheckAt: new Date().toISOString(),
   });
   deps.log(`[Contrib] trimise ${fresh.length} propuneri: ${res.stored} noi,`
-    + ` ${res.duplicates} deja cunoscute (carantină ${QUARANTINE_DAYS} zile)`);
+    + ` ${res.duplicates} deja cunoscute (carantină ${QUARANTINE_HOURS} ore)`);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

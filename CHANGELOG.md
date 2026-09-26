@@ -1,5 +1,10 @@
 # Changelog — AdventShow
 
+## Nepublicat
+
+### Modificări
+- Corecturile și imnurile tale proprii pleacă spre autori la două zile după ultima modificare, nu după o săptămână.
+
 ## v1.6.0 (22 Septembrie 2026)
 
 ### Modificări

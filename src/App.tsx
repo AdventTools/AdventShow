@@ -6048,7 +6048,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                             <section className="sgroup">
                                 <div className="sgroup-head">
                                     <h4>{t('Legătura cu autorii')}</h4>
-                                    <p>{t('Corecturile tale la imnuri pleacă singure, după o săptămână de la ultima modificare. Aici vezi ce s-a hotărât cu ele.')}</p>
+                                    <p>{t('Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Aici vezi ce s-a hotărât cu ele.')}</p>
                                 </div>
                                 <div className="row" style={{ flexWrap: 'wrap' }}>
                                     <button className="btn-action" onClick={() => setDecisionsOpen(true)}>
@@ -6340,7 +6340,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     <div className="help-row"><kbd>2</kbd>
                                         <span><strong>{t('Imnuri Speciale')}</strong> {t('— colecția oficială de cântări care nu sunt în cărți. Numerele le dăm noi.')}</span></div>
                                     <div className="help-row"><kbd>3</kbd>
-                                        <span><strong>{t('Imnurile mele')}</strong> {t('— a ta. Tot ce adaugi ajunge aici și noi nu scriem niciodată în ea. În schimb, ce pui aici pleacă spre noi ca propunere, după o săptămână de la ultima modificare; dacă o acceptăm, imnul intră în colecția oficială și ești anunțat.')}</span></div>
+                                        <span><strong>{t('Imnurile mele')}</strong> {t('— a ta. Tot ce adaugi ajunge aici și noi nu scriem niciodată în ea. În schimb, ce pui aici pleacă spre noi ca propunere, la două zile după ultima modificare; dacă o acceptăm, imnul intră în colecția oficială și ești anunțat.')}</span></div>
                                 </div>
                             </section>
 
