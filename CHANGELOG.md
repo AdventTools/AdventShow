@@ -1,5 +1,31 @@
 # Changelog — AdventShow
 
+## v1.6.1 (26 Septembrie 2026)
+
+### Modificări
+- Corecturile și imnurile tale proprii pleacă spre autori la două zile după ultima modificare, nu după o săptămână.
+- Căutarea în Biblie găsește versetul și când îl scrii din memorie: fără virgule, fără diacritice, cu cuvintele în altă ordine. Pornește singură cât scrii, caută în toată Biblia (sau doar în capitolul deschis, dacă alegi asta din rezultate) și arată cel mult 100 de rezultate.
+- Căutarea în textul imnurilor ignoră la fel punctuația și găsește și fraze care trec de pe un rând pe altul.
+- În timpul proiecției, un verset nou — ales din căutare, din listă sau scris ca trimitere („ps 23") — doar se pregătește, iar Enter sau „Proiectează" îl pune pe ecran. Înainte, ecranul rămânea pe versetul vechi până închideai proiecția.
+- Mărimea textului aleasă cu ↑↓ sau A−/A+ se ține minte separat la Imnuri și la Biblie, și după Esc, și după repornire. Bara de jos arată mereu mărimea reală, iar ce schimbi în Setări apare imediat pe ecran.
+- Bara de sus încape și pe laptopuri (14" la 125%): câmpurile de căutare nu mai sunt strivite, alegerea ecranului și a limbii interfeței s-au mutat în Setări, iar traducerea Bibliei e un buton scurt RO | EN.
+- Două iconițe noi în bara de sus: gândacul, pentru a raporta o problemă, și becul, pentru o sugestie.
+- Pe Windows, titlurile videoclipurilor aduse de pe YouTube își păstrează diacriticele.
+- Ioan 14:6 scria „Adevărulși"; acum scrie „Adevărul și".
+- Corecturile publicate de autori nu mai pot scrie niciodată în „Imnurile mele".
+- Când autorii îți acceptă un imn din „Imnurile mele", primești un mesaj, iar imnul se mută singur în „Imnuri Speciale" — cu textul oficial, chiar dacă l-au corectat înainte să-l publice. Înainte ajungea abia a doua zi și rămânea la „de rezolvat", fiindcă imnurile publicate se aduceau o singură dată pe zi — acum se aduc la fiecare pornire. Un imn neacceptat rămâne la tine, fără niciun mesaj.
+- O corectură a ta la un imn oficial care n-a fost acceptată îți e anunțată o dată, cu motivul; varianta ta rămâne doar pe calculatorul tău, fără nimic de ales.
+- După o actualizare, aplicația îți arată ce s-a schimbat — toate versiunile peste care ai sărit, pe rând, începând cu cea mai nouă. Istoricul întreg e oricând în Setări → Despre, iar bannerul de versiune nouă arată pe scurt ce aduce, înainte de instalare.
+- O dată pe zi, aplicația trimite autorilor lista imnurilor din „Imnurile mele" (număr și titlu), ca să știe și ce a fost scos de acolo, nu doar ce s-a adăugat.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.6.0 (22 Septembrie 2026)
 
 ### Modificări
@@ -15,25 +41,6 @@
 - Fereastra de Setări a fost refăcută: ocupă acum tot spațiul aplicației, cu navigare pe bara laterală (4 secțiuni: Proiecție, Administrare, Despre, Ajutor) și câmpuri așezate într-un grid care se adaptează la rezoluție — mult mai puțin scroll, la orice mărime de ecran.
 - Biblia World English Bible (engleză, domeniu public) — pe lângă Cornilescu, alese dintr-un selector chiar lângă căutarea din Biblie.
 - Interfața aplicației e acum disponibilă și în engleză, cu un selector discret (butonul RO/EN din bara de sus). Traducerea Bibliei alese și interfața se schimbă independent una de alta — proiecția pe ecran urmează mereu Biblia aleasă, nu limba panoului de control al operatorului.
-
----
-
-## Nepublicat
-
-- Corecturile și imnurile tale proprii pleacă spre autori la două zile după ultima modificare, nu după o săptămână.
-- Căutarea în Biblie găsește versetul și când îl scrii din memorie: fără virgule, fără diacritice, cu cuvintele în altă ordine. Pornește singură cât scrii, caută în toată Biblia (sau doar în capitolul deschis, dacă alegi asta din rezultate) și arată cel mult 100 de rezultate.
-- Căutarea în textul imnurilor ignoră la fel punctuația și găsește și fraze care trec de pe un rând pe altul.
-- În timpul proiecției, un verset nou — ales din căutare, din listă sau scris ca trimitere („ps 23") — doar se pregătește, iar Enter sau „Proiectează" îl pune pe ecran. Înainte, ecranul rămânea pe versetul vechi până închideai proiecția.
-- Mărimea textului aleasă cu ↑↓ sau A−/A+ se ține minte separat la Imnuri și la Biblie, și după Esc, și după repornire. Bara de jos arată mereu mărimea reală, iar ce schimbi în Setări apare imediat pe ecran.
-- Bara de sus încape și pe laptopuri (14" la 125%): câmpurile de căutare nu mai sunt strivite, alegerea ecranului și a limbii interfeței s-au mutat în Setări, iar traducerea Bibliei e un buton scurt RO | EN.
-- Două iconițe noi în bara de sus: gândacul, pentru a raporta o problemă, și becul, pentru o sugestie.
-- Pe Windows, titlurile videoclipurilor aduse de pe YouTube își păstrează diacriticele.
-- Ioan 14:6 scria „Adevărulși"; acum scrie „Adevărul și".
-- Corecturile publicate de autori nu mai pot scrie niciodată în „Imnurile mele".
-- Când autorii îți acceptă un imn din „Imnurile mele", primești un mesaj, iar imnul se mută singur în „Imnuri Speciale" — cu textul oficial, chiar dacă l-au corectat înainte să-l publice. Înainte ajungea abia a doua zi și rămânea la „de rezolvat", fiindcă imnurile publicate se aduceau o singură dată pe zi — acum se aduc la fiecare pornire. Un imn neacceptat rămâne la tine, fără niciun mesaj.
-- O corectură a ta la un imn oficial care n-a fost acceptată îți e anunțată o dată, cu motivul; varianta ta rămâne doar pe calculatorul tău, fără nimic de ales.
-- După o actualizare, aplicația îți arată ce s-a schimbat — toate versiunile peste care ai sărit, pe rând, începând cu cea mai nouă. Istoricul întreg e oricând în Setări → Despre, iar bannerul de versiune nouă arată pe scurt ce aduce, înainte de instalare.
-- O dată pe zi, aplicația trimite autorilor lista imnurilor din „Imnurile mele" (număr și titlu), ca să știe și ce a fost scos de acolo, nu doar ce s-a adăugat.
 
 ---
 
