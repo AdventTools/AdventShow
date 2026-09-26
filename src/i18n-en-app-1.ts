@@ -16,7 +16,7 @@ export const EN_APP_1: Record<string, string> = {
     'oprește proiecția': 'stops the projection',
     'Caută în text...': 'Search in text...',
     'Caută în Biblie...': 'Search the Bible...',
-    'Scrie cel puțin 3 litere și apasă Enter.': 'Type at least 3 letters and press Enter.',
+    'Scrie cel puțin 3 litere.': 'Type at least 3 letters.',
     'Traducerea Bibliei': 'Bible translation',
     'Cornilescu (română)': 'Cornilescu (Romanian)',
     'World English Bible (engleză)': 'World English Bible (English)',
@@ -75,4 +75,12 @@ export const EN_APP_1: Record<string, string> = {
     'Descarcă manual din browser': 'Download manually from the browser',
     'Schimbare categorie': 'Change category',
     'Spațiu': 'Space',
+    // Ce e nou (WhatsNew.tsx). Notele în sine rămân în română: vin din CHANGELOG.
+    'Versiunea {v}': 'Version {v}',
+    'Istoricul versiunilor': 'Version history',
+    'Ce e nou: de la versiunea {from} la {to}': "What's new: from version {from} to {to}",
+    'Ce e nou în versiunea {v}': "What's new in version {v}",
+    'Actualizarea cuprinde {n} versiuni. Mai jos e tot ce s-a schimbat, începând cu cea mai nouă.':
+        'This update spans {n} versions. Below is everything that changed, newest first.',
+    'Ce s-a schimbat în fiecare versiune': 'What changed in each version',
 };

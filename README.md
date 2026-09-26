@@ -185,6 +185,8 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 - În sens invers, **corecturile oficiale** publicate de autori ajung automat la toate instalațiile, la pornirea aplicației — fără să aștepți o versiune nouă.
 - **Dacă ți-ai adaptat un imn, varianta ta rămâne a ta.** O corectură oficială nu ți-o mai suprascrie: ești întrebat, cu ambele texte în față, și alegi. Singura excepție e când textul oficial chiar era greșit — atunci îl înlocuim, dar îți păstrăm varianta și îți dăm butonul de pus la loc.
 - Un **imn nou** publicat de autori nu poate lua locul unuia de-al tău, chiar dacă nimerește același număr.
+- **Imnul tău, acceptat:** primești un mesaj, iar imnul se mută singur din „Imnurile mele" în „Imnuri Speciale", unde îl primesc și celelalte biserici. Un imn neacceptat rămâne pur și simplu la tine, fără niciun mesaj.
+- O dată pe zi, aplicația trimite autorilor și **lista imnurilor din „Imnurile mele"** — doar numărul și titlul —, ca să știe ce cântă bisericile în afara colecțiilor oficiale.
 - **Vezi ce s-a hotărât** cu fiecare imn sau corectură pe care ai trimis-o, din butonul de avertismente din antet.
 - La actualizare, **baza ta de imnuri se aduce singură la zi** cu colecțiile și corecturile noi, fără să-ți atingă modificările proprii.
 
@@ -194,6 +196,7 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 - **Două canale**, din Setări → Administrare: **Stabil** (recomandat) și **Beta**, dacă vrei versiunile cu câteva zile mai devreme
 - O actualizare marcată **obligatorie** se descarcă singură, dar **nu se instalează peste o proiecție în curs** — așteaptă să stingi ecranul
 - Pe Windows actualizarea e **silențioasă** — fără ferestre de comandă, fără întrebări; pornește direct versiunea nouă
+- **Vezi ce s-a schimbat:** înainte de instalare, un scurt rezumat al versiunii noi; după, lista completă — cu toate versiunile peste care ai sărit, pe rând. Istoricul întreg e oricând în Setări → Despre
 - Aplicația și instalerul sunt **semnate digital**
 
 ### 🧰 Alte lucruri utile

@@ -35,6 +35,44 @@ function normalizeSearchText(text: string): string {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+/**
+ * Forma dup\u0103 care se CAUT\u0102: f\u0103r\u0103 diacritice, f\u0103r\u0103 punctua\u021bie, spa\u021bii simple.
+ * Operatorul scrie din memorie, f\u0103r\u0103 virgule: \u201edomnul este pastorul meu nu voi"
+ * trebuie s\u0103 g\u0103seasc\u0103 \u201eDomnul este P\u0103storul meu: nu voi duce lips\u0103".
+ */
+function searchKey(text: string): string {
+  return normalizeSearchText(text)
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * `bible_verses.search_text`: searchKey cu un spa\u021biu \u00een fa\u021b\u0103, ca potrivirea \u201e\u00eenceput
+ * de cuv\u00e2nt" (`LIKE '% cuv\u00e2nt%'`) s\u0103 prind\u0103 \u0219i primul cuv\u00e2nt f\u0103r\u0103 concatenare la
+ * fiecare r\u00e2nd din 62 000.
+ */
+function bibleSearchText(text: string): string {
+  return ' ' + searchKey(text);
+}
+
+/**
+ * \u201eToate cuvintele scrise", fiecare ca \u00eenceput de cuv\u00e2nt, \u00een orice ordine \u2014 deci
+ * \u201epastor" g\u0103se\u0219te \u201ep\u0103storul", dar \u201esa" nu g\u0103se\u0219te \u201ecasa". `expr` e o expresie SQL
+ * care d\u0103 textul deja trecut prin searchKey, cu un spa\u021biu \u00een fa\u021b\u0103. Rangul pune
+ * \u00eent\u00e2i fraza exact\u0103, apoi cuvintele \u00een ordinea scris\u0103, apoi restul.
+ */
+function allWords(expr: string, query: string) {
+  const key = searchKey(query);
+  if (!key) return null;
+  const words = key.split(' ');
+  return {
+    where: words.map(() => `${expr} LIKE ?`).join(' AND '),
+    params: words.map(w => `% ${w}%`),
+    rank: `(${expr} LIKE ?) + (${expr} LIKE ?)`,
+    rankParams: [`% ${key}%`, `% ${words.join('% ')}%`],
+  };
+}
+
 function hasLegacyGlobalNumberUnique(db: any): boolean {
   const indexes = db.prepare("PRAGMA index_list('hymns')").all() as {
     name: string;
@@ -90,7 +128,7 @@ export function getDb() {
     // MUST be registered here, on the single shared connection, so every prepared
     // statement that calls nrm() can resolve it. (Regression in v1.2.4: nrm() was
     // used in SQL but never registered → "no such function: nrm" broke all search.)
-    _db.function('nrm', { deterministic: true }, (value: unknown) => normalizeSearchText(String(value ?? '')));
+    _db.function('nrm', { deterministic: true }, (value: unknown) => searchKey(String(value ?? '')));
   }
   return _db;
 }
@@ -426,7 +464,9 @@ export function getHymnByNumber(number: string) {
 }
 
 export function searchHymns(query: string, categoryId?: number) {
-  const normalizedPattern = `%${normalizeSearchText(query)}%`;
+  const key = searchKey(query);
+  // Fără nicio literă sau cifră nu e nimic de comparat — '' nu se potrivește cu niciun titlu.
+  const normalizedPattern = key ? `%${key}%` : '';
   const originalPattern = `%${query}%`;
   if (categoryId !== undefined) {
     return getDb()
@@ -490,39 +530,30 @@ export function getAllHymnsWithSnippets(categoryId?: number) {
 }
 
 export function searchHymnsContent(query: string, categoryId?: number) {
-  const normalizedPattern = `%${normalizeSearchText(query)}%`;
-  const originalPattern = `%${query}%`;
+  // Cuvintele trebuie să fie în aceeași strofă; rândurile ei nu mai contează, fiindcă
+  // searchKey face din fiecare capăt de rând un spațiu.
+  const m = allWords('sec.k', query);
+  if (!m) return [];
   const snippetSubquery = `
     (SELECT GROUP_CONCAT(s.text, ' ') FROM hymn_sections s
      WHERE s.hymn_id = h.id AND s.type = 'strofa'
      ORDER BY s.order_index) AS snippet
   `;
-  if (categoryId !== undefined) {
-    return getDb()
-      .prepare(`
-        SELECT DISTINCT h.id, h.number, h.title, h.category_id,
-               (SELECT COUNT(*) FROM hymn_sections sec2 WHERE sec2.hymn_id = h.id) AS section_count,
-               ${snippetSubquery}
-        FROM hymns h
-        INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
-        WHERE h.category_id = ? AND (sec.text LIKE ? OR nrm(sec.text) LIKE ?)
-        ORDER BY CAST(h.number AS INTEGER)
-        LIMIT 50
-      `)
-      .all(categoryId, originalPattern, normalizedPattern);
-  }
+  const byCategory = categoryId !== undefined;
   return getDb()
     .prepare(`
-      SELECT DISTINCT h.id, h.number, h.title, h.category_id,
+      WITH sec AS MATERIALIZED (SELECT hymn_id, ' ' || nrm(text) AS k FROM hymn_sections)
+      SELECT h.id, h.number, h.title, h.category_id,
              (SELECT COUNT(*) FROM hymn_sections sec2 WHERE sec2.hymn_id = h.id) AS section_count,
              ${snippetSubquery}
       FROM hymns h
-      INNER JOIN hymn_sections sec ON sec.hymn_id = h.id
-      WHERE sec.text LIKE ? OR nrm(sec.text) LIKE ?
-      ORDER BY CAST(h.number AS INTEGER)
+      INNER JOIN sec ON sec.hymn_id = h.id
+      WHERE ${byCategory ? 'h.category_id = ? AND ' : ''}${m.where}
+      GROUP BY h.id
+      ORDER BY MAX(${m.rank}) DESC, CAST(h.number AS INTEGER)
       LIMIT 50
     `)
-    .all(originalPattern, normalizedPattern);
+    .all(...(byCategory ? [categoryId] : []), ...m.params, ...m.rankParams);
 }
 
 export function getHymnWithSections(hymnId: number) {
@@ -1114,12 +1145,46 @@ function migrateBibleSearchText(db: any) {
     const update = db.prepare("UPDATE bible_verses SET search_text = ? WHERE id = ?");
     const tx = db.transaction(() => {
       for (const row of rows) {
-        update.run(normalizeSearchText(row.text), row.id);
+        update.run(bibleSearchText(row.text), row.id);
       }
     });
     tx();
     console.log(`[Bible] search_text populated for ${rows.length} verses`);
   }
+}
+
+/**
+ * Rulează amânat, după ce fereastra e pe ecran (62 000 de versete, ~1 s o singură dată).
+ *
+ * • Până la 1.6.1, `search_text` păstra punctuația, deci „lumea ca a dat" nu găsea
+ *   „lumea, că a dat". O traducere e scrisă dintr-o bucată, deci forma veche se vede
+ *   pe primul verset al fiecărei cărți — la pornirile următoare verificarea costă
+ *   66×2 rânduri, nu 62 000.
+ * • Ioan 14:6 a venit din sursa Cornilescu cu „Adevărulși" lipit.
+ */
+export function refreshBibleSearch() {
+  const db = getDb();
+  const lipit = 'Adevărulși Viața';
+  const ioan = db.prepare(`
+    SELECT bv.id, bv.text FROM bible_verses bv JOIN bible_books bb ON bb.id = bv.book_id
+    WHERE bb.name = 'Ioan' AND bv.chapter = 14 AND bv.verse = 6 AND bv.text LIKE ?
+  `).all(`%${lipit}%`) as { id: number; text: string }[];
+  for (const row of ioan) {
+    const text = row.text.replace(lipit, 'Adevărul și Viața');
+    db.prepare('UPDATE bible_verses SET text = ?, search_text = ? WHERE id = ?').run(text, bibleSearchText(text), row.id);
+  }
+
+  const primele = db.prepare(
+    'SELECT search_text FROM bible_verses WHERE id IN (SELECT MIN(id) FROM bible_verses GROUP BY book_id)'
+  ).all() as { search_text: string }[];
+  if (primele.every(r => /^ [a-z0-9 ]*$/.test(r.search_text))) return;
+
+  const rows = db.prepare('SELECT id, text FROM bible_verses').all() as { id: number; text: string }[];
+  const updateKey = db.prepare('UPDATE bible_verses SET search_text = ? WHERE id = ?');
+  db.transaction(() => {
+    for (const row of rows) updateKey.run(bibleSearchText(row.text), row.id);
+  })();
+  console.log(`[Bible] search_text recalculat pentru ${rows.length} versete`);
 }
 
 // ── Bible queries ─────────────────────────────────────────────────────────────
@@ -1156,12 +1221,15 @@ export function getBibleVerses(bookId: number, chapter: number) {
     .all(bookId, chapter);
 }
 
-export function searchBible(query: string, bookId?: number, chapter?: number, translation: string = 'cornilescu') {
-  const normalizedPattern = `%${normalizeSearchText(query)}%`;
-  const originalPattern = `%${query}%`;
+/** Câte rezultate arată căutarea în Biblie; se cere unul în plus ca să știm că mai sunt. */
+const BIBLE_SEARCH_LIMIT = 100;
 
-  let whereClause = '(bv.search_text LIKE ? OR bv.text LIKE ?) AND bb.translation = ?';
-  const params: any[] = [normalizedPattern, originalPattern, translation];
+export function searchBible(query: string, bookId?: number, chapter?: number, translation: string = 'cornilescu') {
+  const m = allWords('bv.search_text', query);
+  if (!m) return [];
+
+  let whereClause = `${m.where} AND bb.translation = ?`;
+  const params: (string | number)[] = [...m.params, translation];
 
   if (bookId !== undefined) {
     whereClause += ' AND bv.book_id = ?';
@@ -1179,9 +1247,10 @@ export function searchBible(query: string, bookId?: number, chapter?: number, tr
       FROM bible_verses bv
       JOIN bible_books bb ON bb.id = bv.book_id
       WHERE ${whereClause}
-      ORDER BY bv.book_id, bv.chapter, bv.verse
+      ORDER BY ${m.rank} DESC, bv.book_id, bv.chapter, bv.verse
+      LIMIT ${BIBLE_SEARCH_LIMIT + 1}
     `)
-    .all(...params);
+    .all(...params, ...m.rankParams);
 }
 
 export function getBibleVerseRange(bookId: number, chapter: number, startVerse: number, endVerse: number) {
@@ -1290,7 +1359,7 @@ function seedBibleTranslation(jsonPath: string, translation: string, idOffset: n
         for (const ch of chapters) {
           for (const v of (ch.verses ?? [])) {
             const text = (v.text ?? '').trim();
-            insertVerse.run(id, ch.chapter, v.verse, text, normalizeSearchText(text));
+            insertVerse.run(id, ch.chapter, v.verse, text, bibleSearchText(text));
             totalVerses++;
           }
         }

@@ -82,6 +82,9 @@ contextBridge.exposeInMainWorld('electron', {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch: Record<string, unknown>) => ipcRenderer.invoke('settings:set', patch),
     setUiZoom: (factor: number) => ipcRenderer.invoke('settings:set-ui-zoom', factor),
+    onChanged: (cb: (settings: Record<string, unknown>) => void) =>
+      ipcRenderer.on('settings:changed', (_e, s) => cb(s)),
+    offChanged: () => ipcRenderer.removeAllListeners('settings:changed'),
   },
 
   accompaniment: {
@@ -115,9 +118,12 @@ contextBridge.exposeInMainWorld('electron', {
     status: () => ipcRenderer.invoke('contrib:status'),
     // ce s-a hotărât cu propunerile trimise și ce alege omul mai departe
     decisions: () => ipcRenderer.invoke('contrib:decisions'),
+    // decizii despre care omul n-a aflat încă (fiecare o dată): imn propriu acceptat,
+    // corectură respinsă la un imn oficial
+    notices: () => ipcRenderer.invoke('contrib:notices'),
     refreshDecisions: () => ipcRenderer.invoke('contrib:refresh-decisions') as Promise<number>,
-    resolveDecision: (hash: string, alegere: 'pastrat' | 'revenit' | 'sters') =>
-      ipcRenderer.invoke('contrib:resolve-decision', hash, alegere) as
+    resolveDecision: (hash: string) =>
+      ipcRenderer.invoke('contrib:resolve-decision', hash) as
         Promise<{ ok: boolean; error?: string }>,
     // imnuri cu variantă oficială mai nouă, sau cu varianta proprie înlocuită
     hymnStates: () => ipcRenderer.invoke('contrib:hymn-states'),
@@ -209,7 +215,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   update: {
-    check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string; isDelta?: boolean }>,
+    check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string; isDelta?: boolean; notes?: string }>,
     download: () => ipcRenderer.invoke('update:download'),
     install: () => ipcRenderer.invoke('update:install'),
     openLogFile: () => ipcRenderer.invoke('update:open-log'),

@@ -54,6 +54,11 @@ interface ProjectorControllerProps {
   videoActive: boolean;
   /** null când imnul curent n-are acompaniament în manifest. */
   accompaniment?: AccompanimentControl | null;
+  /**
+   * Mărimea textului pe proiecție (1.2 = 120%), aceeași cu cea din Setări. O ține
+   * App, nu bara: bara dispare cât e un imn „pregătit" și ar reporni de la zero.
+   */
+  zoomLevel: number | null;
 }
 
 function mmss(sec: number): string {
@@ -61,16 +66,14 @@ function mmss(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment }: ProjectorControllerProps) {
+export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment, zoomLevel }: ProjectorControllerProps) {
   const t = useT();
   const [currentIndex, setCurrentIndex] = useState(-1);
 
-  // Nivelul de zoom al textului pe proiecție, raportat înapoi din fereastra de proiecție
-  const [zoomPercent, setZoomPercent] = useState(100);
+  const zoomPercent = zoomLevel === null ? null : Math.round(zoomLevel * 100);
   const [zoomToast, setZoomToast] = useState(false);
   const zoomToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const zoomPrevRef = useRef(100);
-  const zoomInitedRef = useRef(false);
+  const zoomPrevRef = useRef(zoomPercent);
 
   // La Biblie nu există „slide de titlu" (ca la imnuri) — minimul e primul verset, nu -1.
   const navigate = useCallback(async (index: number) => {
@@ -129,24 +132,18 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
-  // Recepționează nivelul de zoom raportat din fereastra de proiecție și afișează
-  // un scurt toast „Text: NNN%" la fiecare schimbare (nu la raportul inițial)
+  // Un scurt toast „Text: NNN%" la fiecare schimbare de mărime — nu la montare,
+  // unde valoarea doar e cea de dinainte.
   useEffect(() => {
-    window.electron.projection.onZoomLevel((level) => {
-      const pct = Math.round(level * 100);
-      if (zoomInitedRef.current && pct !== zoomPrevRef.current) {
-        setZoomToast(true);
-        if (zoomToastTimer.current) clearTimeout(zoomToastTimer.current);
-        zoomToastTimer.current = setTimeout(() => setZoomToast(false), 2000);
-      }
-      zoomInitedRef.current = true;
-      zoomPrevRef.current = pct;
-      setZoomPercent(pct);
-    });
-    return () => {
-      window.electron.projection.offZoomLevel();
+    if (zoomPercent !== null && zoomPrevRef.current !== null && zoomPercent !== zoomPrevRef.current) {
+      setZoomToast(true);
       if (zoomToastTimer.current) clearTimeout(zoomToastTimer.current);
-    };
+      zoomToastTimer.current = setTimeout(() => setZoomToast(false), 2000);
+    }
+    zoomPrevRef.current = zoomPercent;
+  }, [zoomPercent]);
+  useEffect(() => () => {
+    if (zoomToastTimer.current) clearTimeout(zoomToastTimer.current);
   }, []);
 
   // Antetul „numărul. titlu" e specific imnurilor — la Biblie titlul (,,Geneza 19") e de-ajuns.
@@ -229,7 +226,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
             </>
           )}
 
-          {/* Zoom text proiecție — A− [nivel] A+ (click pe procent = 100%) */}
+          {/* Mărimea textului — A− [nivel] A+ (click pe procent = mărimea implicită) */}
           <div className="relative flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 p-0.5 mr-1" title={t('Zoom text proiecție')}>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-out')}
@@ -241,9 +238,9 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-reset')}
               className="min-w-[2.75rem] h-6 px-1 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-white/75 hover:text-white hover:bg-white/10 transition-all"
-              title={t('Resetează la 100%')}
+              title={t('Înapoi la mărimea implicită (120%)')}
             >
-              {zoomPercent}%
+              {zoomPercent ?? '—'}%
             </button>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-in')}
@@ -256,7 +253,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
               className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 rounded-md bg-black/85 border border-white/15 text-[11px] font-semibold text-white shadow-lg pointer-events-none transition-opacity duration-300"
               style={{ opacity: zoomToast ? 1 : 0 }}
             >
-              {t('Text: {pct}%', { pct: zoomPercent })}
+              {t('Text: {pct}%', { pct: zoomPercent ?? '—' })}
             </div>
           </div>
           <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">

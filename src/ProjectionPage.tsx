@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, ProjectionTextData } from './vite-env';
 
+// Mărimea textului pe proiecție (1.2 = 120%). Aceleași limite ca în Setări.
+const MARIME_IMPLICITA = 1.2;
+const MARIME_MIN = 0.6;
+const MARIME_MAX = 3.0;
+
+function marimeaTextului(s: AppSettings, tab: 'imnuri' | 'biblia'): number {
+  return s.projectionFontSizeByTab?.[tab] ?? s.projectionFontSize ?? MARIME_IMPLICITA;
+}
+
 // Convert a local file path to a proper file:// URL (handles Windows drive letters)
 function toFileUrl(p: string): string {
   const fwd = p.replace(/\\/g, '/')
@@ -211,7 +220,10 @@ export function ProjectionPage() {
   const [data, setData] = useState<ProjectionSlideData | null>(null);
   const [visible, setVisible] = useState(false);
   const [bg, setBg] = useState<AppSettings>({});
+  // Doar pentru Ceas și Anunțuri, pe durata proiecției. La imnuri și Biblie,
+  // ↑↓ / A± schimbă mărimea salvată a tabului (vezi `schimbaMarimea`).
   const [zoomLevel, setZoomLevel] = useState(1);
+  const schimbaMarimea = useRef<(action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void>(() => { /* până la primul render */ });
 
   // ── Video state ──
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -240,9 +252,12 @@ export function ProjectionPage() {
     else if (v.paused) v.play().catch(() => { /* autoplay refuzat — rămâne static */ });
   }, [bgVideoCovered]);
 
-  // Load background settings once on mount
+  // Setările la deschidere, apoi fiecare schimbare din Setări, pe loc — altfel
+  // mărimea sau fundalul ales cu proiecția deschisă apăreau abia la redeschidere.
   useEffect(() => {
     window.electron.settings.get().then(s => setBg(s));
+    window.electron.settings.onChanged(s => setBg(s));
+    return () => { window.electron.settings.offChanged(); };
   }, []);
 
   // Receive slide updates pushed from main process
@@ -367,10 +382,10 @@ export function ProjectionPage() {
         window.electron.projection.sendKeyRequest('close');
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setZoomLevel(z => Math.min(z + 0.1, 2.5));
+        schimbaMarimea.current('zoom-in');
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setZoomLevel(z => Math.max(z - 0.1, 0.5));
+        schimbaMarimea.current('zoom-out');
       }
     };
     window.addEventListener('keydown', handler);
@@ -379,26 +394,37 @@ export function ProjectionPage() {
 
   // Listen for zoom commands from main window via IPC
   useEffect(() => {
-    window.electron.projection.onZoom((action) => {
-      if (action === 'zoom-in') setZoomLevel(z => Math.min(z + 0.1, 2.5));
-      else if (action === 'zoom-out') setZoomLevel(z => Math.max(z - 0.1, 0.5));
-      else if (action === 'zoom-reset') setZoomLevel(1);
-    });
+    window.electron.projection.onZoom((action) => schimbaMarimea.current(action));
     return () => { window.electron.projection.offZoom(); };
   }, []);
-
-  // Raportează nivelul de zoom către fereastra principală (bara de control)
-  useEffect(() => {
-    window.electron.projection.reportZoom(zoomLevel);
-  }, [zoomLevel]);
 
   const section: HymnSection | undefined = data?.sections[data.currentIndex];
   const isBible = data?.contentType === 'bible';
   const tabKey: 'imnuri' | 'biblia' = isBible ? 'biblia' : 'imnuri';
 
-  // Font size setting: default 1.2, separat per tab (imnuri/biblie) dacă a fost
-  // ales explicit; altfel cade pe mărimea generală, pentru instalări vechi.
-  const fontSizeMultiplier = (bg.projectionFontSizeByTab?.[tabKey] ?? bg.projectionFontSize ?? 1.2) * zoomLevel;
+  // Mărimea textului: cea din Setări, separat pe tab; altfel mărimea generală a
+  // instalărilor vechi. Aceeași valoare o schimbă și ↑↓ / A± în timpul proiecției,
+  // deci rămâne și după Esc, și după repornire.
+  const fontSizeMultiplier = marimeaTextului(bg, tabKey);
+
+  schimbaMarimea.current = (action) => {
+    if (!data) {
+      setZoomLevel(z => action === 'zoom-in' ? Math.min(z + 0.1, 2.5)
+        : action === 'zoom-out' ? Math.max(z - 0.1, 0.5) : 1);
+      return;
+    }
+    const pas = action === 'zoom-in' ? 0.1 : -0.1;
+    const noua = action === 'zoom-reset'
+      ? MARIME_IMPLICITA
+      : Math.round(Math.min(Math.max(marimeaTextului(bg, tabKey) + pas, MARIME_MIN), MARIME_MAX) * 100) / 100;
+    setBg(s => ({ ...s, projectionFontSizeByTab: { ...s.projectionFontSizeByTab, [tabKey]: noua } }));
+    void window.electron.settings.set({ projectionFontSizeByTab: { [tabKey]: noua } });
+  };
+
+  // Raportează mărimea către fereastra principală (bara de control)
+  useEffect(() => {
+    window.electron.projection.reportZoom(fontSizeMultiplier);
+  }, [fontSizeMultiplier]);
 
   // ── Auto-shrink: guarantees text NEVER overflows the container ──
   const contentRef = useRef<HTMLDivElement>(null);
@@ -408,7 +434,7 @@ export function ProjectionPage() {
   // Reset shrink factor when slide changes
   useEffect(() => {
     setShrinkFactor(1);
-  }, [data?.currentIndex, data?.hymnNumber, zoomLevel]);
+  }, [data?.currentIndex, data?.hymnNumber, fontSizeMultiplier]);
 
   // la redimensionarea containerului (schimbare display/zoom) re-pornim potrivirea
   const [resizeTick, setResizeTick] = useState(0);

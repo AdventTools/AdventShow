@@ -32,8 +32,12 @@ export const EN_APP_2: Record<string, string> = {
 
     // BibleSearchResultsList
     '{n} rezultate': '{n} results',
+    'primele {n} rezultate': 'first {n} results',
     'în {scope}': 'in {scope}',
     'în toată Biblia': 'in the whole Bible',
+    'caută în toată Biblia': 'search the whole Bible',
+    'doar în {scope}': 'only in {scope}',
+    'Mai sunt și altele — adaugă un cuvânt ca să restrângi căutarea.': 'There are more — add a word to narrow the search.',
     'Niciun rezultat': 'No result',
 
     // VideoController
@@ -105,7 +109,7 @@ export const EN_APP_2: Record<string, string> = {
     'pregătește versetul →': 'prepares the verse →',
     'verset cu verset, fără să ieși din capitol': 'verse by verse, without leaving the chapter',
     'scrie scurt:': 'type it short:',
-    'sau caută un cuvânt din Biblie și apasă': 'or search for a word in the Bible and press',
+    'sau caută câteva cuvinte din verset, fără virgule sau diacritice': 'or search a few words from the verse, no commas or accents needed',
     'Alege un videoclip sau adu unul de pe YouTube': 'Choose a video or bring one from YouTube',
     'pornește și oprește': 'plays and pauses',
     'sar 5 secunde (30 cu': 'skip 5 seconds (30 with',
@@ -307,12 +311,7 @@ export const EN_APP_2: Record<string, string> = {
     'cu exact textul pe care l-ai trimis. Copia din „{cat}" era identică, așa că am șters-o — ca să nu-l ai de două ori.':
         'with exactly the text you sent. The copy in "{cat}" was identical, so we removed it — so you wouldn\'t have it twice.',
     'Am înțeles': 'Got it',
-    'Textul de acolo diferă puțin de al tău, așa că nu am atins nimic — alegi tu.': "The text there differs slightly from yours, so we haven't touched anything — you choose.",
-    'Șterge copia mea': 'Delete my copy',
-    'Le păstrez pe amândouă': 'Keep both',
     'Modificarea ta nu a fost preluată în versiunea oficială.': 'Your change was not adopted into the official version.',
-    'Revino la varianta oficială': 'Revert to the official version',
-    'Păstrez varianta mea': 'Keep my version',
     'Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.': 'Nothing is final: you can always change a hymn back from the editor.',
 
     // FeedbackModal

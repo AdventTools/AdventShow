@@ -40,12 +40,14 @@ import {
   hasBibleData,
   getBibleTranslations,
   seedBibleFromJson,
+  refreshBibleSearch,
   syncSeedCorrections,
   syncSeedContent,
 } from './db'
 import {
   applyOtaCorrections, applyHymnState, maybeSendContributions, getContributionStatus,
   listHymnStates, listPendingDecisions, refreshProposalDecisions, resolveDecision, ContribDeps,
+  maybeSendInventory, takeDecisionNotices,
 } from './contrib'
 import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
 import {
@@ -129,6 +131,8 @@ interface AppSettings {
   appTheme?: 'dark' | 'light'
   // Limba interfeței proprii a aplicației
   uiLanguage?: 'ro' | 'en'
+  // Versiunea pornită ultima dată (fereastra „Ce e nou" după o actualizare)
+  lastRunVersion?: string
   // Traducerea Bibliei afișate/proiectate — 'cornilescu' rămâne implicit
   bibleTranslation?: string
   audioOutputDeviceId?: string
@@ -249,6 +253,9 @@ function registryDeps(): RegistryDeps {
  * se reia la fiecare heartbeat.
  */
 let contentRoutine: (() => Promise<void>) | null = null
+// Rutina a trecut măcar o dată: abia atunci vestea despre o decizie („imnul tău a
+// fost acceptat") știe și dacă imnul s-a mutat deja în colecția oficială.
+let contentRoutineDone = false
 
 /**
  * Îi spunem interfeței câte lucruri îl așteaptă, ca să apară butonul din antet.
@@ -856,7 +863,12 @@ function writeYouTubePlaylist(playlist: YouTubeEntry[]) {
 function getYouTubeTitle(videoUrl: string): Promise<string> {
   return new Promise((resolve) => {
     if (!isYtDlpInstalled()) { resolve('YouTube video'); return }
-    execFile(getYtDlpPath(), ['--get-title', '--no-playlist', videoUrl], { timeout: 15000 }, (err, stdout) => {
+    // Pe Windows, yt-dlp scrie în codarea veche a consolei când ieșirea e un pipe, iar
+    // noi citim UTF-8: ă/â/î ieșeau stricate, ș/ț dispăreau. Îi cerem UTF-8 explicit.
+    execFile(getYtDlpPath(), ['--encoding', 'utf-8', '--get-title', '--no-playlist', videoUrl], {
+      timeout: 15000,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+    }, (err, stdout) => {
       if (err) { resolve('YouTube video'); return }
       resolve(stdout.trim() || 'YouTube video')
     })
@@ -1425,6 +1437,7 @@ app.whenReady().then(() => {
         seedTemplatesIfNeeded(resourceTemplates, path.join(app.getPath('userData'), 'templates'))
       }
       seedBibleFromJson()
+      refreshBibleSearch()
       // Sync corrections from seed DB to user DB (e.g., fixed hymns)
       const seedPaths = [
         path.join(process.resourcesPath ?? '', 'hymns.db'),
@@ -1435,8 +1448,9 @@ app.whenReady().then(() => {
           syncSeedCorrections(sp)
           // categorii/imnuri noi din seed ajung și la utilizatorii existenți
           syncSeedContent(sp)
-          // corecturi OTA + contribuții (async, silențioase, max 1/zi, timeout scurt;
-          // offline = se sar instant — nimic nu blochează pornirea sau proiecția)
+          // corecturi OTA la fiecare rulare + contribuții și inventar max 1/zi (async,
+          // silențioase, timeout scurt; offline = se sar instant — nimic nu blochează
+          // pornirea sau proiecția)
           const deps = contribDeps(sp)
           // Rutina de conținut: corecturile de la autori, propunerile utilizatorului,
           // verdictele la ce a trimis deja, plus rapoartele rămase din lipsă de rețea.
@@ -1445,9 +1459,10 @@ app.whenReady().then(() => {
             // a unui dezvoltator (mereu decalată față de seed) ar trimite „corecturi"
             // la fiecare `npm run dev`.
             .then(() => (app.isPackaged ? maybeSendContributions(deps) : undefined))
+            .then(() => (app.isPackaged ? maybeSendInventory(deps) : undefined))
             .then(() => refreshProposalDecisions(deps))
             .then(() => flushReportQueue(deps))
-            .then(() => { notifyDecisions(deps) })
+            .then(() => { contentRoutineDone = true; notifyDecisions(deps) })
             .catch(err => debugLog('[content] eroare:', String(err)))
           contentRoutine()
           break
@@ -1481,9 +1496,16 @@ app.whenReady().then(() => {
   // ── Settings ──────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => readSettings())
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
-    const merged = { ...readSettings(), ...patch }
+    const current = readSettings()
+    const merged = { ...current, ...patch }
+    // Mărimea textului o scriu două ferestre: Setările și proiecția (↑↓ / A±).
+    // Fiecare trimite doar tabul ei, ca să nu calce una peste valoarea celeilalte.
+    if (patch.projectionFontSizeByTab) {
+      merged.projectionFontSizeByTab = { ...current.projectionFontSizeByTab, ...patch.projectionFontSizeByTab }
+    }
     writeSettings(merged)
     debugLog('[Settings] Saved:', Object.keys(patch).join(', '))
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send('settings:changed', merged)
   })
   // Aplica LIVE marimea textului interfetei pe fereastra principala. Persistenta
   // se face separat prin settings:set (uiZoom) — aici doar zoom-ul vizibil imediat.
@@ -1717,6 +1739,8 @@ app.whenReady().then(() => {
   }
 
   ipcMain.handle('contrib:decisions', () => withContribDeps(listPendingDecisions, []))
+  ipcMain.handle('contrib:notices', () =>
+    contentRoutineDone ? withContribDeps(takeDecisionNotices, []) : [])
   // Imnuri despre care avem ceva de spus: varianta oficială mai nouă pe care n-am
   // pus-o peste a lor, sau varianta lor pe care am înlocuit-o pentru că textul
   // oficial era greșit.
@@ -1724,9 +1748,8 @@ app.whenReady().then(() => {
   ipcMain.handle('contrib:apply-hymn-state',
     (_e, key: string, alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu') =>
       withContribDeps(d => applyHymnState(d, key, alegere), { ok: false, error: 'Baza oficială lipsește.' }))
-  ipcMain.handle('contrib:resolve-decision',
-    (_e, hash: string, alegere: 'pastrat' | 'revenit' | 'sters') =>
-      withContribDeps(d => resolveDecision(d, hash, alegere), { ok: false, error: 'Baza oficială lipsește.' }))
+  ipcMain.handle('contrib:resolve-decision', (_e, hash: string) =>
+    withContribDeps(d => resolveDecision(d, hash), { ok: false, error: 'Baza oficială lipsește.' }))
   // Verificare la cerere (butonul din Setări), fără să aștepte următorul heartbeat.
   ipcMain.handle('contrib:refresh-decisions', async () => {
     await withContribDeps(d => refreshProposalDecisions(d), Promise.resolve(0))
@@ -2051,7 +2074,13 @@ app.whenReady().then(() => {
       const current = app.getVersion()
       const available = isWorthOffering(latest)
       debugLog(`[Update] check: current=${current} latest=${latest} available=${available}`)
-      return { available, version: latest ?? undefined }
+      // Nota publică din hangar a versiunii noi, arătată în banner înainte de instalare.
+      // Lista completă, pe versiuni, vine abia cu aplicația nouă (CHANGELOG-ul din ea).
+      const rn = result?.updateInfo?.releaseNotes
+      const notes = (typeof rn === 'string' ? rn
+        : Array.isArray(rn) ? rn.map(n => n.note ?? '').filter(Boolean).join('\n\n') : '')
+        .replace(/<[^>]+>/g, '').trim()
+      return { available, version: latest ?? undefined, notes: notes || undefined }
     } catch (err: any) {
       debugLog('[Update] check failed:', err?.message ?? String(err))
       return { available: false }
