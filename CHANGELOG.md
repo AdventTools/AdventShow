@@ -22,7 +22,9 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+- Tema deschisă se poate folosi acum peste tot: textele din Setări, Ajutor, Despre, ferestrele de raportare și de răspunsuri, bara de proiecție de jos și fila Video nu mai rămân albe pe alb, iar bara de jos nu mai rămâne închisă la culoare. Accentele (LIVE, „de rezolvat", etichetele strofelor) au variante care se văd pe alb. Tema închisă a rămas neschimbată.
+- Butonul „Setări" din bara de sus își cuprinde acum eticheta, care ieșea din chenar.
+- În bara de proiecție, punctul pentru slide-ul de titlu se vede și când nu e cel curent.
 
 ---
 

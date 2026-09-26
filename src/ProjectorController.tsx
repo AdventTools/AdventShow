@@ -163,18 +163,18 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
   };
 
   return (
-    <div className="flex-shrink-0 border-t border-white/10 bg-[#0d1020] select-none">
+    <div className="flex-shrink-0 border-t border-fg/10 bg-[var(--bg-controller)] select-none">
 
       {/* Header bar */}
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fg/5">
         <Monitor className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
         <div className="flex items-center gap-2 min-w-0">
           {contentType === 'hymn' && (
             <span className="text-xs font-black text-primary tabular-nums">{hymnNumber}.</span>
           )}
-          <span className="text-xs text-white/60 font-semibold truncate">{hymnTitle}</span>
+          <span className="text-xs text-fg/60 font-semibold truncate">{hymnTitle}</span>
         </div>
-        <span className="text-[10px] text-white/20 ml-1">
+        <span className="text-[10px] text-fg/20 ml-1">
           {currentIndex === -1 ? t('Titlu') : `${currentIndex + 1} / ${sections.length}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
@@ -187,7 +187,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 className={`mr-1 flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
                   accompaniment.playing
                     ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-300'
-                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white'
+                    : 'bg-fg/5 hover:bg-fg/10 border-fg/10 text-fg/70 hover:text-fg'
                 }`}
                 title={accTitle(accompaniment)}
               >
@@ -217,7 +217,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 && accompaniment.onPlayOnly && (
                 <button
                   onClick={accompaniment.onPlayOnly}
-                  className="mr-1 flex items-center px-2 py-1 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-white/60 hover:text-white transition-all"
+                  className="mr-1 flex items-center px-2 py-1 rounded-lg border border-fg/10 bg-fg/5 hover:bg-fg/10 text-xs text-fg/60 hover:text-fg transition-all"
                   title={t('Doar acompaniamentul — strofele le schimbi tu')}
                 >
                   <Music className="w-3 h-3" />
@@ -227,24 +227,24 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           )}
 
           {/* Mărimea textului — A− [nivel] A+ (click pe procent = mărimea implicită) */}
-          <div className="relative flex items-center gap-0.5 rounded-lg bg-white/5 border border-white/10 p-0.5 mr-1" title={t('Zoom text proiecție')}>
+          <div className="relative flex items-center gap-0.5 rounded-lg bg-fg/5 border border-fg/10 p-0.5 mr-1" title={t('Zoom text proiecție')}>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-out')}
-              className="w-7 h-6 flex items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold"
+              className="w-7 h-6 flex items-center justify-center rounded-md text-fg/60 hover:text-fg hover:bg-fg/10 transition-all text-xs font-bold"
               title={t('Micșorează textul (↓)')}
             >
               A−
             </button>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-reset')}
-              className="min-w-[2.75rem] h-6 px-1 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-white/75 hover:text-white hover:bg-white/10 transition-all"
+              className="min-w-[2.75rem] h-6 px-1 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-fg/75 hover:text-fg hover:bg-fg/10 transition-all"
               title={t('Înapoi la mărimea implicită (120%)')}
             >
               {zoomPercent ?? '—'}%
             </button>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-in')}
-              className="w-7 h-6 flex items-center justify-center rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-all text-sm font-bold"
+              className="w-7 h-6 flex items-center justify-center rounded-md text-fg/60 hover:text-fg hover:bg-fg/10 transition-all text-sm font-bold"
               title={t('Mărește textul (↑)')}
             >
               A+
@@ -256,7 +256,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
               {t('Text: {pct}%', { pct: zoomPercent ?? '—' })}
             </div>
           </div>
-          <kbd className="text-[9px] text-white/20 bg-white/5 border border-white/10 rounded px-1.5 py-0.5">
+          <kbd className="text-[9px] text-fg/20 bg-fg/5 border border-fg/10 rounded px-1.5 py-0.5">
             {t('←→ Space: navigare · ↑↓: font')}{accompaniment ? t(' · A: acompaniament') : ''}
           </kbd>
           <button
@@ -296,35 +296,35 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
         <button
           onClick={() => navigate(currentIndex - 1)}
           disabled={currentIndex === -1}
-          className="flex items-center gap-2 px-4 py-3 text-left transition-all hover:bg-white/3 disabled:opacity-20 disabled:cursor-not-allowed flex-shrink-0 w-48 border-r border-white/5"
+          className="flex items-center gap-2 px-4 py-3 text-left transition-all hover:bg-fg/3 disabled:opacity-20 disabled:cursor-not-allowed flex-shrink-0 w-48 border-r border-fg/5"
           title={t('Anterior (←)')}
         >
-          <ChevronLeft className="w-4 h-4 text-white/20 flex-shrink-0" />
+          <ChevronLeft className="w-4 h-4 text-fg/20 flex-shrink-0" />
           {currentIndex === 0 ? (
             <div className="min-w-0">
               <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-primary/50">{t('Titlu')}</div>
-              <div className="text-xs text-white/25 truncate leading-snug">{titleLine}</div>
+              <div className="text-xs text-fg/25 truncate leading-snug">{titleLine}</div>
             </div>
           ) : prev ? (
             <div className="min-w-0">
-              <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${prev.type === 'refren' ? 'text-amber-400/50' : 'text-white/20'}`}>
+              <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${prev.type === 'refren' ? 'text-amber-400/50' : 'text-fg/20'}`}>
                 {sectionLabel(prev)}
               </div>
-              <div className="text-xs text-white/25 truncate leading-snug">
+              <div className="text-xs text-fg/25 truncate leading-snug">
                 {prev.text.split('\n')[0]}
               </div>
             </div>
           ) : (
-            <SkipBack className="w-3 h-3 text-white/10" />
+            <SkipBack className="w-3 h-3 text-fg/10" />
           )}
         </button>
 
         {/* Current section — main focus */}
-        <div className="flex-1 px-6 py-3 bg-white/3 border-r border-white/5">
+        <div className="flex-1 px-6 py-3 bg-fg/3 border-r border-fg/5">
           {currentIndex === -1 ? (
             <>
               <div className="text-[10px] font-bold uppercase tracking-widest mb-1 text-primary/70">{t('Titlu')}</div>
-              <div className="text-sm text-white/80 leading-relaxed font-medium">
+              <div className="text-sm text-fg/80 leading-relaxed font-medium">
                 {contentType === 'hymn' && <span className="text-primary font-black">{hymnNumber}.</span>}{contentType === 'hymn' ? ' ' : ''}{hymnTitle}
               </div>
             </>
@@ -333,7 +333,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
               <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${current.type === 'refren' ? 'text-amber-400' : 'text-primary/70'}`}>
                 {sectionLabel(current)}
               </div>
-              <div className="text-sm text-white/80 leading-relaxed line-clamp-3 whitespace-pre-line font-medium">
+              <div className="text-sm text-fg/80 leading-relaxed line-clamp-3 whitespace-pre-line font-medium">
                 {current.text}
               </div>
             </>
@@ -344,22 +344,22 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
         <button
           onClick={() => navigate(currentIndex + 1)}
           disabled={currentIndex === sections.length - 1}
-          className="flex items-center gap-2 px-4 py-3 text-left transition-all hover:bg-white/3 disabled:opacity-20 disabled:cursor-not-allowed flex-shrink-0 w-48 border-r border-white/5"
+          className="flex items-center gap-2 px-4 py-3 text-left transition-all hover:bg-fg/3 disabled:opacity-20 disabled:cursor-not-allowed flex-shrink-0 w-48 border-r border-fg/5"
           title={t('Următor (→)')}
         >
           {next ? (
             <div className="min-w-0 flex-1">
-              <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${next.type === 'refren' ? 'text-amber-400/50' : 'text-white/20'}`}>
+              <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${next.type === 'refren' ? 'text-amber-400/50' : 'text-fg/20'}`}>
                 {sectionLabel(next)}
               </div>
-              <div className="text-xs text-white/25 truncate leading-snug">
+              <div className="text-xs text-fg/25 truncate leading-snug">
                 {next.text.split('\n')[0]}
               </div>
             </div>
           ) : (
-            <SkipForward className="w-3 h-3 text-white/10 ml-auto" />
+            <SkipForward className="w-3 h-3 text-fg/10 ml-auto" />
           )}
-          <ChevronRight className="w-4 h-4 text-white/20 flex-shrink-0" />
+          <ChevronRight className="w-4 h-4 text-fg/20 flex-shrink-0" />
         </button>
 
         {/* Big prev/next buttons */}
@@ -367,7 +367,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           <button
             onClick={() => navigate(currentIndex - 1)}
             disabled={currentIndex === -1}
-            className="flex-1 px-5 flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-all border-b border-white/5"
+            className="flex-1 px-5 flex items-center justify-center text-fg/20 hover:text-fg/60 hover:bg-fg/5 disabled:opacity-20 disabled:cursor-not-allowed transition-all border-b border-fg/5"
             title="←"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -375,7 +375,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           <button
             onClick={() => navigate(currentIndex + 1)}
             disabled={currentIndex === sections.length - 1}
-            className="flex-1 px-5 flex items-center justify-center text-white/20 hover:text-white/60 hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+            className="flex-1 px-5 flex items-center justify-center text-fg/20 hover:text-fg/60 hover:bg-fg/5 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
             title="→"
           >
             <ChevronRight className="w-5 h-5" />
@@ -385,14 +385,14 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
 
       {/* Puncte de salt — eticheta (T / număr strofă / R) apare doar pe cel curent */}
       {sections.length > 1 && (
-        <div className="flex items-center justify-center flex-wrap gap-2 py-2.5 border-t border-white/5">
+        <div className="flex items-center justify-center flex-wrap gap-2 py-2.5 border-t border-fg/5">
           {/* Punct slide de titlu */}
           <button
             onClick={() => navigate(-1)}
             title={t('Titlu')}
             className={`flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none transition-all duration-200 ${currentIndex === -1
               ? 'h-4 min-w-[1.4rem] px-1.5 bg-primary text-white'
-              : 'w-2 h-2 text-transparent bg-primary/30 hover:bg-primary/60'
+              : 'w-2 h-2 text-transparent bg-fg/15 hover:bg-fg/40'
               }`}
           >
             {currentIndex === -1 ? t('T') : ''}
@@ -411,7 +411,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                     : 'h-4 min-w-[1.4rem] px-1.5 bg-primary text-white'
                   : isRefren
                     ? 'w-2 h-2 bg-amber-400/40 hover:bg-amber-400/70'
-                    : 'w-2 h-2 bg-white/15 hover:bg-white/40'
+                    : 'w-2 h-2 bg-fg/15 hover:bg-fg/40'
                   }`}
               >
                 {isCurrent ? dotLabel(s) : ''}

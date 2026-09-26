@@ -10,10 +10,10 @@
     --bg-sidebar: #0e0f1c;
     --bg-content: #10111f;
     --bg-preview: #0c0d19;
-    --bg-hover: rgba(255 255 255 / 0.04);
+    --bg-hover: rgb(var(--fg-rgb) / 0.04);
     --bg-active: rgba(99 102 241 / 0.12);
     --bg-selected: rgba(99 102 241 / 0.18);
-    --border: rgba(255 255 255 / 0.06);
+    --border: rgb(var(--fg-rgb) / 0.06);
     --text-primary: rgba(255 255 255 / 0.88);
     --text-secondary: rgba(255 255 255 / 0.55);
     --text-muted: rgba(255 255 255 / 0.30);
@@ -25,10 +25,18 @@
     --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 12px;
+    /* Cerneala panourilor (text, margini, nuanțe peste fundal), ca trei numere, ca să
+       se poată da orice transparență: rgb(var(--fg-rgb) / 0.4). Tailwind: text-fg/40. */
+    --fg-rgb: 255 255 255;
+    /* Zone adâncite (jurnal, cutii de cod): negre peste tema închisă. */
+    --sunk-rgb: 0 0 0;
+    --bg-controller: #0d1020;
 }
 
 /* Tema deschisă a interfeței PROPRII a aplicației (nu a proiecției pe ecran) —
-   se activează cu data-theme="light" pe <html>, ales din Setări. */
+   se activează cu data-theme="light" pe <html>, ales din Setări. Culorile scrise
+   direct pentru tema închisă nu se schimbă de aici: ce trebuie să urmeze tema
+   folosește variabilele de mai sus (sau fg/sunk în Tailwind). */
 :root[data-theme="light"] {
     --bg-app: #f4f5f9;
     --bg-header: #ffffff;
@@ -44,7 +52,47 @@
     --text-muted: rgba(10 11 20 / 0.38);
     --accent: #4f46e5;
     --accent-glow: rgba(79 70 229 / 0.20);
+    --fg-rgb: 10 11 20;
+    --sunk-rgb: 255 255 255;
+    --bg-controller: #ffffff;
+    /* În tema închisă lipsesc intenționat (valorile de rezervă din reguli rămân),
+       ca tema închisă să nu se schimbe; aici au nevoie de valori deschise. */
+    --bg-elevated: #ffffff;
+    --bg-surface: #ffffff;
+    --text-dim: rgba(10 11 20 / 0.60);
+    --primary: #4f46e5;
+    /* Accentele de pe fundal închis sunt prea deschise pe alb: aceleași nuanțe, mai închise. */
+    --amber: #b45309;
+    --green: #15803d;
+    --danger: #dc2626;
 }
+
+/* Tema deschisă — culorile scrise direct pentru fundal închis, în varianta lor pe alb */
+:root[data-theme="light"] .header-btn-answers {
+    color: #9a3412;
+    background: rgba(234 88 12 / 0.12);
+    border-color: rgba(194 65 12 / 0.35);
+}
+:root[data-theme="light"] .sec-label.strofa { color: #2563eb; }
+:root[data-theme="light"] .search-scope-badge {
+    color: #b45309;
+    background: rgba(245 158 11 / 0.14);
+    border-color: rgba(180 83 9 / 0.35);
+}
+:root[data-theme="light"] .live-badge-stop { color: #dc2626; }
+:root[data-theme="light"] .btn-sm.on { color: #047857; }
+/* Cardul „fundal implicit" e alb acum; bifa albă cu umbră nu s-ar vedea pe el */
+:root[data-theme="light"] .bg-card-default .bg-card-check { color: var(--accent); text-shadow: none; }
+:root[data-theme="light"] .text-green-400 { color: #15803d; }
+:root[data-theme="light"] .text-red-400 { color: #dc2626; }
+:root[data-theme="light"] .text-emerald-300 { color: #047857; }
+:root[data-theme="light"] .text-amber-300,
+:root[data-theme="light"] .text-amber-400 { color: #b45309; }
+:root[data-theme="light"] .text-amber-400\/50 { color: rgb(180 83 9 / 0.5); }
+:root[data-theme="light"] .text-yellow-400 { color: #a16207; }
+:root[data-theme="light"] .text-indigo-400 { color: #4f46e5; }
+:root[data-theme="light"] .text-emerald-100\/85 { color: rgb(6 95 70 / 0.85); }
+:root[data-theme="light"] .text-amber-100\/85 { color: rgb(146 64 14 / 0.85); }
 
 /* ── Reset ── */
 *,
@@ -149,14 +197,16 @@
 .live-badge-stop:hover { background: rgba(239 68 68 / 0.32); color: #fca5a5; }
 
 /* eticheta text lângă iconul de Setări */
-.header-btn-settings { width: auto; gap: 6px; padding: 0 12px; }
+/* Două clase: .header-btn (32px) e declarat mai jos și altfel ar câștiga — eticheta
+   ieșea din chenar. */
+.header-btn.header-btn-settings { width: auto; gap: 6px; padding: 0 12px; }
 .header-btn-label { font-size: 13px; font-weight: 600; }
 
 /* Tabs */
 .tabs {
     display: flex;
     gap: 2px;
-    background: rgba(255 255 255 / 0.04);
+    background: rgb(var(--fg-rgb) / 0.04);
     border-radius: var(--radius-sm);
     padding: 2px;
     flex-shrink: 0;
@@ -196,7 +246,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    background: rgba(255 255 255 / 0.05);
+    background: rgb(var(--fg-rgb) / 0.05);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 0 10px;
@@ -327,8 +377,8 @@
 .kbd-hints kbd {
     font-size: 9px;
     font-family: 'SF Mono', 'Consolas', monospace;
-    background: rgba(255 255 255 / 0.08);
-    border: 1px solid rgba(255 255 255 / 0.15);
+    background: rgb(var(--fg-rgb) / 0.08);
+    border: 1px solid rgb(var(--fg-rgb) / 0.15);
     border-radius: 3px;
     padding: 1px 5px;
     color: var(--text-secondary);
@@ -336,7 +386,7 @@
 
 .kbd-hints span {
     font-size: 9px;
-    color: rgba(255 255 255 / 0.50);
+    color: rgb(var(--fg-rgb) / 0.50);
     margin-right: 4px;
 }
 
@@ -380,7 +430,7 @@
     gap: 8px;
     font-size: 14px;
     line-height: 1.5;
-    color: rgba(255 255 255 / 0.85);
+    color: rgb(var(--fg-rgb) / 0.85);
 }
 .help-row kbd {
     flex: none;
@@ -390,10 +440,10 @@
     padding: 3px 7px;
     font-size: 13px;
     font-family: 'SF Mono', 'Consolas', monospace;
-    background: rgba(255 255 255 / 0.10);
-    border: 1px solid rgba(255 255 255 / 0.20);
+    background: rgb(var(--fg-rgb) / 0.10);
+    border: 1px solid rgb(var(--fg-rgb) / 0.20);
     border-radius: 6px;
-    color: #fff;
+    color: rgb(var(--fg-rgb));
 }
 
 /* ── Main Area (5-column with resize handles) ── */
@@ -501,7 +551,7 @@
 .sidebar-item .count {
     font-size: 10px;
     color: var(--text-muted);
-    background: rgba(255 255 255 / 0.04);
+    background: rgb(var(--fg-rgb) / 0.04);
     padding: 1px 6px;
     border-radius: 10px;
     flex-shrink: 0;
@@ -814,7 +864,7 @@
     font-size: 14px;
     font-weight: 700;
     color: var(--text-secondary);
-    background: rgba(255 255 255 / 0.04);
+    background: rgb(var(--fg-rgb) / 0.04);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -924,7 +974,7 @@
 
 .video-section {
     padding: 14px;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgb(var(--fg-rgb) / 0.03);
     border: 1px solid var(--border);
     border-radius: 12px;
 }
@@ -951,7 +1001,7 @@
     align-items: center;
     gap: 10px;
     padding: 12px 16px;
-    border: 1px dashed rgba(255 255 255 / 0.12);
+    border: 1px dashed rgb(var(--fg-rgb) / 0.12);
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
@@ -1014,7 +1064,7 @@
     justify-content: center;
     gap: 12px;
     padding: 48px 32px;
-    border: 2px dashed rgba(255 255 255 / 0.1);
+    border: 2px dashed rgb(var(--fg-rgb) / 0.1);
     border-radius: 12px;
     cursor: pointer;
     transition: all 0.2s;
@@ -1047,7 +1097,7 @@
 .video-converting-spinner {
     width: 32px;
     height: 32px;
-    border: 3px solid rgba(255 255 255 / 0.1);
+    border: 3px solid rgb(var(--fg-rgb) / 0.1);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -1169,7 +1219,7 @@
     -webkit-appearance: none;
     appearance: none;
     height: 4px;
-    background: rgba(255 255 255 / 0.1);
+    background: rgb(var(--fg-rgb) / 0.1);
     border-radius: 2px;
     outline: none;
     cursor: pointer;
@@ -1258,7 +1308,7 @@
     appearance: none;
     width: 80px;
     height: 3px;
-    background: rgba(255 255 255 / 0.1);
+    background: rgb(var(--fg-rgb) / 0.1);
     border-radius: 2px;
     outline: none;
     cursor: pointer;
@@ -1361,7 +1411,7 @@
 }
 .video-vu {
     flex: 1; height: 7px; border-radius: 4px; overflow: hidden;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgb(var(--fg-rgb) / 0.08);
 }
 .video-vu-fill {
     height: 100%; border-radius: 4px;
@@ -1408,7 +1458,7 @@
 .video-youtube-section {
     margin-top: 0;
     padding: 14px;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgb(var(--fg-rgb) / 0.03);
     border: 1px solid var(--border);
     border-radius: 12px;
 }
@@ -1441,7 +1491,7 @@
 .video-youtube-input {
     flex: 1;
     padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgb(var(--fg-rgb) / 0.06);
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text-primary);
@@ -1516,7 +1566,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 12px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgb(var(--fg-rgb) / 0.06);
     color: var(--text-muted);
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -1527,7 +1577,7 @@
 }
 
 .video-youtube-update-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgb(var(--fg-rgb) / 0.12);
     color: var(--text-secondary);
 }
 
@@ -1545,7 +1595,7 @@
 }
 
 .yt-playlist-item {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgb(var(--fg-rgb) / 0.04);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px 12px;
@@ -1553,7 +1603,7 @@
 }
 
 .yt-playlist-item:hover {
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: rgb(var(--fg-rgb) / 0.15);
 }
 
 .yt-status-ready {
@@ -1589,7 +1639,7 @@
 .yt-playlist-title-input {
     flex: 1;
     padding: 2px 6px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgb(var(--fg-rgb) / 0.08);
     border: 1px solid var(--accent-primary);
     border-radius: 4px;
     color: var(--text-primary);
@@ -1646,7 +1696,7 @@
 
 .yt-progress-bar {
     height: 3px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgb(var(--fg-rgb) / 0.08);
     border-radius: 2px;
     margin-top: 8px;
     overflow: hidden;
@@ -1683,7 +1733,7 @@
 }
 
 .yt-file-path:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgb(var(--fg-rgb) / 0.08);
     color: var(--accent);
 }
 
@@ -1864,15 +1914,15 @@
 .preview-shortcuts {
     margin-top: 8px;
     font-size: 11px;
-    color: rgba(255 255 255 / 0.50);
+    color: rgb(var(--fg-rgb) / 0.50);
     line-height: 1.8;
 }
 
 .preview-shortcuts kbd {
     font-size: 10px;
     font-family: 'SF Mono', 'Consolas', monospace;
-    background: rgba(255 255 255 / 0.08);
-    border: 1px solid rgba(255 255 255 / 0.15);
+    background: rgb(var(--fg-rgb) / 0.08);
+    border: 1px solid rgb(var(--fg-rgb) / 0.15);
     border-radius: 3px;
     padding: 1px 4px;
     color: var(--text-secondary);
@@ -2006,8 +2056,8 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     color: var(--text-dim, #9aa4bf);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgb(var(--fg-rgb) / 0.05);
+    border: 1px solid rgb(var(--fg-rgb) / 0.12);
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.15s;
@@ -2015,8 +2065,8 @@
 }
 
 .btn-acc:hover:not(:disabled) {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.1);
+    color: rgb(var(--fg-rgb));
+    background: rgb(var(--fg-rgb) / 0.1);
 }
 
 .btn-acc.playing {
@@ -2523,7 +2573,7 @@
 .field select,
 .field input[type="color"],
 .field input[type="range"] {
-    background: rgba(255 255 255 / 0.05);
+    background: rgb(var(--fg-rgb) / 0.05);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -2573,7 +2623,9 @@
     font-size: 13px;
     font-weight: 700;
     text-shadow: 0 1px 3px rgba(0 0 0 / 0.5);
+    /* Mimează ecranul de proiecție, deci rămâne închisă în ambele teme — cu textul ei */
     background: #1a1a2e;
+    color: rgba(255 255 255 / 0.88);
     padding: 4px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
@@ -2588,7 +2640,7 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary);
-    background: rgba(255 255 255 / 0.06);
+    background: rgb(var(--fg-rgb) / 0.06);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -2622,7 +2674,7 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--text-primary);
-    background: rgba(255 255 255 / 0.06);
+    background: rgb(var(--fg-rgb) / 0.06);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -2672,7 +2724,7 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--text-secondary);
-    background: rgba(255 255 255 / 0.04);
+    background: rgb(var(--fg-rgb) / 0.04);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     cursor: pointer;
@@ -2716,7 +2768,7 @@
 }
 
 .editor-input {
-    background: rgba(255 255 255 / 0.05);
+    background: rgb(var(--fg-rgb) / 0.05);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -2745,7 +2797,7 @@
 }
 
 .editor-section {
-    background: rgba(255 255 255 / 0.02);
+    background: rgb(var(--fg-rgb) / 0.02);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 10px;
@@ -2766,7 +2818,7 @@
 }
 
 .editor-select {
-    background: rgba(255 255 255 / 0.05);
+    background: rgb(var(--fg-rgb) / 0.05);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -2776,7 +2828,7 @@
 }
 
 .editor-textarea {
-    background: rgba(255 255 255 / 0.03);
+    background: rgb(var(--fg-rgb) / 0.03);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
@@ -2850,12 +2902,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255 255 255 / 0.08);
+    background: rgb(var(--fg-rgb) / 0.08);
     border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255 255 255 / 0.15);
+    background: rgb(var(--fg-rgb) / 0.15);
 }
 
 /* ── Update notification banner ── */
@@ -2867,7 +2919,7 @@
     background: rgba(99, 102, 241, 0.15);
     border-bottom: 1px solid rgba(99, 102, 241, 0.3);
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgb(var(--fg-rgb) / 0.85);
     flex-shrink: 0;
 }
 
@@ -2909,21 +2961,21 @@
     margin-left: auto;
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.4);
+    color: rgb(var(--fg-rgb) / 0.4);
     cursor: pointer;
     font-size: 14px;
     padding: 2px 6px;
 }
 
 .update-banner-dismiss:hover {
-    color: rgba(255, 255, 255, 0.8);
+    color: rgb(var(--fg-rgb) / 0.8);
 }
 
 .update-banner-progress {
     flex: 1;
     max-width: 200px;
     height: 4px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgb(var(--fg-rgb) / 0.1);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -3421,7 +3473,7 @@
 /* eticheta «implicit» pe șabloanele livrate */
 .tpl-badge {
     margin-left: 8px; font-size: 10px; padding: 1px 6px; border-radius: 999px;
-    background: rgba(255 255 255 / 0.08); color: var(--text-secondary); vertical-align: middle;
+    background: rgb(var(--fg-rgb) / 0.08); color: var(--text-secondary); vertical-align: middle;
 }
 
 /* rezumatul importului PPT */
@@ -3718,11 +3770,11 @@
    subiect stă acum într-un bloc cu titlu și o explicație scurtă, ca ochiul să
    găsească ce caută fără să citească tot. */
 .sgroup {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgb(var(--fg-rgb) / 0.08);
   border-radius: 12px;
   padding: 14px 16px 16px;
   margin-bottom: 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--fg-rgb) / 0.02);
 }
 .sgroup-head { margin-bottom: 12px; }
 .sgroup-head h4 {
@@ -3730,13 +3782,13 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgb(var(--fg-rgb) / 0.85);
   margin: 0 0 4px;
 }
 .sgroup-head p {
   font-size: 12px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--fg-rgb) / 0.45);
   margin: 0;
   max-width: 62ch;
 }
@@ -3809,19 +3861,19 @@
   background: rgba(180, 83, 9, 0.07);
 }
 .review-head { margin-bottom: 10px; }
-.review-head strong { font-size: 13px; color: rgba(255, 255, 255, 0.9); }
+.review-head strong { font-size: 13px; color: rgb(var(--fg-rgb) / 0.9); }
 .review-head p {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgb(var(--fg-rgb) / 0.45);
 }
 .review-row {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgb(var(--fg-rgb) / 0.06);
 }
 .review-nr {
   font-variant-numeric: tabular-nums;
@@ -3839,14 +3891,14 @@
 }
 .review-title {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgb(var(--fg-rgb) / 0.9);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .review-meta {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgb(var(--fg-rgb) / 0.4);
   white-space: nowrap;
 }
 
@@ -3863,11 +3915,11 @@
 
 /* ── Răspunsurile autorilor la ce a trimis utilizatorul ──────────────────────── */
 .decision-card {
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgb(var(--fg-rgb) / 0.09);
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 10px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgb(var(--fg-rgb) / 0.02);
 }
 .decision-head {
   display: flex;
@@ -3880,7 +3932,7 @@
 .decision-text {
   font-size: 12.5px;
   line-height: 1.55;
-  color: rgba(255, 255, 255, 0.65);
+  color: rgb(var(--fg-rgb) / 0.65);
   margin: 0 0 10px;
 }
 .badge-decision {
@@ -3900,7 +3952,7 @@
   border-left: 3px solid #6366f1;
   border-radius: 0 8px 8px 0;
   background: rgba(99, 102, 241, 0.08);
-  color: rgba(255, 255, 255, 0.6);
+  color: rgb(var(--fg-rgb) / 0.6);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -3931,7 +3983,7 @@
     display: block;
     margin: 10px 0 4px;
     background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgb(var(--fg-rgb) / 0.1);
     border-radius: var(--radius-sm);
 }
 
@@ -3955,7 +4007,7 @@
 .admin-bar .admin-sep {
     width: 1px;
     height: 18px;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgb(var(--fg-rgb) / 0.12);
     margin: 0 4px;
 }
 
@@ -4020,7 +4072,7 @@
     padding: 1px 4px;
     margin-left: 4px;
     border-radius: 3px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgb(var(--fg-rgb) / 0.1);
     color: var(--text-dim, #9aa4bf);
 }
 
@@ -4033,8 +4085,8 @@
     flex-wrap: wrap;
     padding: 10px 12px;
     margin: 10px 0 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgb(var(--fg-rgb) / 0.04);
+    border: 1px solid rgb(var(--fg-rgb) / 0.1);
     border-radius: var(--radius-sm);
 }
 
@@ -4059,8 +4111,8 @@
     font-size: 14px;
     font-weight: 700;
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgb(var(--fg-rgb) / 0.08);
+    border: 1px solid rgb(var(--fg-rgb) / 0.16);
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.15s;
@@ -4068,7 +4120,7 @@
 }
 
 .btn-mare:hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgb(var(--fg-rgb) / 0.14);
 }
 
 .btn-mare.accent {
@@ -4116,8 +4168,8 @@
     font-size: 10px;
     font-weight: 700;
     color: var(--text-dim, #9aa4bf);
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgb(var(--fg-rgb) / 0.06);
+    border: 1px solid rgb(var(--fg-rgb) / 0.12);
     border-radius: 4px;
 }
 
@@ -4150,7 +4202,7 @@
     display: block;
     margin: 4px 0 8px;
     background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgb(var(--fg-rgb) / 0.1);
     border-radius: var(--radius-sm);
     cursor: grab;
 }
