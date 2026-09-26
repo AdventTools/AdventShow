@@ -1,6 +1,6 @@
 {
-    "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Corecturi al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-08-21T21:33:49+00:00",
+    "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
+    "generated": "2026-09-26T08:32:43+00:00",
     "entries": [
         {
             "seq": 1,
@@ -320,6 +320,374 @@
             "force": true,
             "ts": "2026-08-21T21:33:49.000Z",
             "text_hash": "6fe999d6671e6629deaa6c76406ad1f2d5b7dc15cfb95730d9dc8c2a0bf05a49"
+        },
+        {
+            "seq": 10,
+            "category": "Imnuri Creștine",
+            "number": "173",
+            "title": "Stânca mântuirii",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Stânca mântuirii, Tu,\nCătre Tine vin acu’,\nLasă sângele-Ți vărsat\nSă mă spele de păcat;\nRătăcit am fost și rău,\nIa-mă Tu la sânul Tău!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Căci ce zice Legea Ta\nCa să fac eu n-aș putea,\nChiar s-alerg, să lupt cât pot\nȘi să plâng amar de tot;\nDacă harul Tău n-ar fi,\nȘtiu că nu m-aș mântui."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Neputând s-aduc nimic,\nLângă cruce stau și zic:\n„Eu sunt gol, dă-mi Tu veșmânt,\nEu sunt slab, Tu fă-mă sfânt!\nÎndurarea Ta o cer,\nDacă nu mi-o dai azi, pier!”"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Stânca mântuirii mi-ești,\nAzi Te rog să mă primești!\nPân-acum Tu m-ai chemat,\nDar eu tot Te-am refuzat;\nAzi când vreau al Tău să fiu,\nÎncă nu e prea târziu!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-09-19T09:22:18.000Z",
+            "text_hash": "ac750454773b34599422d4bd90a3cc1bf5c9c3cfee619c11051b5487c6f6b583"
+        },
+        {
+            "seq": 11,
+            "category": "Imnuri Creștine",
+            "number": "169",
+            "title": "Doar Ție, Doamne!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Doar Ție, Doamne,\nmult păcătuit-am\nȘi rele am făcut în fața Ta;\nTu știi păcatul greu ce făptuit-am,\nDar vezi acum mâhnirea mea."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Eu știu că nu-mi vei face după fapte\nȘi nu-mi vei da așa cum Ți-am greșit;\nTu ești preasfânt și mare\nîn dreptate,\nDar ierți pe omul pocăit."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Demult Tu m-ai chemat\nla mântuire,\nCăci plin de îndurare pururi ești;\nMă-nviorează Tu cu-a Ta iubire,\nDe vrei acum să mă primești!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "M-ajută drumul drept să-l țin, Părinte,\nÎn inimă să strâng Cuvântul sfânt\nȘi orice-ar fi, s-alerg tot înainte,\nSpre tihna unui nou pământ."
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T09:24:27.000Z",
+            "text_hash": "3553a2f73b28238da7ca3dd4ff8f111a4f83b37b0fac22e7bf54a2e64bd46ba6"
+        },
+        {
+            "seq": 12,
+            "category": "Imnuri Creștine",
+            "number": "130",
+            "title": "A-nviat Isus Hristos!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "A-nviat Isus Hristos, Slavă Lui, Aleluia!\nA ieșit victorios! Slavă Lui, Aleluia!\nCel pe cruce răstignit, Slavă Lui, Aleluia!\nBoldul morții-a biruit! Slavă Lui, Aleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Domnul nostru S-a ’nălțat, Slavă Lui, Aleluia!\nMare-Preot și-Mpărat! Slavă Lui, Aleluia!\nMoartea-a doua suferind, Slavă, Aleluia!\nPăcătoșii mântuind! Slavă Lui, Aleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Suferința ne-a purtat, Slavă Lui, Aleluia!\nSufletul ne-a vindecat! Slavă Lui, Aleluia!\nMântuiții cântă-n cor, Slavă Lui, Aleluia!\nDomnului oștirilor! Slavă Lui, Aleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Slavă Celui Înviat! Slavă Lui, Aleluia!\nEl cu Tatăl ne-a-mpăcat! Slavă Lui, Aleluia!\nFie înălțat în cânt, Slavă Lui, Aleluia!\nTatăl, Fiul, Duhul Sfânt!Slavă Lui, Aleluia!"
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T09:25:18.000Z",
+            "text_hash": "d4508629797ee51dc20cd1eb1a9bdfe4f0ef568f2ac460844c3ab35514766276"
+        },
+        {
+            "seq": 13,
+            "category": "Imnuri Creștine",
+            "number": "174",
+            "title": "Doamne, astăzi vin la tronul Tău!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Doamne, astăzi vin la tronul Tău\nȘi, recunoscând păcatul meu,\nSimt în suflet multă vină,\nInima-mi adânc suspină;\nSă privești la mine-ndurător,\nEști iubitul meu Mântuitor,\nȘtiu că vrei să-mi vii în ajutor,\nN-ai să mă lași!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Har e din belșug să fiu salvat,\nSânge prețios să fiu spălat,\nCa astfel ajuns nevinovat,\nSă Te slujesc!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Harul Tău mă-ndeamnă\nazi să viu,\nAzi, cât încă nu e prea târziu,\nNe-nțeles de-această lume,\nDar mergând pe-a’ Tale urme,\nDrumul meu spre cruce îl îndrept,\nInima zdrobită o deșert,\nDoritor s-aud și să repet\nCă sunt iertat."
+                },
+                {
+                    "type": "refren",
+                    "text": "Har e din belșug să fiu salvat,\nSânge prețios să fiu spălat,\nCa astfel ajuns nevinovat,\nSă Te slujesc!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "N-am de ce să tremur, Tu ai dat\nViața Ta să fiu răscumpărat,\nInimii încrezătoare\nTu dai binecuvântare!\nPentru mila Ta și harul Tău,\nPentru dragostea\nlui Dumnezeu,\nÎn genunchi mă plec la tronul Tău\nCa să m-ajuți."
+                },
+                {
+                    "type": "refren",
+                    "text": "Har e din belșug să fiu salvat,\nSânge prețios să fiu spălat,\nCa astfel ajuns nevinovat,\nSă Te slujesc!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Harul Tău eu azi întreg îl cer,\nTot ce ai promis eu cred și sper,\nFața Ta să mă lumine\nSă mă simt legat de Tine,\nFă să fiu de-acum eliberat,\nDomn ești peste moarte și păcat,\nVreau să știu cum poate fi salvat\nUn păcătos."
+                },
+                {
+                    "type": "refren",
+                    "text": "Har e din belșug să fiu salvat,\nSânge prețios să fiu spălat,\nCa astfel ajuns nevinovat,\nSă Te slujesc!"
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T09:27:31.000Z",
+            "text_hash": "2afa5b135fc988bc29882cd773a72d0f01afdcf3caa1891fc0c9148b22374672"
+        },
+        {
+            "seq": 14,
+            "category": "Imnuri Creștine",
+            "number": "177",
+            "title": "O, Miel divin, la Tine vin!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "O, Miel divin, la Tine vin\nSă speli fărădelegea mea\nȘi-n sufletu-mi de teamă plin,\nDă-mi iarăși pacea Ta!\nLovit de vina mea,\nScăpare n-aș avea;\nO, Miel divin, la Tine vin,\nDă-mi iarăși pacea Ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "O, Miel curat, nevinovat,\nZdrobit sub vina lumii grea,\nAi fost străpuns de-al meu păcat\nSă-mi dai iertarea Ta!\nCu toată vina mea,\nEu vin ’naintea Ta,\nO, Miel curat, nevinovat,\nSă-mi dai iertarea Ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "O, Miel Preasfânt, așa cum sunt,\nPrimește-mi inima cea rea,\nSupune-o Tu, sub legământ,\nSă fie-n veci a Ta!\nTu, Doamne, m-ai chemat,\nTot Tu m-ai căutat;\nPrimește-mi, Doamne, inima,\nSă fie-n veci a Ta!"
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T09:28:26.000Z",
+            "text_hash": "d41f9e58ecdbee1b32ecbe1a9416380dc36bb074542f8b6cc340dd6ccdf5b15c"
+        },
+        {
+            "seq": 15,
+            "category": "Imnuri Creștine",
+            "number": "147",
+            "title": "Spirit Sfânt, ce dai putere!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Spirit Sfânt, ce dai putere\nS-ascultăm de Dumnezeu\nȘi de orișice cădere\nNe ferești cu glasul Tău,\nSpirit Sfânt, ce altădată\nAi condus regi și profeți,\nȘi-a apostolilor ceată,\nȘi pe noi azi să ne-nveți!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "A lui Avraam credință\nDă-ne-o, Tu, și nouă azi\nSă ne-ajute-n suferință\nȘi în orișice necaz;\nCa-n puterea și-al Tău Nume\nSă fim gata, bucuros,\nChiar ce-avem mai scump pe lume\nSă jertfim pentru Hristos!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Dă-ne zelul lui Ilie,\nCăci azi lumea mult mai rău\nZace în idolatrie,\nPărăsind pe Dumnezeu!\nDar noi nu vrem a ne-abate,\nNici de ochii lumii chiar,\nȘi, în ciuda oarbei gloate,\nNu jertfim pe-al lor altar!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Spirit Sfânt de mângâiere,\nCe cu blându-Ți glas ne chemi,\nDă-ne Tu și azi putere,\nCa apostolilor din vremi,\nSă vestim credința dreaptă,\nNe-nfricați și plini de har,\nȘi, când ruguri ne așteaptă,\nNoi să stăm în Domnul tari!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Spirit Sfânt, din nou adie\nPeste noi suflarea Ta\nȘi, prin ploaia cea târzie,\nFă-ne gata de-a lupta!\nCruntă-i lupta, tare-i cruntă,\nCând o vezi, te iau fiori,\nDar pe noi nu ne-nspăimântă,\nCăci vom fi biruitori!"
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T09:31:59.000Z",
+            "text_hash": "0f4972d835a973eb329b064e84c17a82c74f89e60f2f651aefe0faac28634897"
+        },
+        {
+            "seq": 16,
+            "category": "Imnuri Creștine",
+            "number": "125",
+            "title": "Când ești apăsat de durere",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Când ești apăsat de durere\nȘi nicio lumină nu vezi,\nÎntoarce-ți privirea spre Domnul,\nS-asculți, să-mplinești și să crezi!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu privi niciodată\nDecât crucea Lui pe Calvar,\nÎn lumina ei minunată,\nVei vedea viitorul mai clar!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Citește Scriptura Golgotei\nCu sfintele ei mângâieri,\nIubirea mai tare ca moartea\nE singura cale spre cer…"
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu privi niciodată\nDecât crucea Lui pe Calvar,\nÎn lumina ei minunată,\nVei vedea viitorul mai clar!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Pământul și cerul vor trece,\nLuate de ultimul vânt,\nDoar dragostea Lui va rămâne!\nS-o știe întregul pământ!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu privi niciodată\nDecât crucea Lui pe Calvar,\nÎn lumina ei minunată,\nVei vedea viitorul mai clar!"
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T09:36:34.000Z",
+            "text_hash": "b771358ca6e93c20615fc7ddf3b52c6a40f0983911b5e1f3701ec3dbb8ba2fa3"
+        },
+        {
+            "seq": 17,
+            "category": "Imnuri Creștine",
+            "number": "104",
+            "title": "Noapte de vis, noapte de har",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nTotu-i lin, totu-i clar…\nDe Maria privegheat,\nPrunc divin preaminunat\n(:Doarme-n liniștea Sa.:)"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nMagi, păstori vin cu dar;\nÎngeri sfinți, Aleluia,\nCântă-n străluciri de stea:\n(:„Mesia S-a născut!”:)"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nPentru cânt nu-i hotar!\nToată slava cea de sus\nStă pe chipul Tău, Isus,\n(:Jos la nașterea Ta.:)"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nO, Isus, vino iar!\nTe coboară-n viața mea,\nSă-Ți tot cânt, Aleluia,\n(:Veșnic Ție, Hristos!:)"
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T09:38:11.000Z",
+            "text_hash": "fa286ee0ab8127bc1cfc2942bab62324b49eb108999683f3fa7d0c13befa11f8"
+        },
+        {
+            "seq": 18,
+            "category": "Imnuri Creștine",
+            "number": "110",
+            "title": "O, ce veste minunată!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "O, ce veste minunată\nÎn Betleem ni se-arată:\n(:Astăzi S-a născut\nCel făr’ de-nceput,\nCum au scris prorocii!:)"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Că la Betleem, Maria,\nSăvârșind călătoria,\n(:Într-un mic sălaș,\nLângă-acel oraș,\nA născut pe Mesia!:)"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Mesia, Cel din vecie,\nDumnezeu mi-L dete mie\n(:Să Se nască\nȘi să crească,\nSă ne mântuiască!:)"
+                }
+            ],
+            "force": true,
+            "ts": "2026-09-19T10:00:50.000Z",
+            "text_hash": "d5d4988060c971d63b55f2d4815ba94b139e7bd48935cba466ec277c4a4a3a94"
+        },
+        {
+            "seq": 19,
+            "category": "Imnuri Speciale",
+            "number": "002",
+            "title": "Domnul e aici",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Când mă tem să lupt și cad, Domnul e aici!\nȘi când valuri mari se sparg, Domnul e aici!\nN-aș putea să fac un pas, Să visez acas’!\nPeste noaptea fără glas, Mâna Lui e-aici!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul e aici,\nDomnul e aici!\nCăci iubirea Lui mi-e far,\nSă trăiesc cu har!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Dacă împrejur se rup, Domnul e aici!\nLângă masa de belșug, Domnul e aici!\nEl mă poartă neîncetat, Binecuvântat!\nȘi mă spală de păcat, Haru-I Său curat!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul e aici,\nDomnul e aici!\nCăci iubirea Lui mi-e far,\nSă trăiesc cu har!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Când sunt singur și străin, Domnul e aici!\nMerg spre țara de lumini, Domnul e aici!\nȘtiu că eu Îl voi vedea, Mă va-mbrățișa,\nPeste toată noaptea mea,  El îmi este stea!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul e aici,\nDomnul e aici!\nCăci iubirea Lui mi-e far,\nSă trăiesc cu har!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-09-26T07:41:28.000Z",
+            "text_hash": "da9495c441a838a0212c01c58ded93647b28788c585a2d851caeb0f99399e781",
+            "only_if_absent": true
+        },
+        {
+            "seq": 20,
+            "category": "Imnuri Creștine",
+            "number": "090",
+            "title": "Isus, Prieten minunat",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Isus, Prieten minunat,\nDin cerurile ’nalte,\nEl pân’ la mine S-a plecat,\nPe când eram în moarte…\nM-a scos din foc, m-a scos din val\nCu brațul Său cel tare,\nȘi am, la marea de cristal,\nCetate de scăpare!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Isus, Prieten minunat\nȘi bun cât nu se poate,\nSunt fericit că L-am aflat,\nEl mă-nțelege-n toate;\nȘi nicio teamă nu mai am:\nEl duce-a mea povară\nȘi glasul Său e sfânt balsam,\nNimic să nu mă doară…"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Isus, Prieten minunat,\nPrin orice-ar fi să vină,\nPe brațul Său eu sunt purtat\nÎn pace și lumină;\nȘi niciun pas pe calea mea\nEl singur nu mă lasă,\nDe parcă-am început deja\nVecia cea frumoasă…"
+                }
+            ],
+            "force": false,
+            "ts": "2026-09-26T08:31:36.000Z",
+            "text_hash": "7a67ae565e7c4bd5159a4d72d6e32c37ad1208e4964e1910a709fe425ce0f601"
+        },
+        {
+            "seq": 21,
+            "category": "Imnuri Creștine",
+            "number": "095",
+            "title": "Ca apa în pustie",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Ca apa în pustie,\nCa florile-n cărări,\nIzvor de bucurie,\nDe har și adevăr,\nE cântec, e viață\nȘi scut în orice greu;\nAșa-i Isus, Isus cel viu,\nAșa e Domnul meu!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Ca stânca în furtună,\nCa pacea în dureri,\nE numai vreme bună\nȘi ani de primăveri,\nE soare, speranță,\nPrieten bun, mereu;\nAșa-i Isus, Isus cel viu,\nAșa e Domnul meu!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Ca zorii după noapte,\nCa pomul înflorit,\nCa zboru-n libertate,\nCa visul împlinit,\nCăminul și cerul\nȘi tot ce-aș vrea, mereu;\nAșa-i Isus, Isus cel viu,\nAșa e Domnul meu!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-09-26T08:31:58.000Z",
+            "text_hash": "0d5e16b0134afabdf10ad44a635dacc6840f0b667a3467af8a91cfac708dc9e5"
+        },
+        {
+            "seq": 22,
+            "category": "Imnuri Creștine",
+            "number": "105",
+            "title": "Isuse scump!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Isuse scump, Tu Te-ai născut\nSpre-a noastră mântuire!\nAtâta har ne-ai dăruit,\nDar lumea nu Te-a prețuit…\nIsuse scump, Tu Te-ai născut\nSpre-a noastră mântuire."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Isuse scump, la Betleem,\nTe-ai dezbrăcat de slavă…\nȘi pentru omul păcătos\nLăsat-ai cerul luminos;\nIsuse scump, la Betleem,\nTe-ai dezbrăcat de slavă."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Isuse scump, Isuse scump,\nÎn Tine-i mântuirea!\nDin întuneric și păcat\nAzi omul poate fi salvat;\nIsuse scump, Isuse scump,\nÎn Tine-i mântuirea!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-09-26T08:32:42.000Z",
+            "text_hash": "fbecaac731dd7c9311add801f9c79a560fe40f2e06ff44cdbee849412ed4460e"
         }
     ]
 }
