@@ -63,8 +63,8 @@ export const EN_APP_3: Record<string, string> = {
     'Stabil — recomandat': 'Stable — recommended',
     'Beta — versiuni de test': 'Beta — test versions',
     'Legătura cu autorii': 'Contact with the authors',
-    'Corecturile tale la imnuri pleacă singure, după o săptămână de la ultima modificare. Aici vezi ce s-a hotărât cu ele.':
-        'Your hymn corrections are sent automatically, a week after the last edit. Here you can see what was decided about them.',
+    'Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Aici vezi ce s-a hotărât cu ele.':
+        'Your hymn corrections are sent automatically, two days after the last edit. Here you can see what was decided about them.',
     'Răspunsuri la ce ai trimis': 'Replies to what you sent',
     'Raportează o problemă': 'Report a problem',
     'Sugerează o îmbunătățire': 'Suggest an improvement',
@@ -145,8 +145,8 @@ export const EN_APP_3: Record<string, string> = {
     'Imnuri Speciale': 'Special Hymns',
     '— colecția oficială de cântări care nu sunt în cărți. Numerele le dăm noi.': '— the official collection of songs that are not in the hymnbooks. We assign the numbers.',
     'Imnurile mele': 'My Hymns',
-    '— a ta. Tot ce adaugi ajunge aici și noi nu scriem niciodată în ea. În schimb, ce pui aici pleacă spre noi ca propunere, după o săptămână de la ultima modificare; dacă o acceptăm, imnul intră în colecția oficială și ești anunțat.':
-        '— yours. Everything you add ends up here, and we never write to it. In turn, what you put here is sent to us as a proposal, a week after the last edit; if we accept it, the hymn joins the official collection and you are notified.',
+    '— a ta. Tot ce adaugi ajunge aici și noi nu scriem niciodată în ea. În schimb, ce pui aici pleacă spre noi ca propunere, la două zile după ultima modificare; dacă o acceptăm, imnul intră în colecția oficială și ești anunțat.':
+        '— yours. Everything you add ends up here, and we never write to it. In turn, what you put here is sent to us as a proposal, two days after the last edit; if we accept it, the hymn joins the official collection and you are notified.',
     'Butonul': 'The',
     'din capul ferestrei, la Imnuri.': 'button at the top of the window, in Hymns.',
     'Scriu eu un imn nou': 'Write a new hymn myself',
