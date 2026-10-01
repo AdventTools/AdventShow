@@ -23,7 +23,14 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Dacă ecranul de proiecție pierde semnalul în timpul serviciului (cablu, comutator, televizor în standby), proiecția se ascunde de pe laptop și revine singură pe ecran, exact cum era, când semnalul se întoarce. Operatorul primește un mesaj scurt în ambele momente.
+- Un imn oficial pe care biserica l-a corectat nu mai e înlocuit de baza livrată cu o versiune nouă a aplicației. Varianta bisericii rămâne, iar textul nostru apare ca variantă oficială pe care o poate adopta când vrea.
+- Copiile imnurilor din „Imnuri Speciale" ajunse din greșeală în „Imnurile mele" se șterg singure. Se șterg doar copiile identice cu originalul; un imn scris sau modificat de biserică rămâne.
+- Videoclipurile aduse de pe YouTube se descarcă la cel mult 1080p, într-un format pe care îl redă orice calculator, cu sunet stereo. Cele descărcate înainte rămân cum erau; dacă unul nu are sunet, descarcă-l din nou.
+- „Instalează și repornește" apăsat în timpul proiecției nu mai închide proiecția: actualizarea se instalează după ce o oprești.
+- Același PowerPoint importat a doua oară nu mai dublează imnurile. Un imn diferit pe un număr deja folosit primește următorul număr liber.
+- Dacă alegi alt imn cât se descarcă acompaniamentul, muzica imnului vechi nu mai pornește singură la final.
 
 ---
 

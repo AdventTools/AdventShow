@@ -41,10 +41,9 @@ import {
   getBibleTranslations,
   seedBibleFromJson,
   refreshBibleSearch,
-  syncSeedCorrections,
-  syncSeedContent,
 } from './db'
 import {
+  syncSeedFromBundle,
   applyOtaCorrections, applyHymnState, maybeSendContributions, getContributionStatus,
   listHymnStates, listPendingDecisions, refreshProposalDecisions, resolveDecision, ContribDeps,
   maybeSendInventory, takeDecisionNotices,
@@ -438,6 +437,8 @@ function updatesSupported(): boolean {
  * aplicație (autoInstallOnAppQuit e pornit).
  */
 let waitingForProjectionToClose = false
+/** „Instalează" apăsat cât proiecția era pe ecran: instalarea pornește după oprire. */
+let installAfterProjection = false
 
 function installWhenNotProjecting() {
   if (isWinAlive(projectionWin)) {
@@ -949,9 +950,11 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       fs.mkdirSync(tmpDir, { recursive: true })
 
       // ── Stage 1: video stream only (prefer H.264 mp4 for Chromium compatibility)
+      //    Cel mult 1080p: fără plafon, unde YouTube nu avea H.264 se lua AV1 la 4K,
+      //    pe care multe laptopuri de biserică nu-l pot reda.
       stage = 'video'
       await runStep(ytdlpBin, [
-        '-f', 'bv*[vcodec^=avc1]/bv*[ext=mp4]/bv*',
+        '-f', 'bv*[vcodec^=avc1][height<=1080]/bv*[vcodec^=avc1]/bv*[height<=1080]/bv*',
         '-o', path.join(tmpDir, 'video.%(ext)s'),
         '--no-playlist', '--newline', '--no-mtime',
         '--retries', '10', '--fragment-retries', '10',
@@ -979,15 +982,20 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       //    -c:v copy: nu re-encodăm video (păstrăm calitatea, e rapid)
       //    -c:a aac: RE-ENCODĂM audio în AAC — garantează compatibilitate MP4/Chromium chiar
       //              dacă yt-dlp a returnat opus (din webm). Aici a fost regresia.
+      //    Video altul decât H.264 (AV1, VP9) se convertește: altfel unele calculatoare
+      //    nu-l redau deloc. Sunetul iese mereu stereo — o sursă 5.1 lăsată pe 6 canale
+      //    poate ieși mută pe boxele bisericii.
       stage = 'mux'
       win?.webContents.send('youtube:progress', entry.id, 95, '[mux] merging streams')
+      const vinfo = await probeMedia(path.join(tmpDir, videoTmp))
+      const videoCopy = !vinfo.probed || vinfo.vcodec === 'h264'
       await runStep(ffmpegBin, [
         '-i', path.join(tmpDir, videoTmp),
         '-i', path.join(tmpDir, audioTmp),
         '-map', '0:v:0',
         '-map', '1:a:0',
-        '-c:v', 'copy',
-        '-c:a', 'aac', '-b:a', '192k',
+        ...(videoCopy ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23']),
+        '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
         '-movflags', '+faststart',
         '-y', finalPath,
       ])
@@ -1105,6 +1113,56 @@ function acoperaEcranul(w: BrowserWindow, target: Electron.Display, pas = 0) {
   setTimeout(() => acoperaEcranul(w, target, pas + 1), 150)
 }
 
+// ── Ecranul de proiecție deconectat în timpul serviciului ─────────────────────
+// Un cablu HDMI lung, un comutator sau un televizor în standby pot pierde semnalul
+// câteva secunde. Sistemul mută atunci fereastra pe laptop, peste aplicație, iar la
+// revenirea ecranului n-o mai duce înapoi. O ascundem cât lipsește ecranul și o
+// punem singuri la loc, cu tot ce era pe ea, fără ca operatorul să facă ceva.
+let ecranProiectie: number | null = null
+let asteptEcranul = false
+
+function ecranDeconectat(d: Electron.Display) {
+  if (!isWinAlive(projectionWin) || d.id !== ecranProiectie) return
+  debugLog('[Projection] ecranul', d.id, 's-a deconectat — ascund proiecția și aștept revenirea lui')
+  asteptEcranul = true
+  projectionWin.hide()
+  if (isWinAlive(win)) win.webContents.send('projection:screen', { conectat: false })
+}
+
+function ecranSchimbat() {
+  if (!isWinAlive(projectionWin)) return
+  const displays = screen.getAllDisplays()
+  const primary = screen.getPrimaryDisplay()
+  if (!asteptEcranul) {
+    // Același ecran, altă rezoluție: fereastra trebuie să-l acopere din nou.
+    const acelasi = displays.find(d => d.id === ecranProiectie)
+    if (acelasi && process.platform === 'win32') acoperaEcranul(projectionWin, acelasi)
+    return
+  }
+  // La reconectare, Windows îi poate da alt număr; atunci luăm ecranul care nu e al laptopului.
+  const tinta = displays.find(d => d.id === ecranProiectie)
+    ?? (displays.length > 1 ? displays.find(d => d.id !== primary.id) : undefined)
+  if (!tinta) return
+  debugLog('[Projection] ecranul a revenit:', tinta.id, '— pun proiecția la loc')
+  asteptEcranul = false
+  ecranProiectie = tinta.id
+  const w = projectionWin
+  if (process.platform === 'win32') {
+    w.setBounds(tinta.bounds)
+    w.showInactive()
+    w.setAlwaysOnTop(true)
+    w.moveTop()
+    acoperaEcranul(w, tinta)
+  } else {
+    if (w.isFullScreen()) w.setFullScreen(false)
+    w.setBounds(tinta.bounds)
+    w.showInactive()
+    w.setFullScreen(true)
+  }
+  setTimeout(() => win?.focus(), 200)
+  if (isWinAlive(win)) win.webContents.send('projection:screen', { conectat: true })
+}
+
 function createProjectionWindow() {
   const settings = readSettings()
   const displays = screen.getAllDisplays()
@@ -1145,6 +1203,9 @@ function createProjectionWindow() {
     },
   })
 
+  ecranProiectie = targetDisplay.id
+  asteptEcranul = false
+
   projectionWin.once('ready-to-show', () => {
     projectionWin?.show()
     if (isWin && isWinAlive(projectionWin)) acoperaEcranul(projectionWin, targetDisplay)
@@ -1157,7 +1218,8 @@ function createProjectionWindow() {
   // uneia din cele două ferestre, o readucem deasupra FĂRĂ să-i fure focusul.
   if (isWin) {
     const reasertaProiectia = () => {
-      if (!isWinAlive(projectionWin)) return
+      // ascunsă pentru că ecranul ei s-a deconectat — n-o aducem peste operator
+      if (!isWinAlive(projectionWin) || asteptEcranul) return
       projectionWin!.setAlwaysOnTop(true)
       projectionWin!.showInactive()
       projectionWin!.moveTop()
@@ -1178,6 +1240,8 @@ function createProjectionWindow() {
 
   projectionWin.on('closed', () => {
     projectionWin = null
+    ecranProiectie = null
+    asteptEcranul = false
     projState = null
     projectionReadyResolve = null
     projectionReadyPromise = null
@@ -1471,13 +1535,13 @@ app.whenReady().then(() => {
       ]
       for (const sp of seedPaths) {
         if (fs.existsSync(sp)) {
-          syncSeedCorrections(sp)
-          // categorii/imnuri noi din seed ajung și la utilizatorii existenți
-          syncSeedContent(sp)
+          const deps = contribDeps(sp)
+          // categorii/imnuri noi și corecturile din seed ajung și la utilizatorii
+          // existenți, fără să calce peste ce a modificat biserica
+          syncSeedFromBundle(deps)
           // corecturi OTA la fiecare rulare + contribuții și inventar max 1/zi (async,
           // silențioase, timeout scurt; offline = se sar instant — nimic nu blochează
           // pornirea sau proiecția)
-          const deps = contribDeps(sp)
           // Rutina de conținut: corecturile de la autori, propunerile utilizatorului,
           // verdictele la ce a trimis deja, plus rapoartele rămase din lipsă de rețea.
           contentRoutine = () => applyOtaCorrections(deps)
@@ -2130,7 +2194,21 @@ app.whenReady().then(() => {
       if (isWinAlive(win)) win.webContents.send('update:error', err?.message ?? 'Descărcarea a eșuat')
     }
   })
-  ipcMain.handle('update:install', () => performQuitAndInstall())
+  // Un click pe „Instalează" în timpul serviciului închidea proiecția din sală.
+  // Instalarea așteaptă oprirea ei, ca la actualizările obligatorii.
+  ipcMain.handle('update:install', () => {
+    if (isWinAlive(projectionWin)) {
+      if (!installAfterProjection) {
+        installAfterProjection = true
+        projectionWin.once('closed', () => {
+          setTimeout(() => { installAfterProjection = false; performQuitAndInstall() }, 3000)
+        })
+      }
+      return { amanat: true }
+    }
+    performQuitAndInstall()
+    return { amanat: false }
+  })
 
   // Canalul de actualizare: „stable" pentru toată lumea, „beta" pentru cine vrea
   // să încerce înainte. Se aplică imediat, fără repornire.
@@ -2552,6 +2630,10 @@ app.whenReady().then(() => {
   ipcMain.on('video:error-from-projection', (_e, msg: string) => {
     win?.webContents.send('video:error', msg)
   })
+
+  screen.on('display-removed', (_e, d) => ecranDeconectat(d))
+  screen.on('display-added', () => ecranSchimbat())
+  screen.on('display-metrics-changed', () => ecranSchimbat())
 
   createWindow()
 })

@@ -418,6 +418,8 @@ function App() {
     const [accHasMarks, setAccHasMarks] = useState(false);
     /** Apăsarea din timpul descărcării: „am apăsat din greșeală, nu porni". */
     const accAutoplayAnulat = useRef(false);
+    /** Crește la fiecare schimbare de imn: o descărcare veche știe că nu mai e a ei. */
+    const accGeneratie = useRef(0);
 
     // ── Update state ──
     const [updateInfo, setUpdateInfo] = useState<{
@@ -1161,10 +1163,12 @@ function App() {
 
         if (!accInfo?.local) {
             accAutoplayAnulat.current = false;
+            const gen = accGeneratie.current;
             const rez = await accDownload(numar);
             if (!rez) return;
             if (!accLive) return;                      // pregătire, nu pornire
             if (accAutoplayAnulat.current) return;     // s-a apăsat frâna
+            if (gen !== accGeneratie.current) return;  // între timp s-a ales alt imn
         }
         await accPlay(true);
     }, [accPlaying, accLoading, accStop, accDownload, accPlay, accInfo, accLive,
@@ -1179,10 +1183,12 @@ function App() {
         if (!Number.isFinite(numar)) return;
         if (!accInfo?.local) {
             accAutoplayAnulat.current = false;
+            const gen = accGeneratie.current;
             const rez = await accDownload(numar);
             if (!rez) return;
             if (!accLive) return;
             if (accAutoplayAnulat.current) return;
+            if (gen !== accGeneratie.current) return;
         }
         await accPlay(false);
     }, [accPlaying, accLoading, accStop, accDownload, accPlay, accInfo, accLive,
@@ -1259,6 +1265,9 @@ function App() {
         accMarks.current = null;
         setAccHasMarks(false);
         accAutoplayAnulat.current = false;
+        // O descărcare pornită pentru imnul de dinainte nu mai are voie să-i pornească
+        // muzica peste cel nou, când se termină.
+        accGeneratie.current++;
         accAutoOprit.current = false;
         setAccPreluat(false);
         setAccSync(false);
@@ -1268,6 +1277,13 @@ function App() {
             accBlobFor.current = null;
         }
     }, [previewNumber, previewType, accStop]);
+
+    // Ecranul de proiecție a pierdut semnalul: proiecția se ascunde și revine singură.
+    useEffect(() => window.electron.projection.onScreen(({ conectat }) => {
+        showToast(conectat
+            ? t('Ecranul de proiecție a revenit.')
+            : t('Ecranul de proiecție s-a deconectat. Proiecția revine singură când se reconectează.'), 8000);
+    }), [t]);
 
     // Listen for projection closed
     useEffect(() => {
@@ -2358,7 +2374,10 @@ function App() {
                             ) : updateReady ? (
                                 <button
                                     className="update-banner-btn"
-                                    onClick={() => window.electron.update.install()}
+                                    onClick={async () => {
+                                        const r = await window.electron.update.install();
+                                        if (r?.amanat) showToast(t('Proiecția e pornită. Actualizarea se instalează după ce o oprești.'), 8000);
+                                    }}
                                 >
                                     {t('Instalează și repornește')}
                                 </button>
@@ -8209,8 +8228,10 @@ function UpdateChecker() {
         }
     }
 
-    const doInstall = () => {
-        window.electron.update.install()
+    const [amanat, setAmanat] = useState(false)
+    const doInstall = async () => {
+        const r = await window.electron.update.install()
+        setAmanat(!!r?.amanat)
     }
 
     return (
@@ -8256,6 +8277,9 @@ function UpdateChecker() {
                         <button className="btn-sm" onClick={doInstall}>
                             {t('Instalează și repornește')}
                         </button>
+                        {amanat && (
+                            <p className="text-fg/60 text-xs">{t('Proiecția e pornită. Actualizarea se instalează după ce o oprești.')}</p>
+                        )}
                     </div>
                 )}
 

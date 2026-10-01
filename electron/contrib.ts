@@ -1,7 +1,7 @@
 import fs from 'fs';
 import crypto from 'crypto';
 import { createRequire } from 'module';
-import { getDb, MY_HYMNS_CATEGORY } from './db';
+import { getDb, MY_HYMNS_CATEGORY, syncSeedContent } from './db';
 import {
   HANGAR_CORRECTIONS_URL, HangarDeps, HangarSettings, LocalInventoryItem, fetchProposalVerdicts,
   sendLocalInventory, sendProposals,
@@ -52,6 +52,11 @@ interface ContribSettings extends HangarSettings {
   // inventarul „Imnurilor mele" trimis în hub: când și câte au fost
   inventoryLastSentAt?: string;
   inventoryLastCount?: number;
+  // „categorie|număr" -> amprenta textului din baza livrată, scris ultima oară aici
+  seedApplied?: Record<string, string>;
+  // „categorie|număr" -> amprenta textului din baza livrată, deja arătat bisericii
+  // ca variantă oficială (ca „Păstrează-l pe al meu" să nu revină la fiecare pornire)
+  seedOffered?: Record<string, string>;
 }
 
 export interface ContribDeps extends HangarDeps {
@@ -129,6 +134,34 @@ function textHash(c: HymnContent): string {
     sections: c.sections.map(s => ({ t: s.type, x: nfc(s.text) })),
   });
   return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+/**
+ * Aduce la zi imnurile oficiale din baza livrată cu aplicația, fără să calce peste
+ * ce a modificat biserica (vezi `SeedGuard` din db.ts). Rulează la fiecare pornire.
+ */
+export function syncSeedFromBundle(deps: ContribDeps): void {
+  const s = deps.getSettings();
+  const pending = { ...(s.pendingOfficial ?? {}) };
+  const offered = { ...(s.seedOffered ?? {}) };
+  let schimbat = false;
+  const livrat = syncSeedContent(deps.seedDbPath, {
+    hash: c => textHash(c as HymnContent),
+    livrat: s.seedApplied ?? {},
+    ota: s.otaApplied ?? {},
+    modificate: new Set(Object.keys(s.contribSentHashes ?? {})),
+    tineDeoparte: (key, title, sections, ts) => {
+      const h = textHash({ title, sections });
+      if (offered[key] === h) return;
+      offered[key] = h;
+      pending[key] = { seq: 0, title, sections, ts };
+      schimbat = true;
+    },
+  });
+  deps.patchSettings({
+    seedApplied: livrat,
+    ...(schimbat ? { pendingOfficial: pending, seedOffered: offered } : {}),
+  });
 }
 
 /**
@@ -323,9 +356,12 @@ export async function applyOtaCorrections(deps: ContribDeps): Promise<void> {
       // al lui. Înainte îl socoteam „neatins" și îl suprascriam: exact așa ar fi
       // dispărut imnul propriu al unei biserici la prima intrare nouă publicată
       // într-o colecție pe care noi n-o livrasem încă.
+      // Orice text dat de noi contează: corectura precedentă, baza livrată acum, sau
+      // cea scrisă aici de o versiune anterioară. Înainte se compara doar cu prima
+      // găsită, iar un imn adus la zi din baza livrată era luat drept al bisericii.
       const localHash = textHash({ title: user.title, sections: userSections });
-      const referinta = officialNow[key] ?? seedHashes.get(key);
-      const alLui = referinta === undefined || localHash !== referinta;
+      const referinte = [officialNow[key], seedHashes.get(key), settings.seedApplied?.[key]].filter(Boolean);
+      const alLui = referinte.length === 0 || !referinte.includes(localHash);
 
       if (alLui && !entry.force) {
         // Varianta lui rămâne. Dar nu o îngropăm: reținem textul oficial, ca să-l

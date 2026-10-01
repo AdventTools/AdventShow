@@ -404,6 +404,7 @@ export interface IElectronAPI {
     offControllerSync: () => void;
     onClosed: (cb: () => void) => void;
     offClosed: () => void;
+    onScreen: (cb: (data: { conectat: boolean }) => void) => () => void;
     onZoom: (cb: (action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void) => void;
     offZoom: () => void;
     reportZoom: (level: number) => Promise<void>;
@@ -424,7 +425,7 @@ export interface IElectronAPI {
     /** `notes` = nota publică din hangar a versiunii noi (doar a ei, nu și a celor sărite). */
     check: () => Promise<{ available: boolean; version?: string; notes?: string }>;
     download: () => Promise<void>;
-    install: () => void;
+    install: () => Promise<{ amanat: boolean }>;
     openLogFile: () => void;
     onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => () => void;
     offProgress: () => void;

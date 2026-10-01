@@ -1018,8 +1018,10 @@ export function bulkInsertHymns(hymns: HymnImportData[]): number[] {
   // Tot ce vine dintr-un PowerPoint intră marcat „de verificat": conversia din
   // slide-uri ghicește unde se termină o strofă și de unde începe titlul, iar la un
   // import în grup nimeni nu se uită peste sute de imnuri pe loc.
+  // Tabelul nu are cheie unică pe (colecție, număr), deci „OR REPLACE" nu înlocuia
+  // nimic: același folder importat de două ori dubla toate imnurile.
   const insertHymn = db.prepare(`
-    INSERT OR REPLACE INTO hymns (number, title, search_text, category_id, needs_review)
+    INSERT INTO hymns (number, title, search_text, category_id, needs_review)
     VALUES (@number, @title, @searchText, @categoryId, 1)
   `);
 
@@ -1028,21 +1030,42 @@ export function bulkInsertHymns(hymns: HymnImportData[]): number[] {
     VALUES (@hymnId, @order_index, @type, @text)
   `);
 
-  const deleteOldSections = db.prepare(`
-    DELETE FROM hymn_sections WHERE hymn_id = ?
+  const peNumar = db.prepare(`
+    SELECT id, title FROM hymns WHERE number = ? AND category_id IS ?
   `);
+  const sectiuni = db.prepare(`
+    SELECT type, text FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index
+  `);
+  const numere = db.prepare(`SELECT number FROM hymns WHERE category_id IS ?`);
 
   const tx = db.transaction((rows: HymnImportData[]) => {
     for (const hymn of rows) {
+      const categoryId = hymn.categoryId ?? null;
+      let number = normalizeHymnNumber(hymn.number);
+      const existente = peNumar.all(number, categoryId) as { id: number; title: string }[];
+      // Același imn, adus încă o dată: rămâne cel de acolo, cu corecturile lui.
+      const acelasi = existente.find(e => {
+        if (e.title !== hymn.title) return false;
+        const s = sectiuni.all(e.id) as { type: string; text: string }[];
+        return s.length === hymn.sections.length
+          && s.every((x, i) => x.type === hymn.sections[i].type && x.text === hymn.sections[i].text);
+      });
+      if (acelasi) { idsScrise.push(acelasi.id); continue; }
+      // Alt imn pe un număr ocupat: primește primul număr liber, nu se pierde nimic.
+      if (existente.length > 0) {
+        const max = (numere.all(categoryId) as { number: string }[])
+          .map(r => parseInt(r.number, 10)).filter(Number.isFinite)
+          .reduce((a, b) => Math.max(a, b), 0);
+        number = normalizeHymnNumber(String(max + 1));
+      }
       const result = insertHymn.run({
-        number: normalizeHymnNumber(hymn.number),
+        number,
         title: hymn.title,
         searchText: hymn.searchText,
-        categoryId: hymn.categoryId ?? null,
+        categoryId,
       });
       const hymnId = result.lastInsertRowid;
       idsScrise.push(Number(hymnId));
-      deleteOldSections.run(hymnId);
       hymn.sections.forEach((section, i) => {
         insertSection.run({
           hymnId,
@@ -1389,95 +1412,24 @@ export function seedBibleFromJson() {
 }
 
 /**
- * Sync corrections from the seed (bundled) DB to the user's DB.
- * Only updates sections where the seed's updated_at is newer than the user's.
- * This ensures our corrections (e.g., fixing hymn 562) reach existing users,
- * while preserving any user modifications that are more recent.
+ * Cine hotărăște dacă un imn oficial primește textul din baza livrată.
+ *
+ * NU data: un imn corectat de biserică înainte de data corecturii noastre se
+ * pierdea în tăcere. Ci textul — îl înlocuim doar dacă e exact ce i-am dat noi
+ * ultima oară (baza livrată anterior sau o corectură OTA). Altfel e al bisericii:
+ * textul nostru se ține deoparte, ca la corecturile OTA, să-l adopte când vrea.
  */
-export function syncSeedCorrections(seedDbPath: string) {
-  if (!fs.existsSync(seedDbPath)) return;
-
-  try {
-    const userDb = getDb();
-    const seedDb = new Database(seedDbPath, { readonly: true });
-
-    // Check if seed DB has updated_at column
-    const seedCols = seedDb.pragma('table_info(hymn_sections)') as { name: string }[];
-    if (!seedCols.some(c => c.name === 'updated_at')) {
-      seedDb.close();
-      return; // Seed DB doesn't have timestamps yet, nothing to sync
-    }
-
-    // Get all seed sections that have an updated_at timestamp
-    const seedSections = seedDb.prepare(`
-      SELECT hs.id, hs.hymn_id, hs.order_index, hs.type, hs.text, hs.updated_at
-      FROM hymn_sections hs
-      WHERE hs.updated_at IS NOT NULL AND hs.updated_at != ''
-    `).all() as { id: number; hymn_id: number; order_index: number; type: string; text: string; updated_at: string }[];
-
-    if (seedSections.length === 0) {
-      seedDb.close();
-      return;
-    }
-
-    // Guard: matching by hymn_id alone is unsafe — in user DBs cu imnuri proprii,
-    // id-urile pot să NU corespundă cu cele din seed. Confirmăm că imnul userului
-    // de la acel id e ACELAȘI imn (același număr + aceeași categorie, după nume).
-    const getSeedHymnIdentity = seedDb.prepare(`
-      SELECT h.number, c.name AS category_name
-      FROM hymns h LEFT JOIN categories c ON c.id = h.category_id
-      WHERE h.id = ?
-    `);
-    const getUserHymnIdentity = userDb.prepare(`
-      SELECT h.number, c.name AS category_name
-      FROM hymns h LEFT JOIN categories c ON c.id = h.category_id
-      WHERE h.id = ?
-    `);
-    const hymnIdentityOk = new Map<number, boolean>();
-    const isSameHymn = (hymnId: number): boolean => {
-      const cached = hymnIdentityOk.get(hymnId);
-      if (cached !== undefined) return cached;
-      const seedHymn = getSeedHymnIdentity.get(hymnId) as { number: string; category_name: string | null } | undefined;
-      const userHymn = getUserHymnIdentity.get(hymnId) as { number: string; category_name: string | null } | undefined;
-      const ok = !!seedHymn && !!userHymn &&
-        normalizeHymnNumber(seedHymn.number ?? '') === normalizeHymnNumber(userHymn.number ?? '') &&
-        (seedHymn.category_name ?? '') === (userHymn.category_name ?? '');
-      hymnIdentityOk.set(hymnId, ok);
-      return ok;
-    };
-
-    const getUserSection = userDb.prepare(`
-      SELECT id, text, updated_at FROM hymn_sections WHERE hymn_id = ? AND order_index = ?
-    `);
-    const updateUserSection = userDb.prepare(`
-      UPDATE hymn_sections SET text = ?, type = ?, updated_at = ? WHERE id = ?
-    `);
-
-    let updated = 0;
-    const tx = userDb.transaction(() => {
-      for (const seed of seedSections) {
-        if (!isSameHymn(seed.hymn_id)) continue;
-        const user = getUserSection.get(seed.hymn_id, seed.order_index) as { id: number; text: string; updated_at: string } | undefined;
-        if (!user) continue;
-
-        // Only update if seed is newer (or user has no timestamp)
-        const userTs = user.updated_at || '';
-        if (seed.updated_at > userTs) {
-          updateUserSection.run(seed.text, seed.type, seed.updated_at, user.id);
-          updated++;
-        }
-      }
-    });
-    tx();
-
-    if (updated > 0) {
-      console.log(`[DB Sync] Updated ${updated} sections from seed DB`);
-    }
-
-    seedDb.close();
-  } catch (err) {
-    console.error('[DB Sync] Failed:', err);
-  }
+export interface SeedGuard {
+  /** Aceeași formulă cu `text_hash` din corecturi (`textHash` din contrib.ts). */
+  hash: (c: { title: string; sections: { type: string; text: string }[] }) => string;
+  /** „categorie|număr" -> amprenta textului din baza livrată, scris ultima oară aici. */
+  livrat: Record<string, string>;
+  /** „categorie|număr" -> amprenta ultimei corecturi OTA aplicate. */
+  ota: Record<string, string>;
+  /** Imnuri despre care știm sigur că biserica le-a modificat (propuneri trimise). */
+  modificate: Set<string>;
+  /** Textul nostru, nepus peste al bisericii. */
+  tineDeoparte: (key: string, title: string, sections: { type: 'strofa' | 'refren'; text: string }[], ts: string) => void;
 }
 
 /**
@@ -1486,13 +1438,13 @@ export function syncSeedCorrections(seedDbPath: string) {
  *  - hymns missing from the user DB (matched by category name + number) are inserted
  *    with their sections — this is how existing users receive newly added collections
  *    (e.g. Licurici / Companioni / Tineret / Amicus added in the seed);
- *  - hymns that exist in both get their content replaced when the seed's updated_at
- *    is >= every timestamp the user has on that hymn (hymn + sections). User edits
- *    made in the app stamp updated_at, so anything the user touched later is preserved.
- * Idempotent — safe to run at every startup.
+ *  - hymns that exist in both get the seed text only if the local text is the one we
+ *    gave this install last time (see SeedGuard); otherwise it is the church's.
+ * Idempotent — safe to run at every startup. Întoarce amprentele „livrat" de păstrat.
  */
-export function syncSeedContent(seedDbPath: string) {
-  if (!fs.existsSync(seedDbPath)) return;
+export function syncSeedContent(seedDbPath: string, paza: SeedGuard): Record<string, string> {
+  const livrat = { ...paza.livrat };
+  if (!fs.existsSync(seedDbPath)) return livrat;
 
   try {
     const userDb = getDb();
@@ -1502,7 +1454,7 @@ export function syncSeedContent(seedDbPath: string) {
     const seedHymnCols = seedDb.pragma('table_info(hymns)') as { name: string }[];
     if (!seedHymnCols.some(c => c.name === 'updated_at')) {
       seedDb.close();
-      return;
+      return livrat;
     }
 
     // ── Categories: create the ones missing locally (matched by name) ────────
@@ -1566,6 +1518,7 @@ export function syncSeedContent(seedDbPath: string) {
     let inserted = 0;
     let refreshed = 0;
     let adopted = 0;
+    let copiiSterse = 0;
     const tx = userDb.transaction(() => {
       for (const seedHymn of seedHymns) {
         const userCatId = categoryIdMap.get(seedHymn.category_id);
@@ -1586,6 +1539,9 @@ export function syncSeedContent(seedDbPath: string) {
           }
         }
 
+        const key = `${seedCatNameById.get(seedHymn.category_id)}|${number}`;
+        const seedHash = paza.hash({ title: seedHymn.title, sections: seedSections });
+
         if (!userHymn) {
           const result = insertHymn.run(
             number, seedHymn.title, seedHymn.search_text, userCatId,
@@ -1595,31 +1551,43 @@ export function syncSeedContent(seedDbPath: string) {
           for (const s of seedSections) {
             insertSection.run(hymnId, s.order_index, s.type, s.text, s.updated_at ?? '');
           }
+          livrat[key] = seedHash;
           inserted++;
           continue;
         }
 
-        // Existing hymn: refresh only if the seed is at least as new as everything
-        // the user has on it (untouched hymns have updated_at = '').
-        const seedTs = seedHymn.updated_at || '';
-        if (!seedTs) continue;
-        // deja sincronizat la acest seed — sărim comparația de conținut
-        if ((userHymn.updated_at || '') === seedTs) continue;
         const userSections = getUserSections.all(userHymn.id) as
           { type: string; text: string; updated_at: string }[];
+        const userTitle = (userDb.prepare('SELECT title FROM hymns WHERE id = ?')
+          .get(userHymn.id) as { title: string }).title;
+        const localHash = paza.hash({ title: userTitle, sections: userSections });
+        if (localHash === seedHash) { livrat[key] = seedHash; continue; }
+
+        const seedTs = seedHymn.updated_at || '';
+        if (!seedTs) continue;
         const userNewest = [userHymn.updated_at || '', ...userSections.map(s => s.updated_at || '')]
           .reduce((a, b) => (a > b ? a : b), '');
-        if (userNewest > seedTs) continue;
+
+        // E textul dat de noi ultima oară? Fără amprentă păstrată (instalări de dinainte
+        // de 1.6.4), rămâne regula veche pe dată, dar nu și pentru imnurile despre care
+        // știm că biserica le-a modificat.
+        const referinte = [livrat[key], paza.ota[key]].filter(Boolean);
+        const aVenitDeLaNoi = referinte.length > 0
+          ? referinte.includes(localHash)
+          : userNewest <= seedTs && !paza.modificate.has(key);
+        if (!aVenitDeLaNoi) {
+          // Al bisericii. Textul nostru i-l arătăm, nu i-l punem peste.
+          if (seedTs > userNewest) paza.tineDeoparte(key, seedHymn.title, seedSections, seedTs);
+          continue;
+        }
 
         const sameContent =
           userSections.length === seedSections.length &&
           userSections.every((s, i) =>
             s.type === seedSections[i].type && s.text.trim() === seedSections[i].text.trim());
-        const sameTitle = (userDb.prepare('SELECT title FROM hymns WHERE id = ?')
-          .get(userHymn.id) as { title: string }).title === seedHymn.title;
-        if (sameContent && sameTitle) continue;
 
         updateHymnRow.run(seedHymn.title, seedHymn.search_text, seedTs, userHymn.id);
+        livrat[key] = seedHash;
         if (!sameContent) {
           deleteSections.run(userHymn.id);
           for (const s of seedSections) {
@@ -1628,15 +1596,44 @@ export function syncSeedContent(seedDbPath: string) {
         }
         refreshed++;
       }
+
+      // Până la 1.6.3, prima pornire muta imnurile oficiale din „Imnuri Speciale" în
+      // „Imnurile mele" (o migrare veche le credea ale bisericii), iar sync-ul le punea
+      // apoi la loc. Copia rămasă poartă exact numărul, titlul și datele din baza
+      // livrată — un imn scris sau atins de biserică nu le are, deci nu se atinge.
+      const mine = userDb.prepare('SELECT id FROM categories WHERE name = ?').get(MY_HYMNS_CATEGORY) as
+        { id: number } | undefined;
+      const seedSpecialId = seedCategories.find(c => c.name === SPECIAL_HYMNS_CATEGORY)?.id;
+      if (mine && seedSpecialId != null) {
+        const copii = userDb.prepare(
+          'SELECT id, number, title, created_at, updated_at FROM hymns WHERE category_id = ?'
+        ).all(mine.id) as { id: number; number: string; title: string; created_at: string; updated_at: string }[];
+        for (const sh of seedHymns.filter(h => h.category_id === seedSpecialId && h.created_at)) {
+          const seedSecs = getSeedSections.all(sh.id) as { type: string; text: string }[];
+          for (const c of copii) {
+            if (normalizeHymnNumber(c.number) !== normalizeHymnNumber(sh.number)
+              || c.title !== sh.title || c.created_at !== sh.created_at
+              || (c.updated_at || '') !== (sh.updated_at || '')) continue;
+            const secs = getUserSections.all(c.id) as { type: string; text: string }[];
+            const identic = secs.length === seedSecs.length
+              && secs.every((s, i) => s.type === seedSecs[i].type && s.text === seedSecs[i].text);
+            if (!identic) continue;
+            deleteSections.run(c.id);
+            userDb.prepare('DELETE FROM hymns WHERE id = ?').run(c.id);
+            copiiSterse++;
+          }
+        }
+      }
     });
     tx();
 
-    if (createdCategories > 0 || inserted > 0 || refreshed > 0 || adopted > 0) {
-      console.log(`[DB Sync] Seed content: +${createdCategories} categorii, +${inserted} imnuri noi, ${refreshed} imnuri actualizate, ${adopted} adoptate în categorie`);
+    if (createdCategories > 0 || inserted > 0 || refreshed > 0 || adopted > 0 || copiiSterse > 0) {
+      console.log(`[DB Sync] Seed content: +${createdCategories} categorii, +${inserted} imnuri noi, ${refreshed} imnuri actualizate, ${adopted} adoptate în categorie, ${copiiSterse} copii oficiale scoase din „${MY_HYMNS_CATEGORY}"`);
     }
 
     seedDb.close();
   } catch (err) {
     console.error('[DB Sync] syncSeedContent failed:', err);
   }
+  return livrat;
 }
