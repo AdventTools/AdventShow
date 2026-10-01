@@ -219,14 +219,26 @@ contextBridge.exposeInMainWorld('electron', {
     download: () => ipcRenderer.invoke('update:download'),
     install: () => ipcRenderer.invoke('update:install'),
     openLogFile: () => ipcRenderer.invoke('update:open-log'),
-    onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) =>
-      ipcRenderer.on('update:download-progress', (_e, data) => cb(data)),
+    // Fiecare abonare își întoarce propria dezabonare: bannerul din fereastra
+    // principală și panoul din Setări ascultă aceleași canale, iar off* le scoate
+    // pe toate — închiderea Setărilor lăsa bannerul fără nicio veste.
+    onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => {
+      const h = (_e: unknown, data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => cb(data)
+      ipcRenderer.on('update:download-progress', h)
+      return () => { ipcRenderer.removeListener('update:download-progress', h) }
+    },
     offProgress: () => ipcRenderer.removeAllListeners('update:download-progress'),
-    onDownloaded: (cb: (data: { version: string }) => void) =>
-      ipcRenderer.on('update:downloaded', (_e, data) => cb(data)),
+    onDownloaded: (cb: (data: { version: string }) => void) => {
+      const h = (_e: unknown, data: { version: string }) => cb(data)
+      ipcRenderer.on('update:downloaded', h)
+      return () => { ipcRenderer.removeListener('update:downloaded', h) }
+    },
     offDownloaded: () => ipcRenderer.removeAllListeners('update:downloaded'),
-    onError: (cb: (msg: string) => void) =>
-      ipcRenderer.on('update:error', (_e, msg) => cb(msg)),
+    onError: (cb: (msg: string) => void) => {
+      const h = (_e: unknown, msg: string) => cb(msg)
+      ipcRenderer.on('update:error', h)
+      return () => { ipcRenderer.removeListener('update:error', h) }
+    },
     offError: () => ipcRenderer.removeAllListeners('update:error'),
     // canal: stable (implicit) sau beta
     getChannel: () => ipcRenderer.invoke('update:get-channel') as Promise<'stable' | 'beta'>,

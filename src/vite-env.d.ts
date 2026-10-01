@@ -426,11 +426,11 @@ export interface IElectronAPI {
     download: () => Promise<void>;
     install: () => void;
     openLogFile: () => void;
-    onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => void;
+    onProgress: (cb: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => () => void;
     offProgress: () => void;
-    onDownloaded: (cb: (data: { version: string }) => void) => void;
+    onDownloaded: (cb: (data: { version: string }) => void) => () => void;
     offDownloaded: () => void;
-    onError: (cb: (msg: string) => void) => void;
+    onError: (cb: (msg: string) => void) => () => void;
     offError: () => void;
     getChannel: () => Promise<'stable' | 'beta'>;
     setChannel: (channel: 'stable' | 'beta') => Promise<'stable' | 'beta'>;

@@ -13,7 +13,22 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- O trimitere scrisă cu cratimă, ca „Geneza 1-2", deschide acum versetul 2 din capitolul 1. Înainte deschidea capitolul de la început, iar mersul din verset în verset pornea de la versetul 1.
+- După ce porneai proiecția de la un verset sau o strofă aleasă, prima săgeată sărea la începutul capitolului sau al imnului. Acum merge la versetul sau strofa următoare, iar bara de jos arată din prima unde ești.
+- O trimitere biblică greșită („ioan 3 61", „ps 151") primește mesajul „Nu am găsit" și nu mai schimbă nimic pe ecran. Înainte arăta versetul 1 sau lăsa textul capitolului vechi sub numele cărții noi. La cărțile cu un singur capitol, „iuda 5" deschide versetul 5.
+- Trimiterea de sub verset rămâne corectă și când schimbi versetul cu săgețile din fereastra de proiecție.
+- La Imnuri, Enter apăsat imediat după ce ai scris numărul pregătește imnul scris, nu pe cel din lista de dinainte. Enter în „Caută în text" pregătește primul rezultat, nu proiectează imnul rămas în previzualizare.
+- Cu un imn pregătit în timpul proiecției, săgețile sus/jos merg mai departe prin listă.
+- Un imn corectat în editor apare corectat și în previzualizare, fără să-l mai alegi o dată.
+- Titlul unui imn nu mai iese din ecran la mărimi mari de text: se micșorează singur, ca strofele.
+- Un videoclip pornit cât ceasul sau un anunț era pe ecran nu mai rămâne ascuns sub ele. Al doilea videoclip pornește la volumul arătat de cursor, nu la maximum.
+- După un ceas sau un anunț, tastatura rămâne în fereastra principală când proiectezi un imn.
+- Bara de actualizare nu mai rămâne la 0% dacă ai deschis și închis Setările înainte de descărcare.
+- Acompaniamentul repornit imediat după oprire nu se mai stinge singur, iar închiderea automată de la finalul imnului nu mai închide ce ai pus între timp pe ecran.
+- Aplicația nu mai pornește de două ori: a doua pornire aduce în față fereastra deja deschisă.
+- Setările se salvează astfel încât o pană de curent să nu le poată șterge.
+- La o instalare nouă, imnurile din „Imnuri Speciale" nu mai apar copiate și în „Imnurile mele".
 
 ---
 

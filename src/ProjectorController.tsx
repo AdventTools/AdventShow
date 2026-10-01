@@ -59,6 +59,12 @@ interface ProjectorControllerProps {
    * App, nu bara: bara dispare cât e un imn „pregătit" și ar reporni de la zero.
    */
   zoomLevel: number | null;
+  /**
+   * Slide-ul de pe ecran (-1 = titlul). Îl ține App: bara apare abia după ce
+   * proiecția a pornit, deci una proprie ar începe mereu de la titlu și prima
+   * săgeată ar sări la începutul imnului sau al capitolului.
+   */
+  currentIndex: number;
 }
 
 function mmss(sec: number): string {
@@ -66,9 +72,8 @@ function mmss(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment, zoomLevel }: ProjectorControllerProps) {
+export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment, zoomLevel, currentIndex }: ProjectorControllerProps) {
   const t = useT();
-  const [currentIndex, setCurrentIndex] = useState(-1);
 
   const zoomPercent = zoomLevel === null ? null : Math.round(zoomLevel * 100);
   const [zoomToast, setZoomToast] = useState(false);
@@ -79,21 +84,12 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
   const navigate = useCallback(async (index: number) => {
     const minIdx = contentType === 'bible' ? 0 : -1;
     const clamped = Math.max(minIdx, Math.min(index, sections.length - 1));
-    setCurrentIndex(clamped);
+    currentIndexRef.current = clamped;
     onNavigate(clamped);
   }, [sections, onNavigate, contentType]);
 
-  // Sync index when projection window drives navigation (arrows/Escape pressed there)
-  useEffect(() => {
-    window.electron.projection.onControllerSync(({ currentIndex: idx }) => {
-      setCurrentIndex(idx);
-      currentIndexRef.current = idx;
-    });
-    return () => { window.electron.projection.offControllerSync(); };
-  }, []);
-
   // Keep a ref that's always in sync so the keyboard handler never captures a stale index
-  const currentIndexRef = useRef(0);
+  const currentIndexRef = useRef(currentIndex);
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
 
   // Suspendă navigarea imnurilor cât timp rulează un video (Space/săgeți controlează video-ul).
