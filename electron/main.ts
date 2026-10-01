@@ -216,8 +216,19 @@ function readSettings(): AppSettings {
   catch { return {} }
 }
 
+// Scriere prin fișier temporar + redenumire: o pană de curent în timpul scrierii
+// lăsa settings.json gol, iar cu el dispăreau parola, ecranul ales și fundalurile.
 function writeSettings(settings: AppSettings) {
-  fs.writeFileSync(getSettingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
+  const tinta = getSettingsPath()
+  const text = JSON.stringify(settings, null, 2)
+  const tmp = `${tinta}.tmp`
+  try {
+    fs.writeFileSync(tmp, text, 'utf-8')
+    fs.renameSync(tmp, tinta)
+  } catch {
+    // redenumirea poate fi refuzată pe Windows (antivirus, fișier ținut deschis)
+    fs.writeFileSync(tinta, text, 'utf-8')
+  }
 }
 
 // dependențele pentru tot ce vorbește cu hangar — main.ts rămâne singurul
@@ -1376,7 +1387,22 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'localfile', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } },
 ])
 
+// O singură instanță: a doua pornire (dublu-clic repetat cât se încarcă) aducea o a
+// doua aplicație pe aceeași bază și un al doilea ecran de proiecție peste primul.
+const primaInstanta = app.requestSingleInstanceLock()
+if (!primaInstanta) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!isWinAlive(win)) return
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  })
+}
+
 app.whenReady().then(() => {
+  if (!primaInstanta) return
   // Configure native macOS About panel
   app.setAboutPanelOptions({
     applicationName: 'AdventShow',
@@ -1410,7 +1436,7 @@ app.whenReady().then(() => {
     const filePath = decodeURIComponent(raw.startsWith('/') ? raw : '/' + raw)
     debugLog('[localfile] request:', request.url.substring(0, 120), '-> filePath:', filePath.substring(0, 120))
     // Use pathToFileURL to properly encode file path (handles spaces, special chars)
-    const fileUrl = `file://${encodeURI(filePath).replace(/#/g, '%23')}`
+    const fileUrl = pathToFileURL(filePath).href
     debugLog('[localfile] fetching:', fileUrl.substring(0, 120))
     return net.fetch(fileUrl, {
       headers: Object.fromEntries(request.headers.entries()),
@@ -1956,6 +1982,9 @@ app.whenReady().then(() => {
       projectionWin.focus()
       // Already open & ready: send immediately
       sendSlideToProjection(idx)
+      // Tastatura rămâne la operator, ca la crearea ferestrei: altfel, după un ceas
+      // sau un anunț, numărul imnului următor se tasta în fereastra de proiecție.
+      setTimeout(() => win?.focus(), 200)
     } else {
       createProjectionWindow()
       // Wait for the projection renderer to fully mount
@@ -2026,6 +2055,11 @@ app.whenReady().then(() => {
     const newIndex = action === 'next'
       ? Math.min(projState.currentIndex + 1, projState.sections.length - 1)
       : Math.max(projState.currentIndex - 1, minIndex)
+    // Trimiterea de sub verset vine gata scrisă din fereastra principală. Navigarea
+    // pornită de aici o lăsa pe versetul vechi; versetele sunt consecutive, deci
+    // numărul se mută cu același pas ca slide-ul.
+    const ref = projState.contentType === 'bible' ? projState.bibleRef?.match(/^(.*:)(\d+)$/) : null
+    if (ref) projState.bibleRef = ref[1] + (parseInt(ref[2], 10) + newIndex - projState.currentIndex)
     sendSlideToProjection(newIndex)
   })
 
@@ -2494,7 +2528,7 @@ app.whenReady().then(() => {
       }
     }
     if (!fs.existsSync(filePath)) return { error: 'Fișierul nu mai există pe disc' }
-    const fileUrl = `file://${encodeURI(filePath).replace(/#/g, '%23')}`
+    const fileUrl = pathToFileURL(filePath).href
     return { url: fileUrl, name: entry.title }
   })
 
@@ -2504,7 +2538,7 @@ app.whenReady().then(() => {
     if (!entry?.fileName) return { error: 'Fișierul nu este disponibil' }
     const filePath = path.join(getYouTubeDir(), entry.fileName)
     if (!fs.existsSync(filePath)) return { error: 'Fișierul nu mai există pe disc' }
-    const url = `file://${encodeURI(filePath).replace(/#/g, '%23')}`
+    const url = pathToFileURL(filePath).href
     return { url, name: entry.title }
   })
 

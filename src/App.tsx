@@ -227,8 +227,10 @@ function parseBibleReference(input: string): {
                 verse = v1;
                 endVerse = v2;
             } else {
+                // „Geneza 1-2" = capitolul 1, versetul 2. Mai multe capitole deodată
+                // nu se pot afișa, deci cratima fără alt număr desparte capitolul de verset.
                 chapter = v1;
-                endVerse = v2;
+                verse = v2;
             }
         } else if (/^\d+$/.test(last)) {
             const num = parseInt(last);
@@ -520,7 +522,7 @@ function App() {
     useEffect(() => { projSlideIndexRef.current = projSlideIndex; }, [projSlideIndex]);
 
     // Mark search as "new" whenever refSearch changes
-    useEffect(() => { searchConsumedRef.current = false; setBibleRefError(null); }, [refSearch]);
+    useEffect(() => { searchConsumedRef.current = false; setBibleRefError(null); }, [refSearch, contentSearch]);
 
     // Focus automat pe câmpul de căutare la pornire (tab Imnuri), imediat ce nu mai e
     // nicio fereastră de start deschisă — ca operatorul să poată tasta numărul direct.
@@ -770,9 +772,11 @@ function App() {
                 }
             }
             setHymns(result);
+            return result;
         } catch (e) {
             console.error('loadHymns error:', e);
             setHymns([]);
+            return [];
         }
     }, [refSearch, contentSearch, activeCategoryId, tab]);
 
@@ -910,6 +914,12 @@ function App() {
             window.clearTimeout(accTitluRef.current);
             accTitluRef.current = null;
         }
+        // Închiderea automată de după ultimul acord nu mai are ce închide dacă
+        // operatorul a pus deja altceva pe ecran.
+        if (accFinalRef.current !== null) {
+            window.clearTimeout(accFinalRef.current);
+            accFinalRef.current = null;
+        }
         if (accAutoNav.current) accAutoNav.current = false;
         else { accAutoOprit.current = true; setAccPreluat(true); }
         const n = previewSections.length;
@@ -939,6 +949,12 @@ function App() {
         if (accTitluRef.current !== null) {
             window.clearTimeout(accTitluRef.current);
             accTitluRef.current = null;
+        }
+        // Închiderea automată de după ultimul acord nu mai are ce închide dacă
+        // operatorul a pus deja altceva pe ecran.
+        if (accFinalRef.current !== null) {
+            window.clearTimeout(accFinalRef.current);
+            accFinalRef.current = null;
         }
         if (accFadeRef.current !== null) {
             window.clearInterval(accFadeRef.current);
@@ -1045,6 +1061,11 @@ function App() {
         if (!Number.isFinite(numar)) return;
         const el = accRef.current;
         if (!el) return;
+        // O oprire lină încă în curs ar stinge și muzica pornită acum.
+        if (accFadeRef.current !== null) {
+            window.clearInterval(accFadeRef.current);
+            accFadeRef.current = null;
+        }
         try {
             // Setările se citesc la fiecare pornire, nu se țin în stare: așa o
             // schimbare de dispozitiv sau de volum se aplică din prima apăsare.
@@ -1387,7 +1408,10 @@ function App() {
         setFloatingMonitorHidden(false);
         liveBus.notify();
         await window.electron.video.startPlayback(url, name);
-    }, []);
+        // Fereastra de proiecție poate fi una nouă: îi spunem volumul afișat aici,
+        // altfel sala primea 100% cu cursorul pe 30% sau pe „fără sunet".
+        window.electron.video.volume(videoMuted ? 0 : videoVolume);
+    }, [videoMuted, videoVolume]);
 
     const videoPlay = useCallback(() => window.electron.video.play(), []);
     const videoPause = useCallback(() => window.electron.video.pause(), []);
@@ -1469,12 +1493,26 @@ function App() {
         const book = matchBibleBook(ref.bookQuery, books);
         if (!book) return false;
 
+        // Întâi se citește tot, apoi se schimbă ce e pe ecran: o trimitere care nu
+        // există lăsa textul capitolului vechi sub numele cărții noi.
+        const chs = await window.electron.bible.getChapters(book.id);
+        // Cărțile cu un singur capitol: „iuda 5" înseamnă versetul 5.
+        if (ref.chapter && !ref.verse && chs.length === 1 && ref.chapter !== chs[0]) {
+            ref.verse = ref.chapter;
+            ref.chapter = chs[0];
+        }
+        const vrs = ref.chapter ? await window.electron.bible.getVerses(book.id, ref.chapter) : [];
+        if (ref.chapter && !vrs.length) return false;
+        if (ref.chapter && ref.verse && !vrs.some((v: BibleVerse) => v.verse === ref.verse)) return false;
+        const passage = ref.chapter && ref.verse && ref.endVerse
+            ? await window.electron.bible.getVerseRange(book.id, ref.chapter, ref.verse, ref.endVerse)
+            : [];
+
         // Always expand sidebar tree: select book + load chapters
         setSelectedBookId(book.id);
         setSelectedBookName(book.name);
         setBibleSearchResults(null);
         setBiblePassage(null);
-        const chs = await window.electron.bible.getChapters(book.id);
         setChapters(chs);
 
         if (!ref.chapter) {
@@ -1489,15 +1527,11 @@ function App() {
 
         // Load chapter verses + expand sidebar to chapter
         setSelectedChapter(ref.chapter);
-        const vrs = await window.electron.bible.getVerses(book.id, ref.chapter);
-        if (!vrs.length) return false;
         skipAutoPreviewRef.current = true; // prevent auto-preview from overriding our precise index
 
-        if (ref.verse && ref.endVerse) {
+        if (ref.verse && ref.endVerse && passage.length) {
             // Interval de versete (ex: gen 1:3-5) → afișează DOAR pasajul; contorul n/N și
             // săgețile rămân în pasaj, iar ↓ dincolo de ultimul verset extinde la tot capitolul.
-            const passage = await window.electron.bible.getVerseRange(book.id, ref.chapter, ref.verse, ref.endVerse);
-            if (!passage.length) return false;
             setVerses(passage);
             const secs = passage.map((v: BibleVerse) => ({ text: v.text, type: 'verse', label: `v. ${v.verse}` }));
             setPreviewType('bible');
@@ -1790,7 +1824,9 @@ function App() {
 
             // ↑↓ navigate hymn list / bible verses
             if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !inInput) {
-                if (projecting) return; // Let ProjectorController handle
+                // Bara de proiecție le preia doar cât e pe ecran ce e în previzualizare;
+                // cu un imn pregătit, săgețile merg mai departe prin listă.
+                if (projecting && previewLive) return;
                 e.preventDefault();
                 if (tab === 'imnuri') {
                     const currentIdx = hymns.findIndex(h => h.id === selectedHymnId);
@@ -1876,12 +1912,15 @@ function App() {
             const isNewSearch = refSearch.trim().length > 0 && !searchConsumedRef.current;
 
             if (tab === 'imnuri') {
-                if (isNewSearch) {
+                if (isNewSearch || (contentSearch.trim().length > 0 && !searchConsumedRef.current)) {
                     // Search nou → DOAR pregătește primul rezultat în previzualizare.
                     // În timpul proiecției NU mai oprim: imnul curent rămâne live până confirmi.
-                    if (hymns.length > 0) {
+                    // Lista se cere acum, nu se ia cea de pe ecran: ea vine cu întârziere
+                    // după tastare, iar un Enter rapid pregătea imnul din lista veche.
+                    const gasite = await loadHymns();
+                    if (gasite.length > 0) {
                         searchConsumedRef.current = true;
-                        await previewHymn(hymns[0].id);
+                        await previewHymn(gasite[0].id);
                     }
                 } else if (previewSections.length > 0) {
                     // Search consumat + Enter = trece live (fluid dacă proiectăm, altfel pornește)
@@ -1986,7 +2025,7 @@ function App() {
             return;
         }
     }, [projecting, previewSections, projSlideIndex, startProjection, tab,
-        selectedHymnId, hymns, previewHymn, loadBibleReference,
+        selectedHymnId, hymns, previewHymn, loadHymns, loadBibleReference,
         navigateSlide, contentSearch, doBibleContentSearch, refSearch, biblePassage,
         previewLive, goLivePreview,
         verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul, t]);
@@ -2537,6 +2576,7 @@ function App() {
                     videoActive={!!videoStatus}
                     accompaniment={accControl}
                     zoomLevel={marimeProiectie}
+                    currentIndex={projSlideIndex}
                 />
             )}
 
@@ -2605,9 +2645,15 @@ function App() {
                     editor={hymnEditor}
                     onClose={() => setHymnEditor(null)}
                     onSave={async () => {
+                        const editat = hymnEditor.hymnId;
                         setHymnEditor(null);
                         await loadHymns();
                         await loadCategories();
+                        // Previzualizarea ține textul de dinainte de corectură; fără asta,
+                        // Enter proiecta varianta veche. Ce e deja pe ecran nu se atinge.
+                        if (editat && editat === selectedHymnId && !(projecting && previewLive)) {
+                            await previewHymn(editat);
+                        }
                     }}
                 />
             )}
@@ -8131,14 +8177,10 @@ function UpdateChecker() {
         const onProg = (data: { percent: number }) => setProgress(data.percent)
         const onDone = () => { setDownloading(false); setReady(true) }
         const onErr = (msg: string) => { setDownloading(false); setError(msg) }
-        window.electron.update.onProgress(onProg)
-        window.electron.update.onDownloaded(onDone)
-        window.electron.update.onError(onErr)
-        return () => {
-            window.electron.update.offProgress()
-            window.electron.update.offDownloaded()
-            window.electron.update.offError()
-        }
+        const offProg = window.electron.update.onProgress(onProg)
+        const offDone = window.electron.update.onDownloaded(onDone)
+        const offErr = window.electron.update.onError(onErr)
+        return () => { offProg(); offDone(); offErr() }
     }, [])
 
     const doCheck = async () => {

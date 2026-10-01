@@ -228,6 +228,7 @@ export function ProjectionPage() {
   // ── Video state ──
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const videoVolRef = useRef(1);
   const bgVideoRef = useRef<HTMLVideoElement>(null);
   const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -316,6 +317,9 @@ export function ProjectionPage() {
     window.electron.video.onLoad((url, _name) => {
       setVideoUrl(url);
       setData(null); // hide hymn/bible content
+      // Ceasul și anunțul stau deasupra videoului; rămase, îl acopereau.
+      setTimer(null);
+      setFreeText(null);
       // Audio output: use saved device if available
       window.electron.settings.get().then(async s => {
         if (s.audioOutputDeviceId && videoRef.current) {
@@ -337,6 +341,7 @@ export function ProjectionPage() {
       if (videoRef.current) videoRef.current.currentTime = time;
     });
     window.electron.video.onVolume((vol) => {
+      videoVolRef.current = vol;
       if (videoRef.current) videoRef.current.volume = vol;
     });
 
@@ -434,7 +439,7 @@ export function ProjectionPage() {
   // Reset shrink factor when slide changes
   useEffect(() => {
     setShrinkFactor(1);
-  }, [data?.currentIndex, data?.hymnNumber, fontSizeMultiplier]);
+  }, [data?.currentIndex, data?.hymnNumber, data?.hymnTitle, section?.text, fontSizeMultiplier]);
 
   // la redimensionarea containerului (schimbare display/zoom) re-pornim potrivirea
   const [resizeTick, setResizeTick] = useState(0);
@@ -601,6 +606,10 @@ export function ProjectionPage() {
           className="absolute inset-0 w-full h-full object-contain z-20"
           style={{ background: '#000' }}
           autoPlay
+          onLoadedMetadata={() => {
+            // Un videoclip nou e un element nou, care pornește la volum maxim.
+            if (videoRef.current) videoRef.current.volume = videoVolRef.current;
+          }}
           onCanPlay={() => {
             videoRef.current?.play().catch(() => { });
           }}
@@ -784,12 +793,12 @@ export function ProjectionPage() {
             </div>
           ) : data && data.currentIndex === -1 ? (
             /* ── Title slide ── */
-            <div className="flex flex-col items-center gap-6">
+            <div ref={contentRef} className="flex flex-col items-center gap-6">
               <span
                 className="font-black tabular-nums"
                 style={{
                   color: hymnNumberColor,
-                  fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${fontSizeMultiplier})`,
+                  fontSize: `calc(clamp(3rem, 10vw, 8rem) * ${fontSizeMultiplier * shrinkFactor})`,
                   lineHeight: 1,
                   textShadow: '0 4px 48px rgba(0,0,0,0.9)',
                 }}
@@ -800,8 +809,9 @@ export function ProjectionPage() {
                 className="font-bold uppercase tracking-widest"
                 style={{
                   color: contentTextColor,
-                  fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${fontSizeMultiplier})`,
+                  fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${fontSizeMultiplier * shrinkFactor})`,
                   letterSpacing: '0.12em',
+                  overflowWrap: 'anywhere',
                   textShadow: '0 2px 32px rgba(0,0,0,0.9)',
                 }}
               >
