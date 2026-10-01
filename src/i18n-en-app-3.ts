@@ -428,4 +428,7 @@ export const EN_APP_3: Record<string, string> = {
     'Videoul de fundal': 'Background video',
     'Niciunul ales': 'None chosen',
     'Cât de vizibil e fundalul: {pct}%': 'How visible the background is: {pct}%',
+    'Proiecția e pornită. Actualizarea se instalează după ce o oprești.': 'Projection is on. The update will install after you stop it.',
+    'Ecranul de proiecție a revenit.': 'The projection screen is back.',
+    'Ecranul de proiecție s-a deconectat. Proiecția revine singură când se reconectează.': 'The projection screen disconnected. Projection comes back by itself when it reconnects.',
 };

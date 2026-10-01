@@ -194,6 +194,12 @@ contextBridge.exposeInMainWorld('electron', {
     onClosed: (cb: () => void) =>
       ipcRenderer.on('projection:closed', () => cb()),
     offClosed: () => ipcRenderer.removeAllListeners('projection:closed'),
+    // ecranul de proiecție s-a deconectat / a revenit (proiecția revine singură)
+    onScreen: (cb: (data: { conectat: boolean }) => void) => {
+      const h = (_e: unknown, data: { conectat: boolean }) => cb(data)
+      ipcRenderer.on('projection:screen', h)
+      return () => { ipcRenderer.removeListener('projection:screen', h) }
+    },
     onZoom: (cb: (action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void) =>
       ipcRenderer.on('projection:zoom', (_e, action) => cb(action)),
     offZoom: () => ipcRenderer.removeAllListeners('projection:zoom'),
@@ -217,7 +223,7 @@ contextBridge.exposeInMainWorld('electron', {
   update: {
     check: () => ipcRenderer.invoke('update:check') as Promise<{ available: boolean; version?: string; isDelta?: boolean; notes?: string }>,
     download: () => ipcRenderer.invoke('update:download'),
-    install: () => ipcRenderer.invoke('update:install'),
+    install: () => ipcRenderer.invoke('update:install') as Promise<{ amanat: boolean }>,
     openLogFile: () => ipcRenderer.invoke('update:open-log'),
     // Fiecare abonare își întoarce propria dezabonare: bannerul din fereastra
     // principală și panoul din Setări ascultă aceleași canale, iar off* le scoate
