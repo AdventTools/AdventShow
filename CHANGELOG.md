@@ -1,17 +1,6 @@
 # Changelog — AdventShow
 
-## v1.6.2 (26 Septembrie 2026)
-
-### Modificări
-- Tema deschisă se poate folosi acum peste tot: textele din Setări, Ajutor, Despre, ferestrele de raportare și de răspunsuri, bara de proiecție de jos și fila Video nu mai rămân albe pe alb, iar bara de jos nu mai rămâne închisă la culoare. Accentele (LIVE, „de rezolvat", etichetele strofelor) au variante care se văd pe alb. Tema închisă a rămas neschimbată.
-- Butonul „Setări" din bara de sus își cuprinde acum eticheta, care ieșea din chenar.
-- În bara de proiecție, punctul pentru slide-ul de titlu se vede și când nu e cel curent.
-- Pe Windows, listele care se deschid din selectoare (drop-down) nu mai au opțiunile albe pe alb — se vede toată lista, nu doar opțiunea aleasă.
-- Imnurile pot avea acum și ele un fundal separat, ca Biblia (Setări → Proiecție). Fundalul general rămâne pentru ce nu are unul separat, inclusiv Ceasul și Anunțurile.
-
----
-
-## Nepublicat
+## v1.6.3 (01 Octombrie 2026)
 
 ### Modificări
 - O trimitere scrisă cu cratimă, ca „Geneza 1-2", deschide acum versetul 2 din capitolul 1. Înainte deschidea capitolul de la început, iar mersul din verset în verset pornea de la versetul 1.
@@ -29,6 +18,23 @@
 - Aplicația nu mai pornește de două ori: a doua pornire aduce în față fereastra deja deschisă.
 - Setările se salvează astfel încât o pană de curent să nu le poată șterge.
 - La o instalare nouă, imnurile din „Imnuri Speciale" nu mai apar copiate și în „Imnurile mele".
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
+## v1.6.2 (26 Septembrie 2026)
+
+### Modificări
+- Tema deschisă se poate folosi acum peste tot: textele din Setări, Ajutor, Despre, ferestrele de raportare și de răspunsuri, bara de proiecție de jos și fila Video nu mai rămân albe pe alb, iar bara de jos nu mai rămâne închisă la culoare. Accentele (LIVE, „de rezolvat", etichetele strofelor) au variante care se văd pe alb. Tema închisă a rămas neschimbată.
+- Butonul „Setări" din bara de sus își cuprinde acum eticheta, care ieșea din chenar.
+- În bara de proiecție, punctul pentru slide-ul de titlu se vede și când nu e cel curent.
+- Pe Windows, listele care se deschid din selectoare (drop-down) nu mai au opțiunile albe pe alb — se vede toată lista, nu doar opțiunea aleasă.
+- Imnurile pot avea acum și ele un fundal separat, ca Biblia (Setări → Proiecție). Fundalul general rămâne pentru ce nu are unul separat, inclusiv Ceasul și Anunțurile.
 
 ---
 
