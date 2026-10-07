@@ -745,6 +745,19 @@ if [ ! -f "$STATE/mirror.done" ]; then
   mark_done mirror
 fi
 
+# ── Curățenie în release/ ────────────────────────────────────────────────────
+#
+# Se rulează doar aici, după ce hangar a confirmat toate fișierele: o stare de
+# reluare nu mai are nevoie de nimic din ce se șterge. Rămâne doar versiunea
+# curentă, fără aplicația despachetată (mac-arm64, ~360 MB); restul e în hangar.
+step "Curățenie în release/"
+rm -rf "${RELEASE_DIR}/mac-arm64"
+for old in release/*/; do
+  old="${old%/}"
+  [ "$old" = "$RELEASE_DIR" ] || rm -rf -- "$old"
+done
+ok "release/ păstrează doar v${NEW_VERSION} ($(du -sh release | cut -f1))"
+
 step "GATA — v${NEW_VERSION} urcat"
 echo ""
 echo "  MAI TREBUIE UN PAS, FĂCUT DE OM: promovează versiunea în hangar."
