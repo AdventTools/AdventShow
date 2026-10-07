@@ -65,6 +65,11 @@ fi
 DMG="release/${VERSION}/AdventShow-Mac-${VERSION}.dmg"
 [ -f "$DMG" ] || { echo "❌ DMG nu a fost produs: $DMG"; exit 1; }
 
+for old in release/*/; do
+    old="${old%/}"
+    [ "$old" = "release/${VERSION}" ] || rm -rf -- "$old"
+done
+
 SIZE=$(du -h "$DMG" | cut -f1)
 echo ""
 echo "✅ DMG: $DMG ($SIZE)"
