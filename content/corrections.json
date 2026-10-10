@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-09-26T08:32:43+00:00",
+    "generated": "2026-10-10T16:54:37+00:00",
     "entries": [
         {
             "seq": 1,
@@ -688,6 +688,42 @@
             "force": false,
             "ts": "2026-09-26T08:32:42.000Z",
             "text_hash": "fbecaac731dd7c9311add801f9c79a560fe40f2e06ff44cdbee849412ed4460e"
+        },
+        {
+            "seq": 23,
+            "category": "Imnuri Speciale",
+            "number": "003",
+            "title": "Asteptand marea zi",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Aşteptând marea zi\nCând Isus va reveni,\nSă ajungem acas’\nDoar puţin a mai rămas !\nSă-ntâlnim pe cei plecaţi\nDintre noi, surori şi fraţi…\nO, ce zi, minunată va fi !"
+                },
+                {
+                    "type": "refren",
+                    "text": "O, ce zi de bucurii\nCu sclipiri de veşnicii,\nCu Isus cel Minunat,\nCare ne-a răscumpărat!\nÎmpreună printre sori\nVom zbura biruitori !\nO, ce zi, scumpă zi vom trăi !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "În curând vom zări\nÎnceput de veşnicii,\nFără lacrimi, fără plâns\nCe durerile le-au strâns…\nŞi-n coroană câte-o stea\nFiecare vom purta !\nO, ce zi, minunată va fi !"
+                },
+                {
+                    "type": "refren",
+                    "text": "O, ce zi de bucurii\nCu sclipiri de veşnicii,\nCu Isus cel Minunat,\nCare ne-a răscumpărat!\nÎmpreună printre sori\nVom zbura biruitori !\nO, ce zi, scumpă zi vom trăi !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Aşteptăm marea zi,\nCând răsplata vom primi !\nPoposind, chiar pe mal,\nLângă marea de cristal !\nPeste aur să umblăm,\nOsanale să-I cântăm !\nO, ce zi, minunată va fi !"
+                },
+                {
+                    "type": "refren",
+                    "text": "O, ce zi de bucurii\nCu sclipiri de veşnicii,\nCu Isus cel Minunat,\nCare ne-a răscumpărat!\nÎmpreună printre sori\nVom zbura biruitori !\nO, ce zi, scumpă zi vom trăi !"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T16:54:37.000Z",
+            "text_hash": "17ca764e9a5edd226985b03e4d55474d572bc626fab45dd80f366d0c2496fc1f",
+            "only_if_absent": true
         }
     ]
 }
