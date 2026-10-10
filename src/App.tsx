@@ -116,23 +116,33 @@ function stripStanzaNumber(text: string): string {
     return text.replace(/^\d+\.\s*/, '');
 }
 
+/**
+ * Ordinea slide-urilor unui imn. Refrenul scris după o strofă e al ei, deci imnurile
+ * cu refrene diferite (IC 500: alt vers final la fiecare) le arată pe fiecare la locul
+ * lui. Strofa fără refren după ea îl primește pe ultimul de dinaintea ei, sau pe primul
+ * din imn: un refren scris o singură dată se repetă după toate strofele.
+ */
 function expandHymnSections(sections: HymnSection[]) {
-    const refren = sections.find(s => s.type === 'refren');
+    const primulRefren = sections.find(s => s.type === 'refren');
     const result: { text: string; type: string; label: string }[] = [];
     let stanzaNum = 0;
-    for (const sec of sections) {
+    let ultimulRefren: HymnSection | undefined;
+    sections.forEach((sec, idx) => {
         if (sec.type === 'strofa') {
             stanzaNum++;
             result.push({ text: stripStanzaNumber(sec.text), type: 'strofa', label: `Strofa ${stanzaNum}` });
+            const urmator = sections[idx + 1];
+            const refren = urmator?.type === 'refren' ? urmator : (ultimulRefren ?? primulRefren);
             if (refren) {
+                ultimulRefren = refren;
                 result.push({ text: refren.text, type: 'refren', label: 'Refren' });
             }
-        } else if (sec.type === 'refren') {
-            const idx = sections.indexOf(sec);
-            if (idx > 0 && sections[idx - 1].type === 'strofa') continue;
+        } else if (idx === 0 || sections[idx - 1].type !== 'strofa') {
+            // refrenul de la început (sau unul după alt refren) se arată o dată, la locul lui
+            ultimulRefren = sec;
             result.push({ text: sec.text, type: 'refren', label: 'Refren' });
         }
-    }
+    });
     return result;
 }
 
