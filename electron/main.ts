@@ -194,8 +194,20 @@ function getLogPath() {
 }
 
 function debugLog(...args: unknown[]) {
-  const settings = readSettings()
-  if (!settings.debugLog) return
+  if (!readSettings().debugLog) return
+  writeLogLine(args)
+}
+
+/**
+ * Rânduri scrise ÎNTOTDEAUNA, și cu jurnalul de depanare oprit: pornirea și pașii
+ * actualizării. Puține, dar fără ele un „nu a repornit după update" vine fără nicio
+ * urmă — jurnalul complet e oprit la aproape toate bisericile.
+ */
+function updateLog(...args: unknown[]) {
+  writeLogLine(args)
+}
+
+function writeLogLine(args: unknown[]) {
   const timestamp = new Date().toISOString()
   const message = args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ')
   const line = `[${timestamp}] ${message}\n`
@@ -323,11 +335,16 @@ function readLogTail(lines: number): string {
   try {
     const p = getLogPath()
     if (!fs.existsSync(p)) return ''
-    // Cu jurnalul oprit din Setări, fișierul rămâne cum era: un raport de azi pleca
-    // cu întâmplări de acum luni de zile, care nu au legătură cu problema.
-    if (Date.now() - fs.statSync(p).mtimeMs > 24 * 60 * 60 * 1000) return ''
+    // Doar ultimele 24 de ore: cu jurnalul complet oprit din Setări, fișierul are
+    // întâmplări de acum luni de zile, care nu au legătură cu problema de azi.
     const all = fs.readFileSync(p, 'utf-8').split('\n')
-    return all.slice(-lines).join('\n').slice(-200000)
+    const prag = Date.now() - 24 * 60 * 60 * 1000
+    const start = all.findIndex(l => {
+      const m = l.match(/^\[(\d{4}-\d\d-\d\dT[\d:.]+Z)\]/)
+      return m !== null && Date.parse(m[1]) >= prag
+    })
+    if (start === -1) return ''
+    return all.slice(Math.max(start, all.length - lines)).join('\n').slice(-200000)
   } catch {
     return ''
   }
@@ -412,7 +429,7 @@ function wireAutoUpdater() {
     })
   })
   autoUpdater.on('update-downloaded', (info) => {
-    debugLog('[autoUpdater] update-downloaded', info.version)
+    updateLog('[Update] descărcată', info.version)
     // Coborârea permisă la ieșirea din beta s-a consumat.
     if (readSettings().pendingDowngrade) {
       const s = readSettings()
@@ -423,7 +440,7 @@ function wireAutoUpdater() {
     if (forcedUpdate.required) installWhenNotProjecting()
   })
   autoUpdater.on('error', (err) => {
-    debugLog('[autoUpdater] error', err == null ? 'unknown' : (err.stack || err.message || String(err)))
+    updateLog('[Update] eroare', err == null ? 'unknown' : (err.stack || err.message || String(err)))
     if (isWinAlive(win)) win.webContents.send('update:error',
       err == null ? 'Eroare necunoscută la actualizare' : (err.message || String(err)))
   })
@@ -460,7 +477,7 @@ function installWhenNotProjecting() {
     })
     return
   }
-  debugLog('[Update] aplic update-ul obligatoriu', forcedUpdate.version)
+  updateLog('[Update] aplic update-ul obligatoriu', forcedUpdate.version)
   performQuitAndInstall()
 }
 
@@ -475,7 +492,7 @@ function installWhenNotProjecting() {
 function performQuitAndInstall() {
   if (!updatesSupported()) return
   try {
-    debugLog('[Update] quitAndInstall: închid ferestrele și pornesc installerul')
+    updateLog('[Update] închid ferestrele și pornesc installerul', app.getVersion())
     isInstalling = true // ca win.on('closed') să nu cheme app.quit() în paralel
     app.removeAllListeners('window-all-closed')
     for (const w of BrowserWindow.getAllWindows()) {
@@ -485,12 +502,15 @@ function performQuitAndInstall() {
       } catch { /* fereastra poate fi deja distrusă */ }
     }
     setImmediate(() => {
-      // isSilent=true (no installer UI), isForceRunAfter=true (relaunch after install).
-      autoUpdater.quitAndInstall(true, true)
+      // isSilent=false: installerul one-click arată o singură fereastră cu bara de
+      // progres, fără întrebări. Silențios nu se vedea nimic minute întregi pe un
+      // calculator lent, omul pornea aplicația de mână peste instalarea în curs și
+      // primea o pagină albă. isForceRunAfter=true: pornește singură la final.
+      autoUpdater.quitAndInstall(false, true)
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    debugLog('[Update] install failed:', msg)
+    updateLog('[Update] instalarea a eșuat:', msg)
     if (isWinAlive(win)) win.webContents.send('update:error', msg || 'Instalarea a eșuat')
   }
 }
@@ -1618,7 +1638,7 @@ app.whenReady().then(() => {
     }
   })
 
-  debugLog('[App] Ready. Platform:', process.platform, 'Version:', app.getVersion(),
+  updateLog('[App] Ready. Platform:', process.platform, 'Version:', app.getVersion(),
     'userData:', app.getPath('userData'))
   debugLog('[App] Displays:', screen.getAllDisplays().map(d =>
     `${d.id}(${d.bounds.width}x${d.bounds.height})`).join(', '))
