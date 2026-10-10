@@ -13,9 +13,7 @@ import {
     Lock,
     Monitor,
     Music,
-    AudioLines,
-    CircleSlash,
-    CloudDownload,
+    ListMusic,
     Pause,
     Plus,
     Play,
@@ -2974,15 +2972,39 @@ function stareAcompaniament(hymn: Hymn, s: AccStates, accCategoryId?: number): S
     return s.synced.has(n) ? 'sincronizat' : 'descarcat';
 }
 
+// Nota din lucide („Music"), desenată în stilul pachetului pentru stările pe care
+// lucide nu le are: tăiată (fără acompaniament) și cu săgeată (de descărcat).
+const ICON_SVG = {
+    viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2,
+    strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
+};
+function NotaTaiata() {
+    return (
+        <svg {...ICON_SVG}>
+            <mask id="nota-taiata"><rect width="24" height="24" fill="white" /><path d="M2 2l20 20" stroke="black" strokeWidth="5" /></mask>
+            <g mask="url(#nota-taiata)"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></g>
+            <path d="M2 2l20 20" />
+        </svg>
+    );
+}
+function NotaDeDescarcat() {
+    return (
+        <svg {...ICON_SVG}>
+            <path d="M7 15V4l9-1.5V12" /><circle cx="4.5" cy="15" r="2.5" /><circle cx="13.5" cy="12" r="2.5" />
+            <path d="M19 15v7" /><path d="m16 19 3 3 3-3" />
+        </svg>
+    );
+}
+
 function AccIcon({ stare }: { stare: StareAcc }) {
     const t = useT();
     const fel = {
-        lipsa: { Icon: CircleSlash, titlu: t('Fără acompaniament') },
-        disponibil: { Icon: CloudDownload, titlu: t('Are acompaniament, nedescărcat încă') },
+        lipsa: { Icon: NotaTaiata, titlu: t('Fără acompaniament') },
+        disponibil: { Icon: NotaDeDescarcat, titlu: t('Are acompaniament, nedescărcat încă') },
         descarcat: { Icon: Music, titlu: t('Acompaniament descărcat') },
-        sincronizat: { Icon: AudioLines, titlu: t('Acompaniament descărcat, sincronizat cu versurile') },
+        sincronizat: { Icon: ListMusic, titlu: t('Acompaniament descărcat, sincronizat cu versurile') },
     }[stare];
-    return <span className={`hymn-acc hymn-acc-${stare}`} title={fel.titlu}><fel.Icon /></span>;
+    return <span className="hymn-acc" title={fel.titlu}><fel.Icon /></span>;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
