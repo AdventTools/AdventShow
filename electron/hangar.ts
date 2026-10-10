@@ -36,6 +36,7 @@ export const HEARTBEAT_INTERVAL_MS = 6 * 3600 * 1000;
 /** Coada de retrimitere: câte rapoarte reținem cât timp nu e internet. */
 const QUEUE_MAX = 25;
 const QUEUE_FILE = 'hangar-queue.json';
+const MESSAGES_FILE = 'hangar-mesaje.json';
 
 export type UpdateChannel = 'stable' | 'beta';
 
@@ -390,6 +391,82 @@ export async function flushReportQueue(deps: HangarDeps): Promise<void> {
 
 export function pendingReportCount(deps: HangarDeps): number {
   return readQueue(deps).length;
+}
+
+// ── Mesajele trimise și răspunsurile autorilor ───────────────────────────────
+
+export interface SentMessage {
+  id: number;
+  kind: 'bug' | 'suggestion';
+  subject: string;
+  body: string;
+  status: 'new' | 'triaged' | 'open' | 'resolved' | 'rejected';
+  reply: string;
+  replied_at: string | null;
+  created_at: string;
+}
+
+interface MessagesFile { items: SentMessage[]; seen: Record<string, string> }
+
+function messagesPath(deps: HangarDeps): string {
+  return path.join(deps.userDataDir, MESSAGES_FILE);
+}
+
+function readMessages(deps: HangarDeps): MessagesFile {
+  try {
+    const raw = JSON.parse(fs.readFileSync(messagesPath(deps), 'utf-8')) as MessagesFile;
+    return { items: Array.isArray(raw.items) ? raw.items : [], seen: raw.seen ?? {} };
+  } catch {
+    return { items: [], seen: {} };
+  }
+}
+
+function writeMessages(deps: HangarDeps, m: MessagesFile): void {
+  try {
+    fs.writeFileSync(messagesPath(deps), JSON.stringify(m, null, 2), 'utf-8');
+  } catch (err) {
+    deps.log('[Hangar] nu pot scrie mesajele:', String(err));
+  }
+}
+
+/**
+ * Aduce de la hub tot ce a trimis instalarea asta (probleme și sugestii), cu starea și
+ * răspunsul autorilor. Hub-ul e sursa: așa ajung și răspunsurile la mesaje trimise
+ * înainte ca aplicația să le țină minte. Copia locală e doar ca lista să se vadă și
+ * fără internet. Offline = rămâne ce era.
+ */
+export async function refreshMessages(deps: HangarDeps): Promise<void> {
+  const out = await postJson(`${REPORT_URL}?do=replies`, {
+    project: HANGAR_KEY,
+    install: installId(deps),
+  }, 10000);
+  if (!out || hubStatus(out.res) !== 200 || !out.json.ok || !Array.isArray(out.json.items)) return;
+  const m = readMessages(deps);
+  m.items = out.json.items as SentMessage[];
+  writeMessages(deps, m);
+}
+
+/** Răspunsurile încă necitite: un răspuns schimbat de autori contează iar ca nou. */
+function isUnread(m: MessagesFile, i: SentMessage): boolean {
+  return i.reply !== '' && !!i.replied_at && m.seen[String(i.id)] !== i.replied_at;
+}
+
+export function listMessages(deps: HangarDeps): (SentMessage & { unread: boolean })[] {
+  const m = readMessages(deps);
+  return m.items.map(i => ({ ...i, unread: isUnread(m, i) }));
+}
+
+export function unreadReplyCount(deps: HangarDeps): number {
+  const m = readMessages(deps);
+  return m.items.filter(i => isUnread(m, i)).length;
+}
+
+export function markRepliesRead(deps: HangarDeps, ids: number[]): void {
+  const m = readMessages(deps);
+  for (const i of m.items) {
+    if (ids.includes(i.id) && i.replied_at) m.seen[String(i.id)] = i.replied_at;
+  }
+  writeMessages(deps, m);
 }
 
 // ── Ce s-a decis cu propunerile lui ──────────────────────────────────────────

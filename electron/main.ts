@@ -58,7 +58,8 @@ import {
 } from './accompaniment'
 import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, compareVersions, flushReportQueue,
-  hangarPlatform, pendingReportCount, sendReport, startHeartbeat, track, updateChannel,
+  hangarPlatform, listMessages, markRepliesRead, pendingReportCount, refreshMessages, sendReport,
+  startHeartbeat, track, unreadReplyCount, updateChannel,
 } from './hangar'
 import {
   parsePresentationFile, seedTemplatesIfNeeded, listTemplates, loadTemplate,
@@ -280,7 +281,7 @@ let contentRoutineDone = false
  * îl apăsa și găsea fereastra goală.
  */
 function notifyDecisions(deps: ContribDeps) {
-  const n = listPendingDecisions(deps).length + listHymnStates(deps).length
+  const n = listPendingDecisions(deps).length + listHymnStates(deps).length + unreadReplyCount(deps)
   if (isWinAlive(win)) win.webContents.send('contrib:decisions', n)
 }
 
@@ -1590,6 +1591,7 @@ app.whenReady().then(() => {
             .then(() => (app.isPackaged ? maybeSendInventory(deps) : undefined))
             .then(() => refreshProposalDecisions(deps))
             .then(() => flushReportQueue(deps))
+            .then(() => refreshMessages(deps))
             .then(() => { contentRoutineDone = true; notifyDecisions(deps) })
             .catch(err => debugLog('[content] eroare:', String(err)))
           contentRoutine()
@@ -2298,12 +2300,20 @@ app.whenReady().then(() => {
     // Mesaj scris de om chiar acum: nu-l punem în coadă pe tăcute, îi spunem ce
     // s-a întâmplat ca să nu-și piardă textul.
     const res = await sendReport(hangarDeps(), report, false)
+    // Mesajul nou apare imediat în „Mesajele mele", fără să aștepte următoarea verificare.
+    if (res.ok) refreshMessages(hangarDeps()).catch(() => { /* apare la următoarea verificare */ })
     return res.ok
       ? { ok: true as const }
       : { ok: false as const, reason: res.reason, message: res.message }
   })
   // Ce a rămas de trimis din lipsă de internet (afișat în Setări).
   ipcMain.handle('feedback:pending', () => pendingReportCount(hangarDeps()))
+  // Ce a trimis instalarea și ce i-au răspuns autorii.
+  ipcMain.handle('feedback:messages', () => listMessages(hangarDeps()))
+  ipcMain.handle('feedback:unread-replies', () => unreadReplyCount(hangarDeps()))
+  ipcMain.handle('feedback:mark-read', (_e, ids: number[]) => {
+    markRepliesRead(hangarDeps(), Array.isArray(ids) ? ids.map(Number) : [])
+  })
   ipcMain.handle('feedback:retry-pending', async () => {
     await flushReportQueue(hangarDeps())
     return pendingReportCount(hangarDeps())
