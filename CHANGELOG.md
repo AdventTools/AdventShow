@@ -1,17 +1,23 @@
 # Changelog — AdventShow
 
-## v1.6.7 (10 Octombrie 2026)
+## v1.6.8 (10 Octombrie 2026)
 
 ### Modificări
-- Pe Windows, instalarea unei actualizări se vede: apare o fereastră cu bara de progres, iar la final aplicația pornește singură. Înainte nu se vedea nimic, iar pe un calculator mai lent aplicația pornită de mână în timpul instalării putea rămâne cu ecranul alb. Așteaptă să pornească singură.
-- Pornirea și pașii unei actualizări se notează mereu în jurnalul aplicației, chiar dacă jurnalul de depanare e oprit, ca o problemă la actualizare să poată fi înțeleasă din raportul trimis.
+- „Ce e nou", după o actualizare, arată versiunea la care ai ajuns și toate schimbările de la versiunea pe care o aveai, într-o singură listă, fără versiunile intermediare. Istoricul complet, pe versiuni, rămâne în Setări.
 
 ---
 
 ## Nepublicat
 
+_(nimic încă)_
+
+---
+
+## v1.6.7 (10 Octombrie 2026)
+
 ### Modificări
-- „Ce e nou", după o actualizare, arată versiunea la care ai ajuns și toate schimbările de la versiunea pe care o aveai, într-o singură listă, fără versiunile intermediare. Istoricul complet, pe versiuni, rămâne în Setări.
+- Pe Windows, instalarea unei actualizări se vede: apare o fereastră cu bara de progres, iar la final aplicația pornește singură. Înainte nu se vedea nimic, iar pe un calculator mai lent aplicația pornită de mână în timpul instalării putea rămâne cu ecranul alb. Așteaptă să pornească singură.
+- Pornirea și pașii unei actualizări se notează mereu în jurnalul aplicației, chiar dacă jurnalul de depanare e oprit, ca o problemă la actualizare să poată fi înțeleasă din raportul trimis.
 
 ---
 
