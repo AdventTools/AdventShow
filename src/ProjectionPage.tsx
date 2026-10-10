@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { zeroMessageSize } from './timerText';
 import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, ProjectionTextData } from './vite-env';
 
 // Mărimea textului pe proiecție (1.2 = 120%). Aceleași limite ca în Setări.
@@ -28,6 +29,9 @@ function freeTextVw(text: string): number {
   const longest = Math.max(1, ...text.split('\n').map(l => l.trim().length));
   return Math.min(9, Math.max(3, 140 / longest));
 }
+
+// Culoarea numărătorii în ultimul minut (aceeași în previzualizare și pe proiecție).
+const LAST_MINUTE_COLOR = '#f59e0b';
 
 // Format a millisecond duration as H:MM:SS (drops the hour when zero → M:SS).
 function formatDuration(ms: number): string {
@@ -88,6 +92,7 @@ function TimerDisplay({ data, color, fontScale }: {
 
   let display: string;
   let atZero = false;
+  let lastMinute = false;
 
   if (data.mode === 'clock') {
     const d = new Date(now);
@@ -110,9 +115,14 @@ function TimerDisplay({ data, color, fontScale }: {
       : (data.targetEpochMs ?? now) - now;
     atZero = remaining <= 0;
     display = atZero ? '0:00' : formatDuration(remaining);
+    // Ultimul minut, în aceeași culoare ca în previzualizarea din fereastra principală.
+    lastMinute = data.running !== false && !atZero && remaining < 60_000;
   }
 
-  const showZeroMsg = atZero && data.mode === 'countdown' && !!data.zeroMessage;
+  const atZeroCountdown = atZero && data.mode === 'countdown';
+  const showZeroImage = atZeroCountdown && !!data.zeroImage;
+  const showZeroMsg = atZeroCountdown && !showZeroImage && !!data.zeroMessage;
+  const hideTitle = (showZeroMsg || showZeroImage) && data.hideTitleAtZero === true;
   const analogClock = data.mode === 'clock' && data.clockAnalog === true;
 
   // După terminare = „ecran negru": la zero acoperă tot cu negru (fără text/fundal).
@@ -122,7 +132,7 @@ function TimerDisplay({ data, color, fontScale }: {
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ padding: '4vh 4vw' }}>
-      {data.title && (
+      {data.title && !hideTitle && (
         <div style={{
           color, opacity: 0.85, fontWeight: 600, textAlign: 'center',
           marginBottom: '2vh', textShadow: '0 2px 16px rgba(0,0,0,0.55)',
@@ -131,15 +141,27 @@ function TimerDisplay({ data, color, fontScale }: {
           {data.title}
         </div>
       )}
-      {analogClock ? (
+      {showZeroImage ? (
+        <img src={`localfile://${encodeURI(data.zeroImage!)}`} alt=""
+          style={{ flex: '1 1 0', minHeight: 0, width: '100%', objectFit: 'contain' }} />
+      ) : showZeroMsg ? (
+        <div style={{
+          color, fontWeight: 800, textAlign: 'center', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+          lineHeight: 1.2, textShadow: '0 4px 28px rgba(0,0,0,0.6)',
+          // fără fontScale: previzualizarea din fereastra principală arată exact mărimea asta
+          fontSize: `${zeroMessageSize(data.zeroMessage!, !!data.title && !hideTitle)}vw`,
+        }}>
+          {data.zeroMessage}
+        </div>
+      ) : analogClock ? (
         <AnalogClock now={now} color={color} showSeconds={data.clockShowSeconds === true} fontScale={fontScale} />
       ) : (
         <div style={{
-          color, fontWeight: 800, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
+          color: lastMinute ? LAST_MINUTE_COLOR : color, fontWeight: 800, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
           lineHeight: 1, letterSpacing: '0.02em', textShadow: '0 4px 28px rgba(0,0,0,0.6)',
           fontSize: `calc(clamp(4rem, 22vw, 22rem) * ${fontScale})`,
         }}>
-          {showZeroMsg ? data.zeroMessage : display}
+          {display}
         </div>
       )}
     </div>
@@ -650,6 +672,7 @@ export function ProjectionPage() {
               style={{
                 fontSize: `calc(3.2vw * ${(bg.projectionFontSize ?? 1.2) * zoomLevel / 1.2})`,
                 color: freeText.textColor ?? bg.contentTextColor ?? '#ffffff',
+                ...(freeText.fontFamily ? { fontFamily: freeText.fontFamily } : {}),
               }}
             >
               {freeText.shapes.map((sh, i) => sh.imageSrc ? (
@@ -685,6 +708,7 @@ export function ProjectionPage() {
               <div
                 style={{
                   color: freeText.textColor ?? bg.contentTextColor ?? '#ffffff',
+                  ...(freeText.fontFamily ? { fontFamily: freeText.fontFamily } : {}),
                   fontWeight: 700,
                   textAlign: 'center',
                   whiteSpace: 'pre-wrap',
@@ -781,7 +805,7 @@ export function ProjectionPage() {
                   className="font-semibold uppercase tracking-widest"
                   style={{
                     color: hymnNumberColor,
-                    fontSize: 'clamp(0.8rem, 2vw, 1.5rem)',
+                    fontSize: `calc(clamp(0.8rem, 2vw, 1.5rem) * ${bg.bibleRefScale ?? 1})`,
                     letterSpacing: '0.15em',
                     textShadow: '0 2px 24px rgba(0,0,0,0.8)',
                     opacity: 0.7,
