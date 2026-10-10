@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-10-10T17:44:29+00:00",
+    "generated": "2026-10-10T19:50:47+00:00",
     "entries": [
         {
             "seq": 1,
@@ -933,6 +933,202 @@
             "force": false,
             "ts": "2026-10-10T17:44:29.000Z",
             "text_hash": "b28717b5d6f7667537e1e47ded8a9a3d308b67c42b9f92a7617ecd2bc1d1a95c",
+            "only_if_absent": true
+        },
+        {
+            "seq": 30,
+            "category": "Imnuri Speciale",
+            "number": "008",
+            "title": "Îndurare necuprinsă",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Îndurare necuprinsă, \nOare poți totul ierta ?\nUnui păcătos ca mine, \nPoți păcatele uita ?"
+                },
+                {
+                    "type": "refren",
+                    "text": "Isuse vin, la Tine vin, \nașa cum sunt la Tine vin.\nIsuse vin, la Tine vin, \nașa cum sunt eu vin !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Multă vreme în păcate, \nPe Isus l-am întristat,\nCufundat în rele fapte, \nInima am ferecat."
+                },
+                {
+                    "type": "refren",
+                    "text": "Isuse vin, la Tine vin, \nașa cum sunt la Tine vin.\nIsuse vin, la Tine vin, \nașa cum sunt eu vin !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "O, Isuse azi Te caut, \nVreau să fiu eliberat,\nDe păcat mă spală grabnic, \nVreau să fiu al Tău curat."
+                },
+                {
+                    "type": "refren",
+                    "text": "Isuse vin, la Tine vin, \nașa cum sunt la Tine vin.\nIsuse vin, la Tine vin, \nașa cum sunt eu vin !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Aleluia, sunt ferice, \nAzi povara mi s-a luat,\nMerg spre ceruri ca pe aripi,\nDe păcate sunt scăpat."
+                },
+                {
+                    "type": "refren",
+                    "text": "Isuse vin, la Tine vin, \nașa cum sunt la Tine vin.\nIsuse vin, la Tine vin, \nașa cum sunt eu vin !"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T19:16:36.000Z",
+            "text_hash": "1375851ba5c6906ab0771a3484544420aa667dacc6aff0b00b513d6eade0ca7f",
+            "only_if_absent": true
+        },
+        {
+            "seq": 31,
+            "category": "Imnuri Speciale",
+            "number": "009",
+            "title": "Isuse-al meu, din zorii tinereții",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Isuse-al meu, din zorii tinereții,\nMi-ai fost prieten bun și credincios.\nÎn mâna Ta pân' la sfârșitul vieții,\nCălătoresc și sunt mereu voios !\nÎn umbra serii mă aplec sub cruce, \nȘi-n zori de zi Te vreau la dreapta mea,\nCăci nu găsesc un scut mai bun și dulce, \nÎn toată lumea cât aș căuta !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "În suferință, Tu mi-ești mângâiere,\nȘi nu mă plâng, oricât mi-ar fi de greu.\nSă biruiesc doar tu îmi dai putere, \nCu mâna Ta de fiu de Dumnezeu ! \nȘi n-am să pier în marea de păcate, \nOricât aș fi de slab și istovit,\nCăci ai trecut 'naintea mea prin toate,\nȘi pentru mine Tu le-ai biruit !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Comoara mea, comoară nesperată, \nTe-am căutat pribeag și rătăcit. \nAzi nu Te las nici pentru lumea toată, \nCăci numai Tu pe mine m-ai iubit ! \nMi-ești frate bun în cânt și în suspine, \nIubirea Ta, mă face să trăiesc, \nIsuse-al meu, ce bine-i lângă Tine, \nȘi-s fericit că pot să Te iubesc !"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T19:36:47.000Z",
+            "text_hash": "68519de40544ca85f0f42871b10bfe2730b21e38c466f040d9cd9b80a25862a3",
+            "only_if_absent": true
+        },
+        {
+            "seq": 32,
+            "category": "Imnuri Speciale",
+            "number": "010",
+            "title": "Viata-i plină de întristări  ( La Calvar )",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Viata-i plină de întristări,\nGriji ce vin zi de zi,\nIsus ia toată povara ta,\nEl poate mântui."
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul ia toată povara ta,\nLa Calvar, la Calvar,\nDomnul ia toată povara ta,\nEl poate mântui."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Chinuit si îngrijorat,\nLa El acum să vii,\nDomnul ia toată povara ta,\nEl poate mântui."
+                },
+                {
+                    "type": "strofa",
+                    "text": "El ascultă suspinul tău,\nStrigătul inimii,\nDomnul ia toată povara ta,\nEl poate mântui."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T19:39:01.000Z",
+            "text_hash": "1a88046d85b05c2d6ff3624960df77c4753c6413c52516be3b04adbc10e8f10f",
+            "only_if_absent": true
+        },
+        {
+            "seq": 33,
+            "category": "Imnuri Speciale",
+            "number": "011",
+            "title": "Mama mea m-a iubit",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Mama mea m-a iubit şi cu drag m-a-ngrijit,\nCa să nu mi se-ntâmple vreun rău.\nÎmi dădea tot ce-avea, iar în suflet purta\nDor adânc pentru binele meu."
+                },
+                {
+                    "type": "refren",
+                    "text": "Voi iubi mama mea neîncetat\nCăci, prin ea, Domnul viaţa mi-a dat!\nŞi-mpreună, Te rog, o, Doamne,\nFă sa fim sus în cer la Tine!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Ne-ncetat lângă pat nopţi întregi a vegheat,\nCând eu în suferinţi mă zbăteam;\nNu mânca, nu dormea, bucuroasă se jertfea,\nCăci aşa m-a iubit mama mea."
+                },
+                {
+                    "type": "refren",
+                    "text": "Voi iubi mama mea neîncetat\nCăci, prin ea, Domnul viaţa mi-a dat!\nŞi-mpreună, Te rog, o, Doamne,\nFă sa fim sus în cer la Tine!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T19:39:49.000Z",
+            "text_hash": "932afa8d01b6428032f2544ca8e9ca7f8f6b30be9a633e4273297de80d4fda1d",
+            "only_if_absent": true
+        },
+        {
+            "seq": 34,
+            "category": "Imnuri Speciale",
+            "number": "012",
+            "title": "Nu renunța",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Suflet scump de ce umbli fără speranță,\nCurajul de ce ți-ai pierdut,\nDacă crezi în Isus, vei primi siguranță\nCă totul va fi renăscut."
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu renunța, Domnul revine,\nDoar o clipă până în zori.\nNu renunța, Domnul revine,\nVine Isus, vine pe nori."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Inima s-a prins de comorile lumii, \nMereu te-a înșelat prea amar,\nDacă-L rogi s-o desprinzi, Dumnezeu te ajută, \nÎntoarce-te, încă e har."
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu renunța, Domnul revine,\nDoar o clipă până în zori.\nNu renunța, Domnul revine,\nVine Isus, vine pe nori."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Doar puțin mai e și pământul va trece,\nPăcatele nu vor mai fi,\nOchii tăi vor vedea nesfârșita mărire,\nIsus în curând va veni."
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu renunța, Domnul revine,\nDoar o clipă până în zori.\nNu renunța, Domnul revine,\nVine Isus, vine pe nori."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T19:49:14.000Z",
+            "text_hash": "53bf4be439074bead1a8d73235bc4c4bbf3713104e9e7a8ec74f3d255c047360",
+            "only_if_absent": true
+        },
+        {
+            "seq": 35,
+            "category": "Imnuri Speciale",
+            "number": "013",
+            "title": "Nu va fi o veste mai frumoasă",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Nu va fi o veste mai frumoasă\nCa salvarea dată prin Isus\nNici iubire care să jertfească\nPentru noi cât a jertfit Isus."
+                },
+                {
+                    "type": "refren",
+                    "text": "Dragostea Lui e darul\nCel mai minunat! Minunat, minunat\nO, dragostea Lui e darul cel mai minunat\nMinunat şi pentru noi."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Zilnic mă-nconjoară cu-ndurare\nVăd la orice pas cât e de bun\nEl mi-a dat pe veci răscumpărare\nPot şi eu voios acum să spun."
+                },
+                {
+                    "type": "refren",
+                    "text": "Dragostea Lui e darul\nCel mai minunat! Minunat, minunat\nO, dragostea Lui e darul cel mai minunat\nMinunat şi pentru noi."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Nu vom înţelege niciodată\nCe măreaţă e iubirea sa\nŞi atunci în slava nevisată\nTot iubirea Lui o vom cânta."
+                },
+                {
+                    "type": "refren",
+                    "text": "Dragostea Lui e darul\nCel mai minunat! Minunat, minunat\nO, dragostea Lui e darul cel mai minunat\nMinunat şi pentru noi."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T19:50:47.000Z",
+            "text_hash": "33e22de96477303702c59302c95cea8daee1dba60fd3f2e947b2262f26d2dc3a",
             "only_if_absent": true
         }
     ]
