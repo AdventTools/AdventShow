@@ -3699,6 +3699,11 @@ select optgroup {
 .rt-preview-title { font-size: 4cqi; opacity: 0.85; color: #fff; }
 .rt-preview-time { font-size: 16cqi; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; line-height: 1; }
 .rt-preview-note { font-size: 3cqi; opacity: 0.6; color: #fff; }
+.rt-preview-endmsg { font-weight: 800; color: #fff; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.2; text-shadow: 0 0.4cqi 2.8cqi rgba(0 0 0 / 0.6); }
+.rt-preview-endimg { flex: 1 1 0; min-height: 0; width: 100%; object-fit: contain; }
+.rt-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.timer-zero-image { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.timer-zero-image img { height: 40px; max-width: 72px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
 .rt-preview-empty { background: #0a0a14; display: flex; align-items: center; justify-content: center; }
 .rt-preview-hint { color: var(--text-secondary); font-size: 3.4cqi; font-weight: 500; }
 .rt-pv-shape { position: absolute; line-height: 1.3; text-shadow: 0 0.2cqi 1cqi rgba(0 0 0 / 0.55); overflow: hidden; }

@@ -15,7 +15,16 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Pe Windows, după parola de administrare sau după o întrebare de tipul „Sigur vrei să ștergi?", casetele de text nu mai rămân fără cursor. Înainte nu se mai putea scrie nicăieri până la repornirea aplicației.
+- Descărcarea unui videoclip nu mai blochează calculatorul la final. Pregătirea fișierului merge mai încet, dar aplicația rămâne folosibilă, iar bara arată cât mai e, cu mesajul să nu închizi aplicația.
+- Ceas: titlul și mesajul de final schimbate cât rulează numărătoarea apar pe loc pe ecran. Ultimul minut are aceeași culoare pe ecran ca în previzualizare.
+- Ceas: „Vezi finalul" arată în previzualizare cum va arăta finalul, fără să proiecteze nimic. Mesajul de final se micșorează singur ca să încapă, iar în locul lui poți pune o imagine. Poți alege ca la final să nu mai apară titlul.
+- Anunțuri: poți alege fontul textului, la text simplu și la prezentări.
+- Setări: trimiterea de sub verset (ex: IOAN 3:16) poate fi mărită, ca să se poată nota de departe.
+- Când treci la Imnuri sau la Biblia, poți scrie direct numărul sau trimiterea: cursorul e deja în căutare.
+- O blocare scurtă a bazei de date (antivirus, copie de siguranță) se așteaptă, nu mai produce o eroare.
+- Un raport trimis nu mai atașează jurnalul de depanare dacă acesta e mai vechi de o zi.
 
 ---
 

@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, net, powerSaveBlocker, protocol, s
 import { execFile, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import {
@@ -115,6 +116,8 @@ interface AppSettings {
   bgOpacity?: number
   hymnNumberColor?: string
   contentTextColor?: string
+  bibleRefScale?: number
+  announceFont?: string
   adminPasswordHash?: string
   projectionFontSize?: number
   // Mărime separată per tab — dacă lipsește pentru un tab, se folosește
@@ -319,6 +322,9 @@ function readLogTail(lines: number): string {
   try {
     const p = getLogPath()
     if (!fs.existsSync(p)) return ''
+    // Cu jurnalul oprit din Setări, fișierul rămâne cum era: un raport de azi pleca
+    // cu întâmplări de acum luni de zile, care nu au legătură cu problema.
+    if (Date.now() - fs.statSync(p).mtimeMs > 24 * 60 * 60 * 1000) return ''
     const all = fs.readFileSync(p, 'utf-8').split('\n')
     return all.slice(-lines).join('\n').slice(-200000)
   } catch {
@@ -907,7 +913,7 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
   // Stage tracking: progress is scaled across 3 phases
   //   video download:  0–45%
   //   audio download: 45–90%
-  //   ffmpeg mux:     90–100% (ffmpeg uses time= not %, so we send a steady 95%)
+  //   ffmpeg mux:     90–99%  (din time= raportat la Duration)
   let stage: 'video' | 'audio' | 'mux' = 'video'
 
   const updateStatus = (status: YouTubeEntry['status'], error?: string, fileName?: string) => {
@@ -921,19 +927,45 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
     win?.webContents.send('youtube:status', entry.id, status, error ?? '')
   }
 
+  // Progresul pleacă spre interfață cel mult de 4 ori pe secundă: yt-dlp scrie sute
+  // de rânduri pe secundă, iar fiecare redesena toată fereastra principală.
+  let lastSent = 0
+  const sendProgress = (pct: number, line: string) => {
+    const now = Date.now()
+    if (now - lastSent < 250) return
+    lastSent = now
+    win?.webContents.send('youtube:progress', entry.id, Math.min(99, pct), line)
+  }
+  const hms = (s: string) => {
+    const [h, m, sec] = s.split(':').map(Number)
+    return h * 3600 + m * 60 + sec
+  }
+  let muxDuration = 0
+
   const runStep = (bin: string, args: string[]): Promise<void> => new Promise((resolve, reject) => {
     debugLog(`[yt-dlp-download:${stage}]`, bin, args.join(' '))
     const proc = trackChild(spawn(bin, args))
+    // Conversia video ocupa tot procesorul: pe laptopurile slabe aplicația (și
+    // calculatorul) păreau blocate minute întregi. Cu prioritate mică merge mai
+    // încet, dar restul rămâne utilizabil.
+    if (stage === 'mux' && proc.pid) {
+      try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_BELOW_NORMAL) } catch { /* fără drept → prioritatea implicită */ }
+    }
     const onData = (data: Buffer) => {
       const line = data.toString().trim()
+      if (stage === 'mux') {
+        // ffmpeg nu scrie procente: le calculăm din time= raportat la Duration.
+        const d = line.match(/Duration: (\d+:\d+:[\d.]+)/)
+        if (d && !muxDuration) muxDuration = hms(d[1])
+        const tm = line.match(/time=(\d+:\d+:[\d.]+)/)
+        if (tm && muxDuration > 0) sendProgress(90 + Math.min(1, hms(tm[1]) / muxDuration) * 9, line)
+        return
+      }
       debugLog(`[yt-dlp-download:${stage}]`, line)
       const m = line.match(/([\d.]+)%/)
       if (m) {
         const pct = parseFloat(m[1])
-        let scaled = pct
-        if (stage === 'video') scaled = pct * 0.45
-        else if (stage === 'audio') scaled = 45 + pct * 0.45
-        win?.webContents.send('youtube:progress', entry.id, Math.min(99, scaled), line)
+        sendProgress(stage === 'video' ? pct * 0.45 : 45 + pct * 0.45, line)
       }
     }
     proc.stdout.on('data', onData)
@@ -986,15 +1018,17 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       //    nu-l redau deloc. Sunetul iese mereu stereo — o sursă 5.1 lăsată pe 6 canale
       //    poate ieși mută pe boxele bisericii.
       stage = 'mux'
-      win?.webContents.send('youtube:progress', entry.id, 95, '[mux] merging streams')
+      win?.webContents.send('youtube:progress', entry.id, 90, '[mux] merging streams')
       const vinfo = await probeMedia(path.join(tmpDir, videoTmp))
       const videoCopy = !vinfo.probed || vinfo.vcodec === 'h264'
+      // Un nucleu rămâne liber pentru aplicație și pentru proiecție.
+      const threads = String(Math.max(1, os.cpus().length - 1))
       await runStep(ffmpegBin, [
         '-i', path.join(tmpDir, videoTmp),
         '-i', path.join(tmpDir, audioTmp),
         '-map', '0:v:0',
         '-map', '1:a:0',
-        ...(videoCopy ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23']),
+        ...(videoCopy ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-threads', threads]),
         '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
         '-movflags', '+faststart',
         '-y', finalPath,
@@ -1297,6 +1331,10 @@ function createWindow() {
   }
   win.on('moved', saveBounds)
   win.on('resized', saveBounds)
+  // Pe Windows fereastra poate primi focusul fără ca pagina din ea să primească
+  // tastatura (după un dialog nativ sau după ce a avut-o proiecția): click-ul în
+  // casete nu mai punea cursorul până la repornire. Îl dăm explicit paginii.
+  win.on('focus', () => { if (isWinAlive(win)) win.webContents.focus() })
 
   // Închiderea ferestrei principale = închiderea aplicației. Fără ea, pe macOS
   // app-ul rămânea pornit (window-all-closed nu face nimic pe darwin), iar
@@ -2106,6 +2144,10 @@ app.whenReady().then(() => {
   // tastele în timpul scrisului. Dacă proiecția nu (mai) există, nu facem nimic.
   ipcMain.handle('projection:update-text', (_e, data) => {
     if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:text', data)
+  })
+  // La fel pentru ceas: titlul sau mesajul de final scrise cât rulează ajung live.
+  ipcMain.handle('projection:update-timer', (_e, data) => {
+    if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:timer', data)
   })
 
   ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') => {

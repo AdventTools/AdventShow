@@ -116,6 +116,8 @@ export interface ProjectionTimerData {
   frozenValueMs?: number;   // when paused, the exact ms to display
   title?: string;           // optional heading, e.g. "Serviciul începe în"
   zeroMessage?: string;     // countdown: shown when it reaches 0, e.g. "Bine ați venit!"
+  hideTitleAtZero?: boolean; // countdown: la final rămâne doar mesajul (sau imaginea), fără titlu
+  zeroImage?: string;        // countdown: imagine (cale pe disc) arătată la final în locul mesajului
   afterZero?: 'stay' | 'black' | 'stop'; // countdown: ce se întâmplă la 0 (implicit: rămâne mesajul)
   afterZeroSeconds?: number;             // countdown afterZero='stop': secunde până la închiderea proiecției
   clock24h?: boolean;       // clock: 24h (default) vs 12h
@@ -161,6 +163,7 @@ export interface ProjectionTextData {
   shapes?: PresShape[];     // slide de prezentare (forme poziționate procentual)
   background?: { type: 'color' | 'gradient' | 'image'; value: string } | null;
   textColor?: string;       // culoarea textului (override peste contentTextColor global)
+  fontFamily?: string;      // fontul anunțului (gol = fontul implicit al proiecției)
 }
 
 export interface DisplayInfo {
@@ -204,6 +207,8 @@ export interface AppSettings {
   bgOpacity?: number;      // 0–1, opacity of the media layer (default 1)
   hymnNumberColor?: string; // hex, e.g. '#9fb3ff'
   contentTextColor?: string; // hex, e.g. '#ffffff'
+  bibleRefScale?: number;    // mărimea trimiterii de sub verset (1 = normal)
+  announceFont?: string;     // fontul ales ultima oară la Anunțuri
   adminPasswordHash?: string; // bcrypt-like hash or empty
   projectionFontSize?: number; // font size multiplier, default 1.2
   /** Mărime separată per tab; lipsă pentru un tab → se folosește `projectionFontSize`. */
@@ -416,6 +421,7 @@ export interface IElectronAPI {
     showTimer: (data: ProjectionTimerData) => Promise<void>;
     showText: (data: ProjectionTextData) => Promise<void>;
     updateText: (data: ProjectionTextData) => Promise<void>;
+    updateTimer: (data: ProjectionTimerData) => Promise<void>;
     onTimer: (cb: (data: ProjectionTimerData) => void) => void;
     offTimer: () => void;
     onText: (cb: (data: ProjectionTextData) => void) => void;

@@ -65,6 +65,7 @@ import { WhatsNewModal } from './WhatsNew';
 import { ProjectorController } from './ProjectorController';
 import type { AccompanimentControl } from './ProjectorController';
 import { accTitle } from './accompaniment-ui';
+import { zeroMessageSize } from './timerText';
 import type {
     AccompanimentInfo,
     AccompanimentStats,
@@ -488,6 +489,13 @@ function App() {
         action: () => void;
         title: string;
     } | null>(null);
+    const [confirmReq, setConfirmReq] = useState<{
+        message: string;
+        resolve: (ok: boolean) => void;
+    } | null>(null);
+    useEffect(() => {
+        confirmGate.ask = (message) => new Promise<boolean>(resolve => setConfirmReq({ message, resolve }));
+    }, []);
 
     // ── Add/Edit Hymn modal ──
     const [hymnEditor, setHymnEditor] = useState<{
@@ -1321,6 +1329,10 @@ function App() {
         setBiblePassage(null);
         setBibleRefError(null);
         if (!projecting) clearPreview();
+        // La Imnuri și Biblia se poate scrie imediat numărul sau trimiterea.
+        if (newTab === 'imnuri' || newTab === 'biblia') {
+            requestAnimationFrame(() => refSearchRef.current?.focus());
+        }
     }, [projecting, clearPreview, sidebarWidth, previewWidth]);
 
     // ── Bible navigation ──
@@ -1648,7 +1660,7 @@ function App() {
 
     const deleteHymnAction = useCallback(async (hymnId: number) => {
         const doDelete = async () => {
-            if (!confirm(t('Sigur vrei să ștergi acest imn?'))) return;
+            if (!await confirmGate.ask(t('Sigur vrei să ștergi acest imn?'))) return;
             await window.electron.hymn.delete(hymnId);
             if (selectedHymnId === hymnId) {
                 clearPreview();
@@ -1670,11 +1682,11 @@ function App() {
     // Imnurile noi merg în „Imnurile mele", colecția utilizatorului. „Imnuri Speciale"
     // e colecția oficială, numerotată de autori: dacă ar scrie direct acolo, un imn
     // oficial cu același număr i l-ar înlocui la prima actualizare.
-    const openAddHymn = useCallback(() => {
+    const openAddHymn = useCallback(async () => {
         const mine = categories.find(c => c.name === 'Imnurile mele');
         const specialId = mine?.id;
         if (specialId !== undefined && activeCategoryId !== specialId) {
-            if (!confirm(t('Imnurile pe care le adaugi tu se strâng în «Imnurile mele». Continui?'))) return;
+            if (!await confirmGate.ask(t('Imnurile pe care le adaugi tu se strâng în «Imnurile mele». Continui?'))) return;
             setActiveCategoryId(specialId);
         }
         setHymnEditor({
@@ -2694,6 +2706,13 @@ function App() {
                 />
             )}
 
+            {confirmReq && (
+                <ConfirmModal
+                    message={confirmReq.message}
+                    onAnswer={ok => { confirmReq.resolve(ok); setConfirmReq(null); }}
+                />
+            )}
+
             {/* ── First Launch Password Setup ── */}
             {needsPasswordSetup && (
                 <PasswordSetupModal
@@ -3506,7 +3525,10 @@ function VideoController({
                                         {entry.status === 'ready' && '✓'}
                                         {entry.status === 'error' && <AlertCircle className="icon-xs" />}
                                         <span>
-                                            {entry.status === 'downloading' ? `${Math.round(youtubeProgress[entry.id] ?? 0)}%` :
+                                            {entry.status === 'downloading'
+                                                ? ((youtubeProgress[entry.id] ?? 0) >= 90
+                                                    ? t('Se pregătește fișierul — {pct}%. Nu închide aplicația.', { pct: Math.round(youtubeProgress[entry.id] ?? 0) })
+                                                    : `${Math.round(youtubeProgress[entry.id] ?? 0)}%`) :
                                                 entry.status === 'ready' ? t('Gata') : t('Eroare')}
                                         </span>
                                     </span>
@@ -5119,6 +5141,39 @@ function PasswordModal({
     );
 }
 
+function ConfirmModal({ message, onAnswer }: { message: string; onAnswer: (ok: boolean) => void }) {
+    const t = useT();
+    const okRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        okRef.current?.focus();
+        // Captură: Enter/Esc răspund aici și nu ajung la scurtăturile globale
+        // (Esc ar opri proiecția, Enter ar trece imnul pregătit live).
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' && e.key !== 'Enter') return;
+            e.preventDefault();
+            e.stopPropagation();
+            onAnswer(e.key === 'Enter');
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [onAnswer]);
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onAnswer(false); }}>
+            <div className="modal-dialog modal-sm">
+                <div className="modal-body">
+                    <p style={{ margin: '4px 0 0', lineHeight: 1.5 }}>{message}</p>
+                    <div className="editor-actions" style={{ marginTop: 16 }}>
+                        <button ref={okRef} className="btn-project" onClick={() => onAnswer(true)}>{t('Da')}</button>
+                        <button className="btn-clear" onClick={() => onAnswer(false)}>{t('Anulează')}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Password Setup Modal (first launch)
 // ═════════════════════════════════════════════════════════════════════════════
@@ -6092,6 +6147,17 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                         </div>
                                     </div>
                                 </div>
+                                <div className="field">
+                                    <label>{t('Mărimea trimiterii de sub verset (ex: IOAN 3:16)')}</label>
+                                    <select
+                                        value={String(settings.bibleRefScale ?? 1)}
+                                        onChange={e => saveSettings({ bibleRefScale: Number(e.target.value) })}
+                                    >
+                                        <option value="1">{t('Normală')}</option>
+                                        <option value="1.5">{t('Mare')}</option>
+                                        <option value="2">{t('Foarte mare')}</option>
+                                    </select>
+                                </div>
                             </section>
 
                             <section className="sgroup">
@@ -6689,6 +6755,10 @@ function TimerPanel() {
     const [zeroMessage, setZeroMessage] = useState('');
     const [afterZero, setAfterZero] = useState<'stay' | 'black' | 'stop'>('stay');
     const [afterZeroStopSec, setAfterZeroStopSec] = useState(30);
+    const [hideTitleAtZero, setHideTitleAtZero] = useState(false);
+    const [zeroImage, setZeroImage] = useState('');
+    // previzualizarea arată finalul (mesaj / imagine) fără să proiecteze nimic
+    const [previewEnd, setPreviewEnd] = useState(false);
     const [clock24h, setClock24h] = useState(true);
     const [clockShowSeconds, setClockShowSeconds] = useState(false);
     const [clockAnalog, setClockAnalog] = useState(false);
@@ -6734,13 +6804,30 @@ function TimerPanel() {
         window.electron.projection.showTimer(payload);
     }, [bgChoice, projected]);
 
+    // Titlul, mesajul de final și opțiunile lor, schimbate cât rulează, ajung pe
+    // proiecție fără să mai apeși ceva. Canal fără focus: tastele rămân în casetă.
+    useEffect(() => {
+        const live = lastSentRef.current;
+        if (!projected || !live) return;
+        const payload: import('./vite-env').ProjectionTimerData = {
+            ...live,
+            title: title || undefined,
+            ...(live.mode === 'countdown'
+                ? { zeroMessage: zeroMessage || undefined, afterZero, afterZeroSeconds: afterZeroStopSec, hideTitleAtZero, zeroImage: zeroImage || undefined }
+                : {}),
+        };
+        lastSentRef.current = payload;
+        timerCtl.live = payload;
+        window.electron.projection.updateTimer(payload);
+    }, [title, zeroMessage, afterZero, afterZeroStopSec, hideTitleAtZero, zeroImage, projected]);
+
     // proiectează o numărătoare cu ținta dată (folosit și de „până la ora X")
     const projectCountdown = useCallback((targetEpochMs: number) => {
         anchorRef.current = { targetEpochMs };
         timerCtl.anchor = anchorRef.current;
         setRunning(true);
-        send({ mode: 'countdown', targetEpochMs, running: true, title: title || undefined, zeroMessage: zeroMessage || undefined, afterZero, afterZeroSeconds: afterZeroStopSec });
-    }, [title, zeroMessage, afterZero, afterZeroStopSec, send]);
+        send({ mode: 'countdown', targetEpochMs, running: true, title: title || undefined, zeroMessage: zeroMessage || undefined, afterZero, afterZeroSeconds: afterZeroStopSec, hideTitleAtZero, zeroImage: zeroImage || undefined });
+    }, [title, zeroMessage, afterZero, afterZeroStopSec, hideTitleAtZero, zeroImage, send]);
 
     const startCountdown = useCallback(() => projectCountdown(Date.now() + durationMs), [durationMs, projectCountdown]);
 
@@ -6765,13 +6852,13 @@ function TimerPanel() {
         if (mode === 'countdown' && anchorRef.current.targetEpochMs != null) {
             const remaining = Math.max(0, anchorRef.current.targetEpochMs - now);
             setRunning(false);
-            send({ mode: 'countdown', running: false, frozenValueMs: remaining, title: title || undefined, zeroMessage: zeroMessage || undefined, afterZero, afterZeroSeconds: afterZeroStopSec });
+            send({ mode: 'countdown', running: false, frozenValueMs: remaining, title: title || undefined, zeroMessage: zeroMessage || undefined, afterZero, afterZeroSeconds: afterZeroStopSec, hideTitleAtZero, zeroImage: zeroImage || undefined });
         } else if (mode === 'stopwatch' && anchorRef.current.startEpochMs != null) {
             const elapsed = now - anchorRef.current.startEpochMs;
             setRunning(false);
             send({ mode: 'stopwatch', running: false, frozenValueMs: elapsed, title: title || undefined });
         }
-    }, [mode, title, zeroMessage, afterZero, afterZeroStopSec, send]);
+    }, [mode, title, zeroMessage, afterZero, afterZeroStopSec, hideTitleAtZero, zeroImage, send]);
 
     // „Continuă" reia din valoarea ÎNGHEȚATĂ la pauză (nu de la capăt): ancorează
     // o țintă/start nou care produce exact timpul rămas/scurs de la pauză.
@@ -6796,7 +6883,7 @@ function TimerPanel() {
         const label = tomorrow
             ? t('mâine la {hh}:{mm}', { hh: pad(atHH), mm: pad(atMM) })
             : t('la {hh}:{mm}', { hh: pad(atHH), mm: pad(atMM) });
-        const durMs = durationMs, ttl = title, z = zeroMessage, az = afterZero, azs = afterZeroStopSec, bg = bgToPayload(bgRef.current);
+        const durMs = durationMs, ttl = title, z = zeroMessage, az = afterZero, azs = afterZeroStopSec, hz = hideTitleAtZero, zi = zeroImage, bg = bgToPayload(bgRef.current);
         if (timerCtl.timeoutId) clearTimeout(timerCtl.timeoutId);
         timerCtl.armed = { fireAtEpochMs: epoch, label };
         timerCtl.timeoutId = setTimeout(() => {
@@ -6807,7 +6894,7 @@ function TimerPanel() {
             const payload: import('./vite-env').ProjectionTimerData = {
                 mode: 'countdown', targetEpochMs: target, running: true,
                 title: ttl || undefined, zeroMessage: z || undefined,
-                afterZero: az, afterZeroSeconds: azs, background: bg,
+                afterZero: az, afterZeroSeconds: azs, hideTitleAtZero: hz, zeroImage: zi || undefined, background: bg,
             };
             timerCtl.live = payload;
             window.electron.projection.showTimer(payload);
@@ -6815,7 +6902,7 @@ function TimerPanel() {
             liveBus.notify();
         }, Math.max(0, epoch - Date.now()));
         setScheduled(timerCtl.armed);
-    }, [atHH, atMM, durationMs, title, zeroMessage, afterZero, afterZeroStopSec, t]);
+    }, [atHH, atMM, durationMs, title, zeroMessage, afterZero, afterZeroStopSec, hideTitleAtZero, zeroImage, t]);
 
     const cancelSchedule = useCallback(() => {
         if (timerCtl.timeoutId) { clearTimeout(timerCtl.timeoutId); timerCtl.timeoutId = null; }
@@ -6870,6 +6957,12 @@ function TimerPanel() {
                 lastSentRef.current = timerCtl.live;
                 anchorRef.current = timerCtl.anchor;
                 setMode(timerCtl.live.mode);
+                setTitle(timerCtl.live.title ?? '');
+                setZeroMessage(timerCtl.live.zeroMessage ?? '');
+                if (timerCtl.live.afterZero) setAfterZero(timerCtl.live.afterZero);
+                if (timerCtl.live.afterZeroSeconds != null) setAfterZeroStopSec(timerCtl.live.afterZeroSeconds);
+                setHideTitleAtZero(timerCtl.live.hideTitleAtZero === true);
+                setZeroImage(timerCtl.live.zeroImage ?? '');
                 setProjected(true);
                 setRunning(timerCtl.live.running !== false);
                 setScheduled(null);
@@ -6922,6 +7015,8 @@ function TimerPanel() {
     })();
     const previewAtZero = mode === 'countdown' && projected && running && previewMs <= 0;
     const previewWarn = mode === 'countdown' && projected && running && previewMs > 0 && previewMs < 60_000;
+    const showEndPreview = mode === 'countdown' && (previewEnd || previewAtZero);
+    const endTitleShown = !!title && !((zeroImage || zeroMessage) && hideTitleAtZero);
     const previewClockText = (() => {
         const d = new Date(); let h = d.getHours();
         const mm = String(d.getMinutes()).padStart(2, '0'); const ss = String(d.getSeconds()).padStart(2, '0');
@@ -6930,7 +7025,7 @@ function TimerPanel() {
     })();
     const previewTime = mode === 'clock'
         ? previewClockText
-        : previewAtZero ? (zeroMessage || t('S-a terminat')) : fmtTimerMs(previewMs);
+        : fmtTimerMs(previewMs);
     // echivalentul în minute pentru „numără până la ora X" (afișat live)
     const untilEquivMin = Math.max(0, Math.round((nextClockOccurrence(untilHH, untilMM).epoch - Date.now()) / 60_000));
     // cât mai e până pornește numărătoarea programată
@@ -7026,6 +7121,24 @@ function TimerPanel() {
                     <label className="timer-label">{t('Mesaj la final (opțional)')}</label>
                     <input className="timer-text-input" type="text" placeholder={t('ex: Bine ați venit!')}
                         value={zeroMessage} onChange={e => setZeroMessage(e.target.value)} />
+                    <div className="timer-zero-image">
+                        {zeroImage ? (<>
+                            <img src={`localfile://${encodeURI(zeroImage)}`} alt="" />
+                            <span className="timer-hint-sm">{t('La final apare imaginea, în locul mesajului.')}</span>
+                            <button className="btn-sm" onClick={() => setZeroImage('')}>{t('Scoate imaginea')}</button>
+                        </>) : (
+                            <button className="btn-sm" onClick={async () => {
+                                const p = await window.electron.dialog.pickMedia('image');
+                                if (p) setZeroImage(p);
+                            }}>{t('Sau o imagine la final…')}</button>
+                        )}
+                    </div>
+                    {(zeroMessage || zeroImage) && (
+                        <label className="timer-checkbox">
+                            <input type="checkbox" checked={hideTitleAtZero} onChange={e => setHideTitleAtZero(e.target.checked)} />
+                            {t('La final fără titlu')}
+                        </label>
+                    )}
 
                     <label className="timer-label">{t('După terminare')}</label>
                     <div className="timer-after-zero">
@@ -7134,14 +7247,38 @@ function TimerPanel() {
             </div>
 
             <div className="rt-right">
-                <label className="timer-label">{t('Previzualizare (cum apare pe ecran)')}</label>
-                <div className="rt-preview" style={{ background: previewBg }}>
-                    <div className="rt-preview-center">
-                        {title && <div className="rt-preview-title">{title}</div>}
-                        <div className="rt-preview-time" style={{ color: previewWarn ? '#f59e0b' : undefined }}>{previewTime}</div>
-                        {mode === 'clock' && clockAnalog && <div className="rt-preview-note">{t('(pe proiecție: ceas analogic)')}</div>}
-                        {projected && !running && mode !== 'clock' && <div className="rt-preview-note">⏸ {t('pauză')}</div>}
-                    </div>
+                <div className="rt-preview-head">
+                    <label className="timer-label">{t('Previzualizare (cum apare pe ecran)')}</label>
+                    {mode === 'countdown' && !previewAtZero && (
+                        <button className="btn-sm" onClick={() => setPreviewEnd(v => !v)}>
+                            {previewEnd ? t('Vezi numărătoarea') : t('Vezi finalul')}
+                        </button>
+                    )}
+                </div>
+                <div className="rt-preview" style={{ background: showEndPreview && afterZero === 'black' ? '#000' : previewBg }}>
+                    {showEndPreview ? (
+                        afterZero === 'black' ? (
+                            <div className="rt-preview-center"><div className="rt-preview-note">{t('(ecran negru)')}</div></div>
+                        ) : (
+                            <div className="rt-preview-center">
+                                {endTitleShown && <div className="rt-preview-title">{title}</div>}
+                                {zeroImage ? (
+                                    <img className="rt-preview-endimg" src={`localfile://${encodeURI(zeroImage)}`} alt="" />
+                                ) : zeroMessage ? (
+                                    <div className="rt-preview-endmsg" style={{ fontSize: `${zeroMessageSize(zeroMessage, endTitleShown)}cqi` }}>{zeroMessage}</div>
+                                ) : (
+                                    <div className="rt-preview-time">0:00</div>
+                                )}
+                            </div>
+                        )
+                    ) : (
+                        <div className="rt-preview-center">
+                            {title && <div className="rt-preview-title">{title}</div>}
+                            <div className="rt-preview-time" style={{ color: previewWarn ? '#f59e0b' : undefined }}>{previewTime}</div>
+                            {mode === 'clock' && clockAnalog && <div className="rt-preview-note">{t('(pe proiecție: ceas analogic)')}</div>}
+                            {projected && !running && mode !== 'clock' && <div className="rt-preview-note">⏸ {t('pauză')}</div>}
+                        </div>
+                    )}
                 </div>
                 {projected
                     ? <span className="live-indicator">{t('● LIVE pe proiecție{end}', { end: previewAtZero ? t(' — s-a terminat') : '' })}</span>
@@ -7168,6 +7305,12 @@ const adminGate: { require: (action: () => void, title: string) => void } = {
     // implicit: rulează direct; App o înlocuiește cu requirePassword la montare
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     require: (action, _title) => { action(); },
+};
+
+// Confirmare desenată de aplicație. confirm() nativ lasă pe Windows fereastra fără
+// tastatură: după el nu se mai putea da click în nicio casetă de text până la repornire.
+const confirmGate: { ask: (message: string) => Promise<boolean> } = {
+    ask: async () => false,
 };
 
 const realtimeCtl = {
@@ -7283,6 +7426,35 @@ function bgToPayload(bg: BgChoice, slide?: { bgColor?: string; bgGradient?: stri
     return null; // fundalul global al aplicației
 }
 
+// Fonturi care există pe Windows și pe macOS și au ș/ț; fontul unui PowerPoint
+// nu se poate prelua, fiindcă de cele mai multe ori nu e instalat pe calculator.
+const ANNOUNCE_FONTS: { label: string; css: string }[] = [
+    { label: 'Arial', css: 'Arial, Helvetica, sans-serif' },
+    { label: 'Verdana', css: 'Verdana, Geneva, sans-serif' },
+    { label: 'Tahoma', css: 'Tahoma, Verdana, sans-serif' },
+    { label: 'Trebuchet MS', css: "'Trebuchet MS', sans-serif" },
+    { label: 'Georgia', css: 'Georgia, serif' },
+    { label: 'Times New Roman', css: "'Times New Roman', Times, serif" },
+    { label: 'Palatino', css: "'Palatino Linotype', Palatino, serif" },
+    { label: 'Impact', css: "Impact, 'Arial Black', sans-serif" },
+];
+
+function AnnounceFontPicker({ value, onChange }: { value: string; onChange: (css: string) => void }) {
+    const t = useT();
+    return (
+        <div className="field">
+            <label className="timer-label">{t('Font')}</label>
+            <select className="timer-text-input" value={value} onChange={e => onChange(e.target.value)}
+                style={value ? { fontFamily: value } : undefined}>
+                <option value="">{t('Implicit')}</option>
+                {ANNOUNCE_FONTS.map(f => (
+                    <option key={f.css} value={f.css} style={{ fontFamily: f.css }}>{f.label}</option>
+                ))}
+            </select>
+        </div>
+    );
+}
+
 function BackgroundPicker({ bg, onChange, existingLabel }: {
     bg: BgChoice; onChange: (b: BgChoice) => void; existingLabel?: string;
 }) {
@@ -7357,6 +7529,12 @@ function MessagePanel() {
     const [bgChoice, setBgChoice] = useState<BgChoice>({ kind: 'preset', css: '' });
     // culoarea textului (text simplu ȘI prezentare) — peste contentTextColor global
     const [textColor, setTextColor] = useState('#ffffff');
+    // fontul anunțului (text simplu ȘI prezentare); ținut minte între porniri
+    const [fontFamily, setFontFamilyState] = useState('');
+    const setFontFamily = useCallback((f: string) => {
+        setFontFamilyState(f);
+        window.electron.settings.set({ announceFont: f }).catch(() => { /* rămâne doar pe sesiune */ });
+    }, []);
     // fundalul global configurat al proiecției — ca previzualizarea să arate exact
     // ce iese pe ecran (nu o altă culoare)
     const [projBg, setProjBg] = useState<{ bgType?: string; bgColor?: string; bgImagePath?: string }>({});
@@ -7367,21 +7545,22 @@ function MessagePanel() {
         window.electron.settings.get().then(s => {
             setProjBg({ bgType: s.bgType, bgColor: s.bgColor, bgImagePath: s.bgImagePath });
             if (s.contentTextColor) setTextColor(s.contentTextColor);
+            if (s.announceFont) setFontFamilyState(s.announceFont);
         }).catch(() => { /* implicit */ });
     }, []);
 
     // Prima proiectare: deschide fereastra (cu dansul de focus, O SINGURĂ dată).
     const project = useCallback((value: string) => {
-        window.electron.projection.showText({ text: value, background: bgToPayload(bgChoice), textColor });
+        window.electron.projection.showText({ text: value, background: bgToPayload(bgChoice), textColor, fontFamily: fontFamily || undefined });
         setProjected(true);
-    }, [bgChoice, textColor]);
+    }, [bgChoice, textColor, fontFamily]);
 
     // Actualizările ulterioare: canal PUR de date — fără creare de fereastră, fără
     // focus. showText la fiecare propagare fura focusul de pe textarea și înghițea
     // tastele: scriai „pe sărite".
     const update = useCallback((value: string) => {
-        window.electron.projection.updateText({ text: value, background: bgToPayload(bgChoice), textColor });
-    }, [bgChoice, textColor]);
+        window.electron.projection.updateText({ text: value, background: bgToPayload(bgChoice), textColor, fontFamily: fontFamily || undefined });
+    }, [bgChoice, textColor, fontFamily]);
 
     useEffect(() => {
         if (mode !== 'text' || !live || !projected) return;
@@ -7394,7 +7573,7 @@ function MessagePanel() {
     useEffect(() => {
         if (mode === 'text' && projected) update(text);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [bgChoice, textColor]);
+    }, [bgChoice, textColor, fontFamily]);
 
     const stop = useCallback(() => {
         setProjected(false);
@@ -7427,8 +7606,8 @@ function MessagePanel() {
     const savedRangeRef = useRef<Range | null>(null);
 
     // închiderea editorului: dacă există modificări nesalvate, cere confirmare
-    const attemptCloseOverlay = useCallback(() => {
-        if (dirty && !window.confirm(t('Ai modificări nesalvate în acest șablon. Închizi fără să salvezi? (poți edita și proiecta și fără să salvezi)'))) return;
+    const attemptCloseOverlay = useCallback(async () => {
+        if (dirty && !await confirmGate.ask(t('Ai modificări nesalvate în acest șablon. Închizi fără să salvezi? (poți edita și proiecta și fără să salvezi)'))) return;
         setOverlayOpen(false);
     }, [dirty, t]);
 
@@ -7528,8 +7707,8 @@ function MessagePanel() {
     const slidePayload = useCallback((idx: number): ProjectionTextData => {
         const p = presRef.current!;
         const slide = p.slides[idx];
-        return { shapes: slide.shapes, background: bgToPayload(bgChoice, slide), textColor };
-    }, [bgChoice, textColor]);
+        return { shapes: slide.shapes, background: bgToPayload(bgChoice, slide), textColor, fontFamily: fontFamily || undefined };
+    }, [bgChoice, textColor, fontFamily]);
 
     const projectSlide = useCallback((idx: number, first: boolean) => {
         const payload = slidePayload(idx);
@@ -7545,6 +7724,14 @@ function MessagePanel() {
             if (presRef.current) window.electron.projection.updateText(slidePayload(curSlide));
         }, 500);
     }, [presProjected, slidePayload, curSlide]);
+
+    // fontul schimbat cu prezentarea pe ecran se vede imediat
+    useEffect(() => {
+        if (mode === 'pres' && presProjected && presRef.current) {
+            window.electron.projection.updateText(slidePayload(curSlide));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fontFamily]);
 
     const goSlide = (idx: number) => {
         if (!presRef.current) return;
@@ -7800,6 +7987,7 @@ function MessagePanel() {
                                 <span className="color-hex">{textColor}</span>
                             </div>
                         </div>
+                        <AnnounceFontPicker value={fontFamily} onChange={setFontFamily} />
                         <BackgroundPicker bg={bgChoice} onChange={setBgChoice} />
                         <div className="timer-actions">
                             {!projected ? (
@@ -7819,7 +8007,7 @@ function MessagePanel() {
                     <div className="rt-right">
                         <label className="timer-label">{t('Previzualizare (cum apare pe ecran)')}</label>
                         <div className="rt-preview" style={{ background: textPreviewBgCss }}>
-                            <div className="rt-preview-center rt-preview-text" style={{ color: textColor }}>
+                            <div className="rt-preview-center rt-preview-text" style={{ color: textColor, fontFamily: fontFamily || undefined }}>
                                 {text.trim() || t('Scrie un mesaj…')}
                             </div>
                         </div>
@@ -7924,7 +8112,7 @@ function MessagePanel() {
                     <div className="rt-right">
                         <label className="timer-label">{t('Previzualizare')}</label>
                         {presRef.current && slide ? (<>
-                            <div className="rt-preview" style={{ background: canvasBgCss ?? projFallbackCss, color: textColor }}>
+                            <div className="rt-preview" style={{ background: canvasBgCss ?? projFallbackCss, color: textColor, fontFamily: fontFamily || undefined }}>
                                 {slide.shapes.map((sh, i) => sh.imageSrc ? (
                                     <div key={i} className="rt-pv-shape" style={{ left: `${sh.x}%`, top: `${sh.y}%`, width: `${sh.w}%`, height: `${sh.h}%` }}>
                                         <img src={`localfile://${encodeURI(sh.imageSrc)}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -8052,7 +8240,7 @@ function MessagePanel() {
                         <div
                             className="pres-canvas pres-canvas-big"
                             ref={canvasRef}
-                            style={{ fontSize: canvasFont, background: canvasBgCss ?? projFallbackCss, color: textColor }}
+                            style={{ fontSize: canvasFont, background: canvasBgCss ?? projFallbackCss, color: textColor, fontFamily: fontFamily || undefined }}
                             onMouseDown={e => { if (e.target === e.currentTarget) setFocusedShape(null); }}
                         >
                             {slide?.shapes.map((sh, i) => (
@@ -8143,6 +8331,10 @@ function MessagePanel() {
                                 </div>
                                 <span className="timer-hint">{t('Se aplică textului fără culoare proprie (cele colorate din PPT rămân).')}</span>
                             </div>
+                            <AnnounceFontPicker
+                                value={fontFamily}
+                                onChange={setFontFamily}
+                            />
                         </div>
 
                         <div className="pres-save">

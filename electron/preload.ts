@@ -212,6 +212,7 @@ contextBridge.exposeInMainWorld('electron', {
     showTimer: (data: any) => ipcRenderer.invoke('projection:show-timer', data),
     showText: (data: any) => ipcRenderer.invoke('projection:show-text', data),
     updateText: (data: unknown) => ipcRenderer.invoke('projection:update-text', data),
+    updateTimer: (data: unknown) => ipcRenderer.invoke('projection:update-timer', data),
     onTimer: (cb: (data: any) => void) =>
       ipcRenderer.on('projection:timer', (_e, data) => cb(data)),
     offTimer: () => ipcRenderer.removeAllListeners('projection:timer'),
