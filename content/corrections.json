@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-10-10T16:54:37+00:00",
+    "generated": "2026-10-10T17:44:29+00:00",
     "entries": [
         {
             "seq": 1,
@@ -723,6 +723,216 @@
             "force": false,
             "ts": "2026-10-10T16:54:37.000Z",
             "text_hash": "17ca764e9a5edd226985b03e4d55474d572bc626fab45dd80f366d0c2496fc1f",
+            "only_if_absent": true
+        },
+        {
+            "seq": 24,
+            "category": "Imnuri Speciale",
+            "number": "004",
+            "title": "Bucurați-vă",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Bucurați-vă de soare, bucurați-vă în zori,\nDe căldură și răcoare și de norii călători!\nBucurați-vă de ploaie, de zăpadă și de vânt,\nDe cascade și pâraie, bucurați-vă de cânt!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Bucurați-vă! Bucurați-vă!\nPentru tot ce-n cale întâlniți!\nBucurați-vă! Bucurați-vă!\nDumnezeu vă face fericiți!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Bucurați-vă de-o floare, bucurați-vă de-un vers!\nDe copaci, de munți și mare, de întregul univers!\nBucurați-vă de stele, de apus și răsărit!\nDe furnici și păsărele, de-nceput și de sfârșit!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Bucurați-vă! Bucurați-vă!\nPentru tot ce-n cale întâlniți!\nBucurați-vă! Bucurați-vă!\nDumnezeu vă face fericiți!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Bucurați-vă de vise, de uitări și amintiri,\nDe minunile promise, de speranțe și împliniri.\nBucurați-vă de toate, de încercări și bucurii!\nDe prieten și de frate, de părinți și de copii!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Bucurați-vă! Bucurați-vă!\nPentru tot ce-n cale întâlniți!\nBucurați-vă! Bucurați-vă!\nDumnezeu vă face fericiți!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Bucurați-vă de viață, de iubire și visări,\nȘi de orice dimineață, de odihnă și-nserări!\nBucurați-vă de pace, de prezent și de trecut,\nDe Acel ce poate face, totul nou ca la-nceput!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Bucurați-vă! Bucurați-vă!\nPentru tot ce-n cale întâlniți!\nBucurați-vă! Bucurați-vă!\nDumnezeu vă face fericiți!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T17:42:08.000Z",
+            "text_hash": "5cc334f59cc85a769607cff4948c3b512e74660f6f51b742a1fb4f2b7f66f693",
+            "only_if_absent": true
+        },
+        {
+            "seq": 25,
+            "category": "Tineret",
+            "number": "053",
+            "title": "Din zori de zi",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Din zori de zi viața\nîn șoaptă a zâmbit,\nNeliniștiți munții\nspre soare-au pornit."
+                },
+                {
+                    "type": "refren",
+                    "text": "În pacea Ta, Doamne inima s-a stins,\nDe mână cu Tatăl am cerul deschis."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Doar mână în mână\nspre zâmbet ușor,\nLacrima din suflet,\nsemn de prea mult dor..."
+                },
+                {
+                    "type": "refren",
+                    "text": "În pacea Ta, Doamne inima s-a stins,\nDe mână cu Tatăl am cerul deschis."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Pe cruce iubirea din cer ne-a urzit,\nÎn veci fericirea\nprin El am primit."
+                },
+                {
+                    "type": "refren",
+                    "text": "În pacea Ta, Doamne inima s-a stins,\nDe mână cu Tatăl am cerul deschis.\nCoda:\nSpre slava Ta,\nDoamne ne-am strâns într-un glas,\nCerul sfânt e-al nostru,\npământ bun rămas!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T17:43:28.000Z",
+            "text_hash": "0d010db1d0a22fba610607b77c0fa44e8304eb0d9c3ed43d2bb6e0975d75631d"
+        },
+        {
+            "seq": 26,
+            "category": "Tineret",
+            "number": "054",
+            "title": "De la stânci",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "De la stânci am învățat\nSă urcăm spre soare\nDe la cerul înstelat\nPacea-n încercare..."
+                },
+                {
+                    "type": "refren",
+                    "text": "Doamne-ajută să-nțelegem\nTot ce astăzi vom vedea,\nSă vedem iubirea Ta\nPe oriunde mergem!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "De la ape-am învățat\nSă privim ‘nainte,\nDe la mărul încărcat\nDragostea fierbinte..."
+                },
+                {
+                    "type": "strofa",
+                    "text": "De la flori am învățat\nCât e de frumoasă\nViața care ni s-a dat,\nInima voioasă..."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T17:43:28.000Z",
+            "text_hash": "aef960d7d3805c864f725112521065b0cab1d0347b5c361b7bed66d8424b4cd7"
+        },
+        {
+            "seq": 27,
+            "category": "Imnuri Speciale",
+            "number": "005",
+            "title": "De-aș putea ca vulturul să zbor",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "De-aș putea ca vulturul să zbor\nCătre Bunul meu Mântuitor,\n(: Să colind prin sferele cerești\nȘi să cânt cu cete îngerești :)"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Vinovat am fost mereu și sunt,\nTrecător ca iarba de pe câmp,\n(: Doamne ia-mă Tu în slujba Ta,\nFă-mă Tu unealtă scumpă-a Ta :)"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Și atunci putea-voi ca să zbor,\nCăci Tu mi-ești singur Mântuitor.\n(: Numai Tu dacă-mi vei ajuta,\nFața sfântă-atunci Ți-o voi vedea :)"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T17:43:47.000Z",
+            "text_hash": "b9d0d2ce7952a89f3b12ec019d7e60085e648d8c111251776e10cef2d0f2034a",
+            "only_if_absent": true
+        },
+        {
+            "seq": 28,
+            "category": "Imnuri Speciale",
+            "number": "006",
+            "title": "Doar o colibă",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Doar o colibă aici jos îmi ajunge\nArgint şi aur n-am în casa mea.\nDar în oraşul strălucirii divine,\nNumai în aur eu voi umbla."
+                },
+                {
+                    "type": "refren",
+                    "text": "Eu am locaşul dincolo-n mărire\nÎn strălucirea ce n-o pot visa\nCândva acolo voi sfârşi alergarea,\nPe străzi de aur în slava Sa."
+                },
+                {
+                    "type": "strofa",
+                    "text": "De vreo ispită îmi chinuie gândul\nŞi ca profetul pe piatră adorm,\nEu ştiu că-n ceruri, dincolo de stele,\nVoi sta la masă lângă-al meu Domn."
+                },
+                {
+                    "type": "refren",
+                    "text": "Eu am locaşul dincolo-n mărire\nÎn strălucirea ce n-o pot visa\nCândva acolo voi sfârşi alergarea,\nPe străzi de aur în slava Sa."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Să nu mă credeţi sărman şi nici singur\nSufletul meu e de ceruri legat.\nSunt călătorul ce-şi caută ţara\nUnde-i lumină neîncetat!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Eu am locaşul dincolo-n mărire\nÎn strălucirea ce n-o pot visa\nCândva acolo voi sfârşi alergarea,\nPe străzi de aur în slava Sa."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T17:44:05.000Z",
+            "text_hash": "0ce5d0be990d7b79824e02ab8eec037b2cb2ec34023b271e009b552a48614df3",
+            "only_if_absent": true
+        },
+        {
+            "seq": 29,
+            "category": "Imnuri Speciale",
+            "number": "007",
+            "title": "Fericit mă simt în viață",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Fericit mă simt în viață,\nCăci pe Domnul l-am aflat.\nȘi voi fi întotdeauna,\nCu El ne-ncetat."
+                },
+                {
+                    "type": "refren",
+                    "text": "Fericit mă simt mereu,\nOcrotit de brațul Său,\nȘi sub ocrotirea Sa,\nEu voi rămânea."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Când sunt istovit pe cale,\nMă simt fără ajutor,\nMă-nconjoară cu-ndurare,\nAl meu Salvator."
+                },
+                {
+                    "type": "refren",
+                    "text": "Fericit mă simt mereu,\nOcrotit de brațul Său,\nȘi sub ocrotirea Sa,\nEu voi rămânea."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Când mă simt străin în lume\nȘi când toți m-au părăsit,\nEl îmi e a mea salvare,\nEl m-a mântuit."
+                },
+                {
+                    "type": "refren",
+                    "text": "Fericit mă simt mereu,\nOcrotit de brațul Său,\nȘi sub ocrotirea Sa,\nEu voi rămânea."
+                },
+                {
+                    "type": "strofa",
+                    "text": "De aceea a mea viață,\nLui Isus azi i-o predau;\nȘi îl rog să-mi dea povață,\nLângă El să stau."
+                },
+                {
+                    "type": "refren",
+                    "text": "Fericit mă simt mereu,\nOcrotit de brațul Său,\nȘi sub ocrotirea Sa,\nEu voi rămânea."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-10T17:44:29.000Z",
+            "text_hash": "b28717b5d6f7667537e1e47ded8a9a3d308b67c42b9f92a7617ecd2bc1d1a95c",
             "only_if_absent": true
         }
     ]
