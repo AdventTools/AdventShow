@@ -1,5 +1,19 @@
 # Changelog — AdventShow
 
+## v1.6.6 (10 Octombrie 2026)
+
+### Modificări
+- Autorii îți pot răspunde la problemele și sugestiile trimise din aplicație. Când vine un răspuns, se aprinde plicul de sus, ca la celelalte vești; îl citești acolo și apeși „Am citit".
+- Tot ce ai trimis de pe calculatorul ăsta, cu starea fiecărui mesaj (primit, analizat, în lucru, rezolvat) și cu răspunsul autorilor, e în Setări, la „Legătura cu autorii" → „Mesajele mele". Apar și mesajele trimise înainte de această versiune.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.6.5 (10 Octombrie 2026)
 
 ### Modificări
@@ -12,14 +26,6 @@
 - Când treci la Imnuri sau la Biblia, poți scrie direct numărul sau trimiterea: cursorul e deja în căutare.
 - O blocare scurtă a bazei de date (antivirus, copie de siguranță) se așteaptă, nu mai produce o eroare.
 - Un raport trimis nu mai atașează jurnalul de depanare dacă acesta e mai vechi de o zi.
-
----
-
-## Nepublicat
-
-### Modificări
-- Autorii îți pot răspunde la problemele și sugestiile trimise din aplicație. Când vine un răspuns, se aprinde plicul de sus, ca la celelalte vești; îl citești acolo și apeși „Am citit".
-- Tot ce ai trimis de pe calculatorul ăsta, cu starea fiecărui mesaj (primit, analizat, în lucru, rezolvat) și cu răspunsul autorilor, e în Setări, la „Legătura cu autorii" → „Mesajele mele". Apar și mesajele trimise înainte de această versiune.
 
 ---
 
