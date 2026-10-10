@@ -277,6 +277,9 @@ contextBridge.exposeInMainWorld('electron', {
     pending: () => ipcRenderer.invoke('feedback:pending') as Promise<number>,
     retryPending: () => ipcRenderer.invoke('feedback:retry-pending') as Promise<number>,
     logPreview: () => ipcRenderer.invoke('feedback:log-preview') as Promise<string>,
+    messages: () => ipcRenderer.invoke('feedback:messages'),
+    unreadReplies: () => ipcRenderer.invoke('feedback:unread-replies') as Promise<number>,
+    markRead: (ids: number[]) => ipcRenderer.invoke('feedback:mark-read', ids) as Promise<void>,
   },
 
   video: {

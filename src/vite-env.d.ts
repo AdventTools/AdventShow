@@ -166,6 +166,19 @@ export interface ProjectionTextData {
   fontFamily?: string;      // fontul anunțului (gol = fontul implicit al proiecției)
 }
 
+/** O problemă sau o sugestie trimisă autorilor, cu starea și răspunsul lor. */
+export interface SentMessage {
+  id: number;
+  kind: 'bug' | 'suggestion';
+  subject: string;
+  body: string;
+  status: 'new' | 'triaged' | 'open' | 'resolved' | 'rejected';
+  reply: string;
+  replied_at: string | null;
+  created_at: string;
+  unread: boolean;          // are un răspuns pe care omul nu l-a citit încă
+}
+
 export interface DisplayInfo {
   id: number;
   label: string;
@@ -460,6 +473,9 @@ export interface IElectronAPI {
     pending: () => Promise<number>;
     retryPending: () => Promise<number>;
     logPreview: () => Promise<string>;
+    messages: () => Promise<SentMessage[]>;
+    unreadReplies: () => Promise<number>;
+    markRead: (ids: number[]) => Promise<void>;
   };
   video: {
     pickFile: () => Promise<string | undefined>;

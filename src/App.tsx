@@ -83,6 +83,7 @@ import type {
     Presentation,
     PresShape,
     ProjectionTextData,
+    SentMessage,
     TemplateInfo,
     YouTubeEntry,
 } from './vite-env';
@@ -676,9 +677,10 @@ function App() {
             window.electron.contrib.hymnStates(),
             window.electron.db.countToReview(),
             window.electron.ytdlp.health().catch(() => null),
-        ]).then(([d, st, rev, yt]) => setDecisionsCount(
+            window.electron.feedback.unreadReplies(),
+        ]).then(([d, st, rev, yt, rep]) => setDecisionsCount(
             (d as PendingDecision[]).length + (st as HymnState[]).length + (rev as number)
-            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0),
+            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0) + (rep as number),
         )).catch(() => { });
         numaraRaspunsuriRef.current = numaraRaspunsuri;
         numaraRaspunsuri();
@@ -2119,9 +2121,10 @@ function App() {
                             window.electron.contrib.hymnStates(),
                             window.electron.db.countToReview(),
                             window.electron.ytdlp.health().catch(() => null),
-                        ]).then(([d, st, rev, yt]) => setDecisionsCount(
+                            window.electron.feedback.unreadReplies(),
+                        ]).then(([d, st, rev, yt, rep]) => setDecisionsCount(
                             (d as PendingDecision[]).length + (st as HymnState[]).length + (rev as number)
-                            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0),
+                            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0) + (rep as number),
                         )).catch(() => { });
                     }}
                     onChanged={() => { loadHymns(); numaraRaspunsuriRef.current?.(); }}
@@ -2636,7 +2639,7 @@ function App() {
             {(modalOpen === 'settings' || modalOpen === 'help') && (
                 <SettingsModal
                     initialTab={modalOpen === 'help' ? 'help' : 'projection'}
-                    onClose={() => setModalOpen(null)}
+                    onClose={() => { setModalOpen(null); numaraRaspunsuriRef.current?.(); }}
                     onCategoriesChanged={loadCategories}
                     onHymnsChanged={loadHymns}
                     onChangePassword={() => { setModalOpen(null); setSetPwOpen('change'); }}
@@ -5398,10 +5401,13 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
     const [states, setStates] = useState<HymnState[]>([]);
     const [deVerificat, setDeVerificat] = useState<HymnToReview[]>([]);
     const [yt, setYt] = useState<YtDlpHealth | null>(null);
+    const [replies, setReplies] = useState<SentMessage[]>([]);
+    const [allMessagesOpen, setAllMessagesOpen] = useState(false);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState('');
 
     const load = useCallback(() => {
+        window.electron.feedback.messages().then(m => setReplies(m.filter(i => i.unread))).catch(() => setReplies([]));
         window.electron.contrib.decisions().then(setItems).catch(() => setItems([]));
         window.electron.contrib.hymnStates().then(setStates).catch(() => setStates([]));
         window.electron.db.hymnsToReview().then(setDeVerificat).catch(() => setDeVerificat([]));
@@ -5411,10 +5417,11 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
     // Dacă fereastra s-a deschis și nu are nimic de arătat, butonul din antet e
     // aprins degeaba: îi cerem părintelui să recalculeze, ca să se stingă pe loc.
     useEffect(() => {
-        if (items.length === 0 && states.length === 0 && deVerificat.length === 0 && !ytCereAtentie(yt)) {
+        if (items.length === 0 && states.length === 0 && deVerificat.length === 0 && !ytCereAtentie(yt)
+            && replies.length === 0) {
             onChanged();
         }
-    }, [items, states, deVerificat, yt, onChanged]);
+    }, [items, states, deVerificat, yt, replies, onChanged]);
     useEffect(() => { load(); }, [load]);
 
     const alegeImn = async (key: string,
@@ -5447,12 +5454,39 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
                 </div>
                 <div className="modal-body">
                     {items.length === 0 && states.length === 0 && deVerificat.length === 0
-                        && !ytCereAtentie(yt) && (
+                        && !ytCereAtentie(yt) && replies.length === 0 && (
                         <div className="text-fg/50 text-sm py-6 text-center">
                             {t('Nu te așteaptă nimic. Tot ce era de rezolvat e rezolvat.')}
                         </div>
                     )}
                     {error && <div className="editor-error">{error}</div>}
+
+                    {replies.length > 0 && (
+                        <div className="review-block">
+                            <div className="review-head">
+                                <strong>{t(replies.length === 1
+                                    ? 'Ai un răspuns la un mesaj trimis de tine'
+                                    : 'Ai {n} răspunsuri la mesajele trimise de tine', { n: replies.length })}</strong>
+                            </div>
+                            {replies.map(m => (
+                                <MessageCard key={m.id} m={m}>
+                                    <button className="btn-action" disabled={busy === `msg${m.id}`}
+                                        onClick={async () => {
+                                            setBusy(`msg${m.id}`);
+                                            await window.electron.feedback.markRead([m.id]);
+                                            setBusy(null);
+                                            load();
+                                            onChanged();
+                                        }}>
+                                        {t('Am citit')}
+                                    </button>
+                                </MessageCard>
+                            ))}
+                            <button className="btn-clear" onClick={() => setAllMessagesOpen(true)}>
+                                {t('Toate mesajele mele')}
+                            </button>
+                        </div>
+                    )}
 
                     {ytCereAtentie(yt) && (
                         <div className="review-block">
@@ -5602,6 +5636,76 @@ function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
 
                     <p className="text-fg/40 text-xs mt-3">
                         {t('Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.')}
+                    </p>
+                </div>
+            </div>
+            {allMessagesOpen && <MessagesModal onClose={() => { setAllMessagesOpen(false); load(); onChanged(); }} />}
+        </div>
+    );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Mesajele trimise autorilor — problemele și sugestiile instalării, cu starea și
+// răspunsul lor. Lista vine din hangar (după identificatorul instalării), deci
+// cuprinde și ce s-a trimis înainte ca aplicația să țină evidența.
+// ═════════════════════════════════════════════════════════════════════════════
+
+function MessageCard({ m, children }: { m: SentMessage; children?: React.ReactNode }) {
+    const t = useT();
+    const stare: Record<SentMessage['status'], string> = {
+        new: t('Primit'), triaged: t('Analizat'), open: t('În lucru'),
+        resolved: t('Rezolvat'), rejected: t('Nu se face'),
+    };
+    const data = new Date(m.created_at).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
+    return (
+        <div className="message-card">
+            <div className="message-head">
+                <strong>{m.subject || (m.kind === 'bug' ? t('Problemă') : t('Sugestie'))}</strong>
+                <span className={`message-status message-status-${m.status}`}>{stare[m.status] ?? m.status}</span>
+            </div>
+            <div className="message-meta">
+                {m.kind === 'bug' ? t('Problemă') : t('Sugestie')} · {data}
+            </div>
+            {m.body && <p className="message-body">{m.body}</p>}
+            {m.reply && (
+                <div className={`message-reply ${m.unread ? 'is-new' : ''}`}>
+                    <span className="message-reply-label">{t('Răspunsul autorilor')}</span>
+                    <p>{m.reply}</p>
+                </div>
+            )}
+            {children && <div className="row">{children}</div>}
+        </div>
+    );
+}
+
+function MessagesModal({ onClose }: { onClose: () => void }) {
+    const t = useT();
+    const [list, setList] = useState<SentMessage[] | null>(null);
+
+    // Deschiderea listei înseamnă că omul a văzut răspunsurile din ea.
+    useEffect(() => {
+        window.electron.feedback.messages().then(m => {
+            setList(m);
+            const necitite = m.filter(i => i.unread).map(i => i.id);
+            if (necitite.length) window.electron.feedback.markRead(necitite).catch(() => { });
+        }).catch(() => setList([]));
+    }, []);
+
+    return (
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="modal-dialog">
+                <div className="modal-header">
+                    <h3>{t('Mesajele mele')}</h3>
+                    <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
+                </div>
+                <div className="modal-body">
+                    {list === null ? null : list.length === 0 ? (
+                        <div className="text-fg/50 text-sm py-6 text-center">
+                            {t('N-ai trimis încă nicio problemă sau sugestie de pe acest calculator.')}
+                        </div>
+                    ) : list.map(m => <MessageCard key={m.id} m={m} />)}
+                    <p className="text-fg/40 text-xs mt-3">
+                        {t('Aici apar problemele și sugestiile trimise de pe acest calculator. Când autorii răspund, plicul de sus se aprinde.')}
                     </p>
                 </div>
             </div>
@@ -5974,6 +6078,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     const [updateChannelValue, setUpdateChannelValue] = useState<'stable' | 'beta'>('stable');
     const [feedbackKind, setFeedbackKind] = useState<'bug' | 'suggestion' | null>(null);
     const [pendingFeedback, setPendingFeedback] = useState(0);
+    const [messagesOpen, setMessagesOpen] = useState(false);
     const [decisionsOpen, setDecisionsOpen] = useState(false);
     const [pendingDecisions, setPendingDecisions] = useState(0);
 
@@ -5981,8 +6086,9 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
         window.electron.settings.get().then(s => setSettings(s));
         window.electron.update.getChannel().then(setUpdateChannelValue).catch(() => { });
         window.electron.feedback.pending().then(setPendingFeedback).catch(() => { });
-        Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates()])
-            .then(([d, st]) => setPendingDecisions(d.length + st.length)).catch(() => { });
+        Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates(),
+            window.electron.feedback.unreadReplies()])
+            .then(([d, st, rep]) => setPendingDecisions(d.length + st.length + rep)).catch(() => { });
     }, []);
 
     // Close on Escape
@@ -6311,12 +6417,15 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                             <section className="sgroup">
                                 <div className="sgroup-head">
                                     <h4>{t('Legătura cu autorii')}</h4>
-                                    <p>{t('Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Aici vezi ce s-a hotărât cu ele.')}</p>
+                                    <p>{t('Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Aici vezi ce s-a hotărât cu ele și ce ți-au răspuns autorii la mesaje.')}</p>
                                 </div>
                                 <div className="row" style={{ flexWrap: 'wrap' }}>
                                     <button className="btn-action" onClick={() => setDecisionsOpen(true)}>
                                         {t('Răspunsuri la ce ai trimis')}
                                         {pendingDecisions > 0 && <span className="pill-count">{pendingDecisions}</span>}
+                                    </button>
+                                    <button className="btn-clear" onClick={() => setMessagesOpen(true)}>
+                                        {t('Mesajele mele')}
                                     </button>
                                     <button className="btn-clear" onClick={() => setFeedbackKind('bug')}>
                                         {t('Raportează o problemă')}
@@ -6687,11 +6796,21 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                             window.electron.contrib.decisions(),
                             window.electron.contrib.hymnStates(),
                             window.electron.db.countToReview(),
-                        ]).then(([d, st, rev]) => setPendingDecisions(d.length + st.length + rev)).catch(() => { });
+                            window.electron.feedback.unreadReplies(),
+                        ]).then(([d, st, rev, rep]) => setPendingDecisions(d.length + st.length + rev + rep)).catch(() => { });
                         onHymnsChanged();
                     }}
                     onReviewHymn={id => { onClose(); onReviewHymn(id); }}
                 />
+            )}
+
+            {messagesOpen && (
+                <MessagesModal onClose={() => {
+                    setMessagesOpen(false);
+                    Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates(),
+                        window.electron.db.countToReview(), window.electron.feedback.unreadReplies()])
+                        .then(([d, st, rev, rep]) => setPendingDecisions(d.length + st.length + rev + rep)).catch(() => { });
+                }} />
             )}
 
             {feedbackKind && (

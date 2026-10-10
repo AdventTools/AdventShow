@@ -17,7 +17,9 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Autorii îți pot răspunde la problemele și sugestiile trimise din aplicație. Când vine un răspuns, se aprinde plicul de sus, ca la celelalte vești; îl citești acolo și apeși „Am citit".
+- Tot ce ai trimis de pe calculatorul ăsta, cu starea fiecărui mesaj (primit, analizat, în lucru, rezolvat) și cu răspunsul autorilor, e în Setări, la „Legătura cu autorii" → „Mesajele mele". Apar și mesajele trimise înainte de această versiune.
 
 ---
 
