@@ -1,5 +1,18 @@
 # Changelog — AdventShow
 
+## v1.6.10 (10 Octombrie 2026)
+
+### Modificări
+- Iconițele de acompaniament din lista de imnuri sunt acum toate note muzicale, în același gri: notă tăiată = fără acompaniament, notă cu săgeată = de descărcat, notă = descărcat, notă cu rânduri de text = sincronizat cu versurile.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.6.9 (10 Octombrie 2026)
 
 ### Modificări
@@ -7,13 +20,6 @@
 - În lista de imnuri, iconița din dreptul numărului arată starea acompaniamentului: fără acompaniament, de descărcat, descărcat, sau descărcat și sincronizat cu versurile. Semnul de acompaniament nu mai apare greșit la imnurile din alte colecții care au același număr cu unul din „Imnuri Creștine".
 - La pornire și după fereastra „Ce e nou", cursorul e direct în căutarea de imnuri: poți scrie numărul imediat.
 - La „Tineret", „Din zori de zi" și „De la stânci" au strofele și refrenul la locul lor.
-
----
-
-## Nepublicat
-
-### Modificări
-- Iconițele de acompaniament din lista de imnuri sunt acum toate note muzicale, în același gri: notă tăiată = fără acompaniament, notă cu săgeată = de descărcat, notă = descărcat, notă cu rânduri de text = sincronizat cu versurile.
 
 ---
 
