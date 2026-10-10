@@ -2352,12 +2352,6 @@
 }
 
 /* ── Ce e nou: notele de versiune, pe versiuni, cea mai nouă prima ── */
-.whatsnew-intro {
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin: 0 0 14px;
-    line-height: 1.5;
-}
 .whatsnew-version {
     padding: 14px 0;
     border-top: 1px solid var(--border);
