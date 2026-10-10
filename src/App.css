@@ -74,7 +74,6 @@
     border-color: rgba(194 65 12 / 0.35);
 }
 :root[data-theme="light"] .sec-label.strofa { color: #2563eb; }
-:root[data-theme="light"] .hymn-acc-sincronizat { color: #15803d; }
 :root[data-theme="light"] .search-scope-badge {
     color: #b45309;
     background: rgba(245 158 11 / 0.14);
@@ -776,13 +775,10 @@
     align-items: center;
     justify-content: center;
     align-self: center;
+    /* Toate în același gri, decizia ownerului: starea o spune forma, nu culoarea. */
+    color: rgb(var(--fg-rgb) / 0.45);
 }
 .hymn-acc svg { width: 11px; height: 11px; stroke-width: 2.25; }
-/* De la cel mai discret la cel mai vizibil: fără → de descărcat → descărcat → sincronizat. */
-.hymn-acc-lipsa { color: rgb(var(--fg-rgb) / 0.18); }
-.hymn-acc-disponibil { color: rgb(var(--fg-rgb) / 0.4); }
-.hymn-acc-descarcat { color: var(--accent); opacity: 0.75; }
-.hymn-acc-sincronizat { color: #22c55e; }
 
 .hymn-info {
     display: flex;

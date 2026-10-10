@@ -12,7 +12,8 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Iconițele de acompaniament din lista de imnuri sunt acum toate note muzicale, în același gri: notă tăiată = fără acompaniament, notă cu săgeată = de descărcat, notă = descărcat, notă cu rânduri de text = sincronizat cu versurile.
 
 ---
 
