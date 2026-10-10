@@ -10,7 +10,8 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- „Ce e nou", după o actualizare, arată versiunea la care ai ajuns și toate schimbările de la versiunea pe care o aveai, într-o singură listă, fără versiunile intermediare. Istoricul complet, pe versiuni, rămâne în Setări.
 
 ---
 

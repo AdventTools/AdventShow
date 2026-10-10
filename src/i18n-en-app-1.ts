@@ -78,9 +78,6 @@ export const EN_APP_1: Record<string, string> = {
     // Ce e nou (WhatsNew.tsx). Notele în sine rămân în română: vin din CHANGELOG.
     'Versiunea {v}': 'Version {v}',
     'Istoricul versiunilor': 'Version history',
-    'Ce e nou: de la versiunea {from} la {to}': "What's new: from version {from} to {to}",
     'Ce e nou în versiunea {v}': "What's new in version {v}",
-    'Actualizarea cuprinde {n} versiuni. Mai jos e tot ce s-a schimbat, începând cu cea mai nouă.':
-        'This update spans {n} versions. Below is everything that changed, newest first.',
     'Ce s-a schimbat în fiecare versiune': 'What changed in each version',
 };

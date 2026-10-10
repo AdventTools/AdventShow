@@ -19,11 +19,10 @@ function Inline({ text }: { text: string }) {
     );
 }
 
-function VersionNotes({ v }: { v: ChangelogVersion }) {
-    const t = useT();
+function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
     // Punctele consecutive merg în aceeași listă; titlurile și paragrafele o întrerup.
     const groups: (ChangelogBlock | ChangelogBlock[])[] = [];
-    for (const b of v.blocks) {
+    for (const b of blocks) {
         const last = groups[groups.length - 1];
         if (b.kind === 'punct') {
             if (Array.isArray(last)) last.push(b);
@@ -31,11 +30,7 @@ function VersionNotes({ v }: { v: ChangelogVersion }) {
         } else groups.push(b);
     }
     return (
-        <section className="whatsnew-version">
-            <div className="whatsnew-head">
-                <span className="whatsnew-number">{t('Versiunea {v}', { v: v.version })}</span>
-                {v.date && <span className="whatsnew-date">{v.date}</span>}
-            </div>
+        <>
             {groups.map((g, i) => Array.isArray(g) ? (
                 <ul key={i} className="whatsnew-list">
                     {g.map((b, j) => <li key={j}><Inline text={b.text} /></li>)}
@@ -45,13 +40,28 @@ function VersionNotes({ v }: { v: ChangelogVersion }) {
             ) : (
                 <p key={i} className="whatsnew-text"><Inline text={g.text} /></p>
             ))}
+        </>
+    );
+}
+
+function VersionNotes({ v }: { v: ChangelogVersion }) {
+    const t = useT();
+    return (
+        <section className="whatsnew-version">
+            <div className="whatsnew-head">
+                <span className="whatsnew-number">{t('Versiunea {v}', { v: v.version })}</span>
+                {v.date && <span className="whatsnew-date">{v.date}</span>}
+            </div>
+            <Notes blocks={v.blocks} />
         </section>
     );
 }
 
 /**
- * „Ce e nou": `from`/`to` = ce s-a schimbat la actualizare, toate versiunile dintre
- * ele; `all` = tot istoricul (din Setări → Despre).
+ * „Ce e nou": `from`/`to` = ce s-a schimbat la actualizare; `all` = tot istoricul
+ * (din Setări → Despre). La actualizare omul vede doar versiunea la care a ajuns și
+ * toate schimbările de după cea pe care o avea, într-o singură listă, cele mai noi
+ * primele. Versiunile intermediare nu-i spun nimic: el n-a avut niciuna din ele.
  */
 export function WhatsNewModal({ from, to, all, onClose }: {
     from: string | null;
@@ -68,11 +78,7 @@ export function WhatsNewModal({ from, to, all, onClose }: {
         return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
-    const titlu = all
-        ? t('Istoricul versiunilor')
-        : list.length > 1
-            ? t('Ce e nou: de la versiunea {from} la {to}', { from: from ?? '', to })
-            : t('Ce e nou în versiunea {v}', { v: to });
+    const titlu = all ? t('Istoricul versiunilor') : t('Ce e nou în versiunea {v}', { v: to });
 
     return (
         <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -82,12 +88,9 @@ export function WhatsNewModal({ from, to, all, onClose }: {
                     <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
                 </div>
                 <div className="modal-body">
-                    {!all && list.length > 1 && (
-                        <p className="whatsnew-intro">
-                            {t('Actualizarea cuprinde {n} versiuni. Mai jos e tot ce s-a schimbat, începând cu cea mai nouă.', { n: list.length })}
-                        </p>
-                    )}
-                    {list.map(v => <VersionNotes key={v.version} v={v} />)}
+                    {all
+                        ? list.map(v => <VersionNotes key={v.version} v={v} />)
+                        : <section className="whatsnew-version"><Notes blocks={list.flatMap(v => v.blocks)} /></section>}
                 </div>
                 <div className="whatsnew-footer">
                     <button className="btn-action" onClick={onClose}>{t('Am înțeles')}</button>
