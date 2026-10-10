@@ -349,8 +349,10 @@ export interface IElectronAPI {
   accompaniment: {
     stats: () => Promise<AccompanimentStats>;
     refresh: () => Promise<AccompanimentStats>;
-    /** Numerele de imn care au fișierul pe disc. */
-    present: () => Promise<number[]>;
+    /** Ce există pe server, ce e pe disc și ce are marcaje de sincronizare (numere de imn). */
+    states: () => Promise<{ available: number[]; present: number[]; synced: number[] }>;
+    onChanged: (cb: () => void) => void;
+    offChanged: () => void;
     info: (numar: number) => Promise<AccompanimentInfo | null>;
     /** Descarcă dacă lipsește; null când nu există fișier sau nu e internet. */
     ensure: (numar: number) => Promise<{ path: string; ms: number; bytes: number } | null>;

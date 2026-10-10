@@ -1677,7 +1677,11 @@ app.whenReady().then(() => {
   let accStopAll = false
   // Marcajele se aduc o dată la pornire, în fundal. Dacă serverul tace, rămân
   // cele din cache; dacă nu e niciunul, sincronizarea pur si simplu nu se oferă.
-  setImmediate(() => { void refreshSync(accDeps).then(s => { accSync = s ?? accSync }) })
+  // Lista de imnuri își recitește iconițele când se schimbă ce e sincronizat.
+  const accAnuntaSchimbarea = () => { if (isWinAlive(win)) win.webContents.send('accompaniment:changed') }
+  setImmediate(() => {
+    void refreshSync(accDeps).then(s => { accSync = s ?? accSync; accAnuntaSchimbarea() })
+  })
 
   /** Manifestul, cu o singură încercare de împrospătare dacă nu-l avem încă. */
   const accEnsureManifest = async (): Promise<AccompanimentManifest | null> => {
@@ -1696,11 +1700,20 @@ app.whenReady().then(() => {
     return accompanimentStats(accDeps, accManifest)
   })
 
-  /** Numerele de imn care au fișierul pe disc — pentru ♪ din listă. */
-  ipcMain.handle('accompaniment:present', async () => {
-    await accEnsureManifest()
-    return presentNumbers(accDeps, accManifest)
+  /**
+   * Starea acompaniamentului pentru iconițele din listă: ce există pe server, ce e
+   * pe disc și ce are marcaje de sincronizare (de la autori sau puse cu mâna).
+   */
+  ipcMain.handle('accompaniment:states', async () => {
+    const m = await accEnsureManifest()
+    const marcate = new Set([...Object.keys(accSync?.h ?? {}), ...Object.keys(localMarks(accDeps).h)])
+    return {
+      available: m ? m.items.map(i => i.n) : [],
+      present: presentNumbers(accDeps, m),
+      synced: [...marcate].map(Number).filter(n => Number.isFinite(n)),
+    }
   })
+
 
   /**
    * Calea locală a acompaniamentului unui imn, descărcându-l dacă lipsește.
@@ -1749,6 +1762,7 @@ app.whenReady().then(() => {
       () => isWinAlive(projectionWin),
     )
     if (isWinAlive(win)) win.webContents.send('accompaniment:bulk-done', rez)
+    accAnuntaSchimbarea()
     return rez
   })
 
@@ -1759,6 +1773,7 @@ app.whenReady().then(() => {
   ipcMain.handle('accompaniment:remove-all', async () => {
     const sterse = removeAllAccompaniment(accDeps)
     await accEnsureManifest()
+    accAnuntaSchimbarea()
     return { sterse, stats: accompanimentStats(accDeps, accManifest) }
   })
 
@@ -1779,6 +1794,7 @@ app.whenReady().then(() => {
     const n = setLocalMarks(accDeps, Number(numar), marks)
     debugLog('[Acompaniament] marcaje locale pentru', numar, marks ? marks.length : 0,
       '— imnuri marcate cu mâna:', n)
+    accAnuntaSchimbarea()
     return n
   })
 
@@ -1791,6 +1807,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('accompaniment:refresh-marks', async () => {
     accSync = (await refreshSync(accDeps)) ?? accSync
+    accAnuntaSchimbarea()
     return accSync ? Object.keys(accSync.h).length : 0
   })
 
