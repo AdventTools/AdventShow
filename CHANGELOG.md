@@ -1,18 +1,24 @@
 # Changelog — AdventShow
 
-## v1.6.6 (10 Octombrie 2026)
+## v1.6.7 (10 Octombrie 2026)
 
 ### Modificări
-- Autorii îți pot răspunde la problemele și sugestiile trimise din aplicație. Când vine un răspuns, se aprinde plicul de sus, ca la celelalte vești; îl citești acolo și apeși „Am citit".
-- Tot ce ai trimis de pe calculatorul ăsta, cu starea fiecărui mesaj (primit, analizat, în lucru, rezolvat) și cu răspunsul autorilor, e în Setări, la „Legătura cu autorii" → „Mesajele mele". Apar și mesajele trimise înainte de această versiune.
+- Pe Windows, instalarea unei actualizări se vede: apare o fereastră cu bara de progres, iar la final aplicația pornește singură. Înainte nu se vedea nimic, iar pe un calculator mai lent aplicația pornită de mână în timpul instalării putea rămâne cu ecranul alb. Așteaptă să pornească singură.
+- Pornirea și pașii unei actualizări se notează mereu în jurnalul aplicației, chiar dacă jurnalul de depanare e oprit, ca o problemă la actualizare să poată fi înțeleasă din raportul trimis.
 
 ---
 
 ## Nepublicat
 
+_(nimic încă)_
+
+---
+
+## v1.6.6 (10 Octombrie 2026)
+
 ### Modificări
-- Pe Windows, instalarea unei actualizări se vede: apare o fereastră cu bara de progres, iar la final aplicația pornește singură. Înainte nu se vedea nimic, iar pe un calculator mai lent aplicația pornită de mână în timpul instalării putea rămâne cu ecranul alb. Așteaptă să pornească singură.
-- Pornirea și pașii unei actualizări se notează mereu în jurnalul aplicației, chiar dacă jurnalul de depanare e oprit, ca o problemă la actualizare să poată fi înțeleasă din raportul trimis.
+- Autorii îți pot răspunde la problemele și sugestiile trimise din aplicație. Când vine un răspuns, se aprinde plicul de sus, ca la celelalte vești; îl citești acolo și apeși „Am citit".
+- Tot ce ai trimis de pe calculatorul ăsta, cu starea fiecărui mesaj (primit, analizat, în lucru, rezolvat) și cu răspunsul autorilor, e în Setări, la „Legătura cu autorii" → „Mesajele mele". Apar și mesajele trimise înainte de această versiune.
 
 ---
 
