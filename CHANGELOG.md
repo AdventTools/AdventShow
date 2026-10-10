@@ -9,7 +9,8 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Imnurile cu refrene diferite de la o strofă la alta se proiectează corect: după fiecare strofă apare refrenul ei. Înainte se repeta mereu primul refren (de exemplu la „Printre nori de osanale", unde fiecare refren se încheie altfel). Un refren scris o singură dată se repetă în continuare după toate strofele.
 
 ---
 
