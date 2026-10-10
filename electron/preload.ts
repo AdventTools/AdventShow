@@ -90,7 +90,9 @@ contextBridge.exposeInMainWorld('electron', {
   accompaniment: {
     stats: () => ipcRenderer.invoke('accompaniment:stats'),
     refresh: () => ipcRenderer.invoke('accompaniment:refresh'),
-    present: () => ipcRenderer.invoke('accompaniment:present'),
+    states: () => ipcRenderer.invoke('accompaniment:states'),
+    onChanged: (cb: () => void) => ipcRenderer.on('accompaniment:changed', () => cb()),
+    offChanged: () => ipcRenderer.removeAllListeners('accompaniment:changed'),
     info: (numar: number) => ipcRenderer.invoke('accompaniment:info', numar),
     ensure: (numar: number) => ipcRenderer.invoke('accompaniment:ensure', numar),
     downloadAll: () => ipcRenderer.invoke('accompaniment:download-all'),

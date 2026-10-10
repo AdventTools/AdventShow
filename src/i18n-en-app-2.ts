@@ -20,7 +20,6 @@ export const EN_APP_2: Record<string, string> = {
     'Aici stau imnurile adăugate de tine. Nimic din colecțiile oficiale nu le atinge vreodată. Ce scrii aici ajunge și la autorii AdventShow, care pot alege să adauge imnul în colecția oficială „Imnuri Speciale" — vei fi anunțat dacă se întâmplă.':
         'Your own added hymns live here. Nothing from the official collections ever touches this. What you write here also reaches the AdventShow authors, who may choose to add the hymn to the official "Imnuri Speciale" collection — you\'ll be notified if that happens.',
     'Niciun imn găsit': 'No hymn found',
-    'Are acompaniament descărcat': 'Has accompaniment downloaded',
     'Adus dintr-un PowerPoint — încă necitit': 'Imported from PowerPoint — not reviewed yet',
     'Opțiuni imn': 'Hymn options',
 

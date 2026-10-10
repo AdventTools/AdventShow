@@ -13,6 +13,9 @@ import {
     Lock,
     Monitor,
     Music,
+    AudioLines,
+    CircleSlash,
+    CloudDownload,
     Pause,
     Plus,
     Play,
@@ -412,7 +415,7 @@ function App() {
     /** Reglajele de avans, citite din setări la fiecare pornire. 3000 = implicit. */
     const accTitleDelay = useRef(3000);
     const accLead = useRef(3000);
-    const [accPresent, setAccPresent] = useState<Set<number>>(new Set());
+    const [accStates, setAccStates] = useState<AccStates>(ACC_STATES_GOALE);
     const [accPlaying, setAccPlaying] = useState(false);
     const [accLoading, setAccLoading] = useState(false);
     const [accRemaining, setAccRemaining] = useState(0);
@@ -551,14 +554,18 @@ function App() {
     useEffect(() => {
         if (startupFocusDoneRef.current) return;
         if (tab !== 'imnuri') return;
-        if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup || needsChurchInfo) return;
+        if (modalOpen || hymnEditor || passwordModal || needsPasswordSetup || needsChurchInfo || whatsNew) return;
+        // Pe Windows fereastra poate să nu aibă încă focusul sistemului: atunci cererea
+        // se repetă când îl primește, altfel cursorul nu ajungea în căutare.
+        const pune = () => refSearchRef.current?.focus();
         const tm = setTimeout(() => {
             if (startupFocusDoneRef.current) return;
             startupFocusDoneRef.current = true;
-            refSearchRef.current?.focus();
+            pune();
+            if (!document.hasFocus()) window.addEventListener('focus', pune, { once: true });
         }, 150);
-        return () => clearTimeout(tm);
-    }, [tab, modalOpen, hymnEditor, passwordModal, needsPasswordSetup, needsChurchInfo]);
+        return () => { clearTimeout(tm); window.removeEventListener('focus', pune); };
+    }, [tab, modalOpen, hymnEditor, passwordModal, needsPasswordSetup, needsChurchInfo, whatsNew]);
 
     // ── Load categories + books on mount ──
     const loadCategories = useCallback(async () => {
@@ -1061,7 +1068,7 @@ function App() {
                 setAccError(t('Nu s-a putut aduce. Verifică internetul.'));
                 return null;
             }
-            setAccPresent(prev => new Set(prev).add(numar));
+            setAccStates(prev => ({ ...prev, present: new Set(prev.present).add(numar) }));
             setAccInfo(prev => (prev && prev.n === numar
                 ? { ...prev, local: true, path: rez.path }
                 : prev));
@@ -1240,11 +1247,15 @@ function App() {
     ), [previewType, accInfo, accPlaying, accLoading, accRemaining, accError, accSync,
         accHasMarks, accLive, accPreluat, accToggle, accPlayOnly]);
 
-    // Ce imnuri au deja fișierul pe disc — pentru ♪ din listă.
+    // Starea acompaniamentului pentru iconițele din listă; se recitește când sosesc
+    // marcajele de sincronizare sau se pun cu mâna.
     useEffect(() => {
-        window.electron.accompaniment.present()
-            .then(list => setAccPresent(new Set(list)))
+        const citeste = () => window.electron.accompaniment.states()
+            .then(s => setAccStates({ available: new Set(s.available), present: new Set(s.present), synced: new Set(s.synced) }))
             .catch(() => { /* fără manifest încă */ });
+        citeste();
+        window.electron.accompaniment.onChanged(citeste);
+        return () => window.electron.accompaniment.offChanged();
     }, []);
 
     // Informația despre imnul pregătit: durată, dacă e local, și marcajele.
@@ -2455,7 +2466,8 @@ function App() {
                                 setContextMenu({ x: e.clientX, y: e.clientY, hymn });
                             }}
                             listRef={hymnListRef}
-                            accPresent={accPresent}
+                            accStates={accStates}
+                            accCategoryId={imnuriCrestineCategoryId}
                         />
                     ) : tab === 'video' ? (
                         <VideoController
@@ -2679,6 +2691,8 @@ function App() {
                     onClose={() => {
                         if (!whatsNew.all) window.electron.settings.set({ lastRunVersion: whatsNew.to });
                         setWhatsNew(null);
+                        // după „Ce e nou" de la pornire se poate scrie direct numărul imnului
+                        if (tab === 'imnuri' || tab === 'biblia') requestAnimationFrame(() => refSearchRef.current?.focus());
                     }}
                 />
             )}
@@ -2944,12 +2958,40 @@ function SidebarVideoFilter({
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Acompaniamentul în lista de imnuri: o iconiță pentru fiecare stare
+// ═════════════════════════════════════════════════════════════════════════════
+
+type AccStates = { available: Set<number>; present: Set<number>; synced: Set<number> };
+const ACC_STATES_GOALE: AccStates = { available: new Set(), present: new Set(), synced: new Set() };
+type StareAcc = 'lipsa' | 'disponibil' | 'descarcat' | 'sincronizat';
+
+/** Acompaniamentul există doar pentru „Imnuri Creștine"; restul colecțiilor nu au. */
+function stareAcompaniament(hymn: Hymn, s: AccStates, accCategoryId?: number): StareAcc {
+    if (accCategoryId === undefined || hymn.category_id !== accCategoryId) return 'lipsa';
+    const n = parseInt(String(hymn.number).replace(/\D/g, ''), 10);
+    if (!s.available.has(n)) return 'lipsa';
+    if (!s.present.has(n)) return 'disponibil';
+    return s.synced.has(n) ? 'sincronizat' : 'descarcat';
+}
+
+function AccIcon({ stare }: { stare: StareAcc }) {
+    const t = useT();
+    const fel = {
+        lipsa: { Icon: CircleSlash, titlu: t('Fără acompaniament') },
+        disponibil: { Icon: CloudDownload, titlu: t('Are acompaniament, nedescărcat încă') },
+        descarcat: { Icon: Music, titlu: t('Acompaniament descărcat') },
+        sincronizat: { Icon: AudioLines, titlu: t('Acompaniament descărcat, sincronizat cu versurile') },
+    }[stare];
+    return <span className={`hymn-acc hymn-acc-${stare}`} title={fel.titlu}><fel.Icon /></span>;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // HymnList
 // ═════════════════════════════════════════════════════════════════════════════
 
 function HymnList({
     hymns, categories, activeCategoryId, selectedHymnId, onSelect, onContextMenu, listRef,
-    accPresent,
+    accStates, accCategoryId,
 }: {
     hymns: Hymn[];
     categories: Category[];
@@ -2958,8 +3000,10 @@ function HymnList({
     onSelect: (id: number) => void;
     onContextMenu: (e: React.MouseEvent, hymn: Hymn) => void;
     listRef: React.RefObject<HTMLDivElement>;
-    /** Numerele de imn care au acompaniamentul descărcat — pentru ♪. */
-    accPresent: Set<number>;
+    /** Starea acompaniamentului, pe numere de imn din „Imnuri Creștine". */
+    accStates: AccStates;
+    /** Colecția care are acompaniament; celelalte nu au. */
+    accCategoryId?: number;
 }) {
     const t = useT();
     const catName = activeCategoryId
@@ -2999,9 +3043,7 @@ function HymnList({
                                 onContextMenu={e => onContextMenu(e, hymn)}
                             >
                                 <span className="hymn-num">{hymn.number}</span>
-                                {accPresent.has(parseInt(String(hymn.number).replace(/\D/g, ''), 10)) && (
-                                    <span className="hymn-acc" title={t('Are acompaniament descărcat')}>♪</span>
-                                )}
+                                <AccIcon stare={stareAcompaniament(hymn, accStates, accCategoryId)} />
                                 <div className="hymn-info">
                                     <span className="hymn-title">
                                         {hymn.title}
