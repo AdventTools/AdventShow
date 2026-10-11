@@ -27,7 +27,6 @@ import {
     Upload,
     Volume2,
     X,
-    Youtube,
     Bold,
     Italic,
     Underline,
@@ -59,7 +58,14 @@ import {
     Mail,
     Bug,
     Lightbulb,
+    createLucideIcon,
 } from 'lucide-react';
+
+// lucide a scos din 1.0 iconițele de mărci; YouTube rămâne desenat exact ca înainte.
+const Youtube = createLucideIcon('youtube', [
+    ['path', { d: 'M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17', key: '1q2vi4' }],
+    ['path', { d: 'm10 15 5-3-5-3z', key: '1jp15x' }],
+]);
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { initLang, setLang, useLang, useT } from './i18n';
@@ -172,7 +178,7 @@ function checkPassword(input: string, hash: string): boolean {
  * Reîncearcă pe câteva cadre și reia focusul dacă fereastra îl recapătă mai
  * târziu, cât timp modalul e încă montat.
  */
-function useReliableAutofocus(ref: React.RefObject<HTMLInputElement>) {
+function useReliableAutofocus(ref: React.RefObject<HTMLInputElement | null>) {
     useEffect(() => {
         let cancelled = false;
         let attempts = 0;
@@ -3004,7 +3010,7 @@ function HymnList({
     selectedHymnId: number | null;
     onSelect: (id: number) => void;
     onContextMenu: (e: React.MouseEvent, hymn: Hymn) => void;
-    listRef: React.RefObject<HTMLDivElement>;
+    listRef: React.RefObject<HTMLDivElement | null>;
     /** Starea acompaniamentului, pe numere de imn din „Imnuri Creștine". */
     accStates: AccStates;
     /** Colecția care are acompaniament; celelalte nu au. */
@@ -5335,7 +5341,7 @@ function PasswordSetupModal({ onSave }: {
                         />
                     </div>
                     <p className="text-fg/40 text-xs mt-1">
-                        {t('Biserica și localitatea se trimit autorilor pentru evidența instalărilor și pentru ajutor la recuperarea parolei. Nu se trimit alte date.')}
+                        {t('Biserica și localitatea se trimit autorilor pentru evidența instalărilor și pentru ajutor la recuperarea parolei. În afară de ele pleacă doar date tehnice despre calculator (sistemul, procesorul, memoria, ecranele), fără nume și fără fișiere.')}
                     </p>
                     <div className="field" style={{ marginTop: 8 }}>
                         <label>{t('Folder descărcări video')}</label>

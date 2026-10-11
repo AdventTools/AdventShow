@@ -57,7 +57,7 @@ import {
   SyncFile, SyncMark, cachedSync, refreshSync, marksFor, localMarks, setLocalMarks,
 } from './accompaniment'
 import {
-  HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, compareVersions, flushReportQueue,
+  HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, SystemInfo, compareVersions, flushReportQueue,
   hangarPlatform, listMessages, markRepliesRead, pendingReportCount, refreshMessages, sendReport,
   startHeartbeat, track, unreadReplyCount, updateChannel,
 } from './hangar'
@@ -248,9 +248,63 @@ function writeSettings(settings: AppSettings) {
 
 // dependențele pentru tot ce vorbește cu hangar — main.ts rămâne singurul
 // proprietar al settings.json (citire-modificare-scriere aici, nu în module)
+/** Placa video și modelul nu se schimbă cât rulează aplicația; ecranele da. */
+let gpuInfo: Promise<{ gpu?: string; model?: string }> | null = null
+
+function readGpuInfo(): Promise<{ gpu?: string; model?: string }> {
+  gpuInfo ??= app.getGPUInfo('basic').then((raw) => {
+    const info = raw as {
+      gpuDevice?: { active?: boolean; vendorId?: number; deviceId?: number; driverVersion?: string }[]
+      machineModelName?: string
+      machineModelVersion?: string
+    }
+    const dev = info.gpuDevice?.find(d => d.active) ?? info.gpuDevice?.[0]
+    const hex = (n?: number) => (n ?? 0).toString(16).padStart(4, '0')
+    return {
+      gpu: dev ? `${hex(dev.vendorId)}:${hex(dev.deviceId)}${dev.driverVersion ? ` ${dev.driverVersion}` : ''}` : undefined,
+      model: info.machineModelName
+        ? `${info.machineModelName} ${info.machineModelVersion ?? ''}`.trim()
+        : undefined,
+    }
+  }).catch(() => ({}))
+  return gpuInfo
+}
+
+/** Numele sistemului așa cum îl știe omul: Windows 10/11 se deosebesc doar prin build. */
+function osName(): string {
+  if (process.platform === 'win32') {
+    const build = Number(os.release().split('.')[2] ?? 0)
+    return build >= 22000 ? 'Windows 11' : 'Windows 10'
+  }
+  if (process.platform === 'darwin') return 'macOS'
+  try {
+    const rel = fs.readFileSync('/etc/os-release', 'utf8').match(/^PRETTY_NAME="?([^"\n]+)/m)
+    if (rel) return rel[1]
+  } catch { /* distribuție fără /etc/os-release */ }
+  return 'Linux'
+}
+
+async function systemInfo(): Promise<SystemInfo> {
+  const cpus = os.cpus()
+  const { gpu, model } = await readGpuInfo()
+  return {
+    os: osName(),
+    os_version: process.platform === 'linux' ? os.release() : process.getSystemVersion(),
+    cpu: (cpus[0]?.model ?? '').replace(/\s+/g, ' ').trim(),
+    cores: cpus.length,
+    ram_gb: Math.round(os.totalmem() / 1024 ** 3),
+    translated: app.runningUnderARM64Translation,
+    displays: screen.getAllDisplays().map(d =>
+      `${d.size.width}x${d.size.height}@${d.scaleFactor}${d.internal ? ' intern' : ''}`),
+    ...(gpu ? { gpu } : {}),
+    ...(model ? { model } : {}),
+  }
+}
+
 function hangarDeps(): HangarDeps {
   return {
     appVersion: app.getVersion(),
+    system: systemInfo,
     userDataDir: app.getPath('userData'),
     getSettings: () => readSettings(),
     patchSettings: (patch) => writeSettings({ ...readSettings(), ...patch }),
@@ -376,7 +430,10 @@ let forcedUpdate: { required: boolean; version: string | null; reason: string } 
 /** Canalul cerut de utilizator, tradus în numele feed-ului din hangar. */
 function applyUpdateChannel() {
   const channel = updateChannel(hangarDeps())
-  autoUpdater.channel = channel === 'beta' ? 'beta' : 'latest'
+  // Mac-urile Intel au feed-ul lor (`latest-x64-mac.yml`): pachetul de Intel nu se
+  // construiește la fiecare versiune, iar hangar le dă cea mai nouă care îl are.
+  const intel = process.platform === 'darwin' && process.arch === 'x64' ? '-x64' : ''
+  autoUpdater.channel = (channel === 'beta' ? 'beta' : 'latest') + intel
   // Coborârea de versiune se permite DOAR imediat după ce omul a ieșit din beta:
   // altfel rămâne blocat pe o versiune de test mai nouă decât cea stabilă. În rest
   // e periculoasă — dacă feed-ul stabil e (temporar) în urma versiunii instalate,
@@ -572,7 +629,7 @@ function getFFmpegPath(): string {
   //    app.asar.unpacked/.../ffmpeg (per electron-builder.json5 asarUnpack). The assertion
   //    throws and require returns nothing, falling into our catch.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const p = require('ffmpeg-static') as string
     if (p && fs.existsSync(p)) return p
     // require returned but path doesn't exist on disk — try asar.unpacked rewrite
