@@ -14,8 +14,20 @@
   },
   "files": [
     "dist",
-    "dist-electron"
+    "dist-electron",
+    // Baza de imnuri ajunge în pachet prin extraResources; copia pe care Vite o pune
+    // în dist/ (din public/) nu o citește nimeni și ar dubla 11 MB.
+    "!dist/hymns.db",
+    // better-sqlite3 vine din 13.x cu modulele gata compilate (prebuilds/, Node-API, merg
+    // pe orice Electron); sursele SQLite (10 MB) și orice build local nu intră în pachet.
+    "!**/node_modules/better-sqlite3/{deps,src,build}/**",
+    "!**/node_modules/better-sqlite3/binding.gyp",
+    // Doar binarul sistemului și arhitecturii pentru care se construiește pachetul.
+    "!**/node_modules/better-sqlite3/prebuilds/!(${platform}-${arch}).node"
   ],
+  // Nimic de recompilat: singurul modul nativ (better-sqlite3) are deja binarele pentru
+  // fiecare sistem și arhitectură. Recompilarea ar cere compilator pe mașina de build.
+  "npmRebuild": false,
   "extraResources": [
     {
       "from": "public/hymns.db",
@@ -45,6 +57,9 @@
       "filter": ["**/*"]
     }
   ],
+  // Chromium aduce traduceri pentru ~55 de limbi (meniurile de sistem: copiere,
+  // lipire, verificare ortografică). Interfața e doar în română și engleză.
+  "electronLanguages": ["ro", "en", "en-US", "en-GB"],
   "afterPack": "./scripts/afterPack.cjs",
   // electron-updater reads release metadata (latest.yml / latest-mac.yml) from
   // hangar.it4all.ro. Declaring `publish` is what writes the feed URL into
@@ -79,11 +94,14 @@
     // dmg = first-time install (drag to Applications). zip = what Squirrel.Mac
     // (electron-updater) downloads to self-apply updates in place. Both are signed
     // + notarized; latest-mac.yml references the zip.
+    // Arhitectura o alege scriptul de build (--arm64 / --x64), câte una pe rând: fiecare
+    // are nevoie de ffmpeg-ul ei, iar node_modules ține unul singur.
     "target": [
       "dmg",
       "zip"
     ],
-    "artifactName": "AdventShow-Mac-${version}.${ext}"
+    // Arhitectura în nume: hangar face din ea feed-uri separate pentru Apple și Intel.
+    "artifactName": "AdventShow-Mac-${version}-${arch}.${ext}"
   },
   "dmg": {
     // Fereastra DMG cu instrucțiuni vizuale: fundalul (generat de
@@ -123,8 +141,10 @@
     // vechi înlocuind versiunea, iar hangar publică fiecare versiune în același
     // director plat — două release-uri cu „AdventShow-Setup.exe" s-ar suprascrie.
     "artifactName": "AdventShow-Setup-${version}.${ext}",
-    "sign": "./scripts/sign-windows.cjs",
-    "signingHashAlgorithms": ["sha256"]
+    "signtoolOptions": {
+      "sign": "./scripts/sign-windows.cjs",
+      "signingHashAlgorithms": ["sha256"]
+    }
   },
   "nsis": {
     // One-click installer: a single progress screen, no wizard. This is what makes

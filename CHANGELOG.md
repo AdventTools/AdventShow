@@ -9,7 +9,11 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Aplicația rulează pe o versiune nouă a motorului ei, cu reparațiile de securitate la zi. Pe Mac cere macOS 12 (Monterey) sau mai nou; pe Windows, ca până acum, Windows 10 sau 11.
+- Pachet separat pentru Mac-urile cu procesor Intel; până acum exista doar varianta pentru procesoarele Apple (M1 și mai noi).
+- Pachetul de instalare e mai curat: am scos fișiere care nu erau folosite.
+- Aplicația trimite autorilor și date tehnice despre calculator (sistemul, procesorul, memoria, ecranele), fără nume și fără fișiere, ca să știm pe ce calculatoare rulează înainte de a cere un sistem mai nou.
 
 ---
 

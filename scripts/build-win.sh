@@ -44,6 +44,8 @@ source scripts/signing.env
 
 WIN_SSH_OPTS=(-o ProxyJump=jumper -o "Port=${WIN_SSH_PORT}")
 WIN_PROJECT="${WIN_REPO}\\AdventShow"
+# shellcheck source=scripts/vm-node.sh
+source scripts/vm-node.sh
 VERSION=$(node -p "require('./package.json').version")
 
 echo "══════════════════════════════════════════════════════════════"
@@ -77,15 +79,19 @@ ssh "${WIN_SSH_OPTS[@]}" "$WIN_HOST" \
     || { echo "❌ Extract pe Windows a eșuat"; exit 1; }
 echo "   ✓ Sursa pe VM"
 
+ensure_vm_node || { echo "❌ nu pot pune Node ${VM_NODE_VERSION} pe VM"; exit 1; }
+check_vm_node || { echo "❌ Node-ul de pe VM nu e v${VM_NODE_VERSION}"; exit 1; }
+echo "   ✓ Node v${VM_NODE_VERSION} (al proiectului, nu al sistemului)"
+
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 echo ""
 if [ "$BUILD_MODE" = "release" ]; then
     echo "🔐 Build SEMNAT (Azure Trusted Signing)..."
-    BUILD_CMD="cd ${WIN_PROJECT} && npm ci && npm run build:win"
+    BUILD_CMD="set PATH=${VM_NODE_DIR};%PATH% && cd ${WIN_PROJECT} && npm ci && npm run build:win"
 else
     echo "⚠️  Build NESEMNAT (SKIP_WIN_SIGN=1)..."
-    BUILD_CMD="cd ${WIN_PROJECT} && set SKIP_WIN_SIGN=1 && npm ci && npm run build:win"
+    BUILD_CMD="set PATH=${VM_NODE_DIR};%PATH% && cd ${WIN_PROJECT} && set SKIP_WIN_SIGN=1 && npm ci && npm run build:win"
 fi
 
 ssh "${WIN_SSH_OPTS[@]}" "$WIN_HOST" "$BUILD_CMD" \
