@@ -15,6 +15,7 @@ import {
     Music,
     ListMusic,
     CloudDownload,
+    Globe,
     Pause,
     Plus,
     Play,
@@ -4088,7 +4089,7 @@ function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
                 {acc.loading ? (
                     <>
                         <Loader className="icon-xs spin" />
-                        {acc.willPlay ? t('Se descarcă… · nu porni') : t('Se descarcă…')}
+                        {acc.willPlay ? t('Se descarcă acompaniamentul… · nu porni') : t('Se descarcă acompaniamentul…')}
                     </>
                 ) : acc.playing ? (
                     <>
@@ -4097,8 +4098,8 @@ function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
                     </>
                 ) : acc.needsDownload ? (
                     <>
-                        <Download className="icon-xs" />
-                        {acc.willPlay ? t('Descarcă și cântă') : t('Descarcă')} {acc.sizeMb.toFixed(1)} MB
+                        <CloudDownload className="icon-xs" />
+                        {acc.willPlay ? t('Descarcă acompaniamentul și cântă') : t('Descarcă acompaniamentul')} {acc.sizeMb.toFixed(1)} MB
                     </>
                 ) : acc.hasMarks ? (
                     <><Music className="icon-xs" /> {t('Cântă singur')}</>
@@ -4204,7 +4205,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
             const octeti = await window.electron.accompaniment.bytes(n);
             if (!octeti) {
-                setStare(t('Acompaniamentul nu e pe calculator. Deschide imnul și apasă o dată „Descarcă".'));
+                setStare(t('Acompaniamentul nu e pe calculator. Deschide imnul și apasă o dată „Descarcă acompaniamentul".'));
                 return;
             }
             const buf = new Uint8Array(octeti).slice().buffer;
@@ -6644,6 +6645,16 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
 
                                 <div className="border-t border-fg/10 w-full" />
 
+                                <button
+                                    className="flex flex-col items-center gap-0.5 text-sm"
+                                    onClick={() => window.electron.openExternal('https://adventhub.ro')}
+                                >
+                                    <span className="flex items-center gap-2 text-primary hover:text-primary/80 font-semibold transition-colors">
+                                        <Globe className="icon-sm" /> adventhub.ro
+                                    </span>
+                                    <span className="text-fg/40 text-xs">{t('Toate proiectele noastre, într-un singur loc')}</span>
+                                </button>
+
                                 {/* Link GitHub */}
                                 <a
                                     href="https://github.com/AdventTools"
@@ -8872,8 +8883,9 @@ function AccompanimentSettings({ settings, onSave }: {
                                 disabled={!stats || lipsa === 0}
                                 onClick={() => { setMesaj(''); window.electron.accompaniment.downloadAll(); }}
                             >
+                                {stats && lipsa > 0 && <CloudDownload className="icon-xs" />}
                                 {stats && lipsa > 0
-                                    ? t('Descarcă cele {n} rămase ({gb} GB)', { n: lipsa, gb: gb(stats.totalBytes - stats.bytes) })
+                                    ? t('Descarcă acompaniamentul la cele {n} imnuri rămase ({gb} GB)', { n: lipsa, gb: gb(stats.totalBytes - stats.bytes) })
                                     : t('Toate sunt descărcate')}
                             </button>
                             {stats && stats.have > 0 && (
