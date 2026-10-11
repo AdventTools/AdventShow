@@ -9,7 +9,8 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- Iconițele de acompaniament din lista de imnuri sunt mai mari și mai clare: nor cu săgeată = de descărcat, notă = descărcat, notă cu rânduri de text = sincronizat cu versurile. Imnurile fără acompaniament nu mai au niciun semn.
 
 ---
 
