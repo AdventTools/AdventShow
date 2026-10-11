@@ -765,20 +765,20 @@
     line-height: 1.4;
 }
 
-/* Starea acompaniamentului. Discret: e o însemnare, nu o comandă.
+/* Starea acompaniamentului: cât rândul numărului, ca să se vadă.
    flex-shrink:0 + lățime fixă ca să nu miște coloanele existente. */
 .hymn-acc {
     flex-shrink: 0;
-    width: 12px;
-    margin-left: -4px;
+    width: 18px;
+    margin-left: -2px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     align-self: center;
     /* Toate în același gri, decizia ownerului: starea o spune forma, nu culoarea. */
-    color: rgb(var(--fg-rgb) / 0.45);
+    color: rgb(var(--fg-rgb) / 0.6);
 }
-.hymn-acc svg { width: 11px; height: 11px; stroke-width: 2.25; }
+.hymn-acc svg { width: 18px; height: 18px; stroke-width: 2.5; }
 
 .hymn-info {
     display: flex;

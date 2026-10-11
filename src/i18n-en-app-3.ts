@@ -453,7 +453,6 @@ export const EN_APP_3: Record<string, string> = {
     'Sugestie': 'Suggestion',
     'Răspunsul autorilor': 'Reply from the authors',
     'Mesajele mele': 'My messages',
-    'Fără acompaniament': 'No accompaniment',
     'Are acompaniament, nedescărcat încă': 'Has accompaniment, not downloaded yet',
     'Acompaniament descărcat': 'Accompaniment downloaded',
     'Acompaniament descărcat, sincronizat cu versurile': 'Accompaniment downloaded, synced with the lyrics',
