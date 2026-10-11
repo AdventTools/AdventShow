@@ -1,17 +1,23 @@
 # Changelog — AdventShow
 
-## v1.6.11 (11 Octombrie 2026)
+## v1.6.12 (11 Octombrie 2026)
 
 ### Modificări
-- Iconițele de acompaniament din lista de imnuri sunt mai mari și mai clare: nor cu săgeată = de descărcat, notă = descărcat, notă cu rânduri de text = sincronizat cu versurile. Imnurile fără acompaniament nu mai au niciun semn.
-- Butonul de descărcare scrie acum „Descarcă acompaniamentul”, cu același nor ca în listă.
+- Îmbunătățiri vizuale.
 
 ---
 
 ## Nepublicat
 
+_(nimic încă)_
+
+---
+
+## v1.6.11 (11 Octombrie 2026)
+
 ### Modificări
-- Îmbunătățiri vizuale.
+- Iconițele de acompaniament din lista de imnuri sunt mai mari și mai clare: nor cu săgeată = de descărcat, notă = descărcat, notă cu rânduri de text = sincronizat cu versurile. Imnurile fără acompaniament nu mai au niciun semn.
+- Butonul de descărcare scrie acum „Descarcă acompaniamentul”, cu același nor ca în listă.
 
 ---
 
