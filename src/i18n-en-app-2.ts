@@ -260,8 +260,8 @@ export const EN_APP_2: Record<string, string> = {
     'ex: Biserica Adventistă Speranța': 'e.g. Hope Adventist Church',
     'Localitatea': 'City/town',
     'ex: Cluj-Napoca': 'e.g. Cluj-Napoca',
-    'Biserica și localitatea se trimit autorilor pentru evidența instalărilor și pentru ajutor la recuperarea parolei. Nu se trimit alte date.':
-        'The church name and city are sent to the authors to keep track of installs and to help recover your password. No other data is sent.',
+    'Biserica și localitatea se trimit autorilor pentru evidența instalărilor și pentru ajutor la recuperarea parolei. În afară de ele pleacă doar date tehnice despre calculator (sistemul, procesorul, memoria, ecranele), fără nume și fără fișiere.':
+        'The church name and city are sent to the authors to keep track of installs and to help recover your password. Besides them, only technical details about the computer are sent (system, processor, memory, screens), with no names and no files.',
     'Folder descărcări video': 'Video download folder',
     'Se detectează...': 'Detecting...',
     'Schimbă...': 'Change...',

@@ -29,11 +29,17 @@
 #   1. Pre-flight   2. Bump versiune + README + CHANGELOG   3. Build macOS semnat
 #   4. Notary submit   5. Sync sursă VM   6. Build Windows detașat   7. Pull EXE
 #   8. Notary poll + staple   9. Git push main   10. Upload în hangar + verificare
-#   11. Tag + note pe GitHub (declanșează CI-ul de Linux)
+#   11. Tag + note pe GitHub (+ build-ul de Linux, doar la COMPLET=1)
 #   La final: oglinda corecturilor din hangar pe GitHub, pentru instalările de sub 1.4.0
 #
 # Usage:
 #   ./scripts/release.sh "descriere modificări" [patch|minor|major]
+#   COMPLET=1 ./scripts/release.sh "…" patch   # și Mac Intel + Linux
+#
+# Implicit se construiesc Windows și Mac Apple (arm64) — acolo sunt bisericile.
+# Mac Intel și Linux doar la release-urile alese de om (COMPLET=1): hangar dă
+# fiecărei platforme cea mai nouă versiune care are pachet pentru ea, deci cine e pe
+# Intel sau Linux rămâne liniștit pe ultimul release complet, fără erori.
 #   REGULĂ VERSIUNI: patch implicit; minor DOAR la schimbări de schemă DB;
 #   major doar la cerere explicită. Nu se decide altfel, nu se întreabă.
 #
@@ -72,6 +78,8 @@ source scripts/signing.env
 
 WIN_SSH_OPTS=(-o ProxyJump=jumper -o "Port=${WIN_SSH_PORT}" -o ConnectTimeout=12 -o ServerAliveInterval=10 -o ServerAliveCountMax=2)
 WIN_PROJECT="${WIN_REPO}\\AdventShow"
+# shellcheck source=scripts/vm-node.sh
+source scripts/vm-node.sh
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -176,6 +184,14 @@ fi
 STATE="$STATE_ROOT/${NEW_VERSION}"
 mkdir -p "$STATE"
 
+# COMPLET se ține minte în stare: o reluare fără variabilă nu are voie să scoată
+# din release pachetul de Intel pe care rularea de început l-a promis.
+[ "${COMPLET:-0}" = "1" ] && : > "$STATE/complet"
+COMPLET=0
+[ -f "$STATE/complet" ] && COMPLET=1
+MAC_ARCHS=(arm64)
+[ "$COMPLET" = "1" ] && MAC_ARCHS+=(x64)
+
 # ── Amprenta codului din care s-a construit fiecare pas ───────────────────────
 #
 # Un marker gol spune doar „pasul ăsta e făcut", nu și DIN CE cod. Atâta timp cât
@@ -197,7 +213,8 @@ mkdir -p "$STATE"
 FP_PATHS=(electron src public templates build index.html vite.config.ts
           tsconfig.json tsconfig.node.json electron-builder.json5
           package.json package-lock.json
-          scripts/afterPack.cjs scripts/sign-windows.cjs scripts/cornilescu.json)
+          scripts/afterPack.cjs scripts/sign-windows.cjs scripts/cornilescu.json
+          scripts/web.json scripts/build-mac.sh scripts/vm-node.sh)
 
 source_fingerprint() {
   git ls-files -z -- "${FP_PATHS[@]}" | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1
@@ -227,8 +244,12 @@ log "Amprenta codului: ${FP:0:12}  (commit $(git rev-parse --short HEAD))"
 
 TAG="v${NEW_VERSION}"
 RELEASE_DIR="release/${NEW_VERSION}"
-DMG="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg"
-ZIP="${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip"
+dmg_of() { echo "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}-$1.dmg"; }
+zip_of() { echo "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}-$1.zip"; }
+unpacked_of() { if [ "$1" = "arm64" ]; then echo "${RELEASE_DIR}/mac-arm64"; else echo "${RELEASE_DIR}/mac"; fi; }
+# Pachetul de Apple e cel care merge în fiecare release (și în puntea GitHub).
+DMG=$(dmg_of arm64)
+ZIP=$(zip_of arm64)
 EXE="${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe"
 
 # ── Baza livrată preia ce s-a publicat în hangar ──────────────────────────────
@@ -325,50 +346,53 @@ if [ ! -f "$STATE/bump.done" ]; then
 fi
 log "Versiune release: $NEW_VERSION"
 
-# ── Build macOS semnat ────────────────────────────────────────────────────────
+# ── Build macOS semnat, câte o arhitectură ───────────────────────────────────
 
-if ! step_done mac; then
-  step "3/11 Build macOS (signed)"
+log "Mac: ${MAC_ARCHS[*]}$([ "$COMPLET" = "1" ] && echo " · release complet (și Linux)")"
+for arch in "${MAC_ARCHS[@]}"; do
+  if step_done "mac-${arch}"; then continue; fi
+  step "3/11 Build macOS ${arch} (signed)"
   # codesign cu retry — fiecare semnătură cere serverul de timestamp Apple;
   # o singură cerere picată omora tot build-ul pe rețea instabilă
   export PATH="$PWD/scripts/codesign-retry:$PATH"
+  dmg=$(dmg_of "$arch"); zip=$(zip_of "$arch")
   built=""
   for attempt in 1 2 3 4; do
-    log "build mac — încercarea $attempt"
-    # Se curăță DOAR artefactele de mac. Un `rm -rf` pe tot folderul ar mătura și
-    # EXE-ul adus de pe VM-ul de Windows, în timp ce markerul lui ar rămâne pe
-    # „adus" — a rămas așa la 1.5.2, fără blockmap și fără latest.yml.
-    rm -rf "${RELEASE_DIR}/mac-arm64" "$DMG" "$ZIP" "${DMG}.blockmap" "${ZIP}.blockmap" \
+    log "build mac ${arch} — încercarea $attempt"
+    # Se curăță DOAR artefactele arhitecturii ăsteia. Un `rm -rf` pe tot folderul ar
+    # mătura și EXE-ul adus de pe VM-ul de Windows, în timp ce markerul lui ar rămâne
+    # pe „adus" — a rămas așa la 1.5.2, fără blockmap și fără latest.yml.
+    rm -rf "$(unpacked_of "$arch")" "$dmg" "$zip" "${dmg}.blockmap" "${zip}.blockmap" \
            "${RELEASE_DIR}/latest-mac.yml" "${RELEASE_DIR}/builder-debug.yml"
-    if ./scripts/build-mac.sh release; then built=1; break; fi
-    log "  …build mac eșuat, reîncerc în 30s"; sleep 30
+    if MAC_ARCH="$arch" ./scripts/build-mac.sh release; then built=1; break; fi
+    log "  …build mac ${arch} eșuat, reîncerc în 30s"; sleep 30
   done
-  [ -n "$built" ] || fail "build mac eșuat de 4 ori"
-  [ -f "$DMG" ] || fail "DMG nu există: $DMG"
-  [ -f "$ZIP" ] || fail "ZIP mac nu există: $ZIP (necesar pentru auto-update)"
+  [ -n "$built" ] || fail "build mac ${arch} eșuat de 4 ori"
+  [ -f "$dmg" ] || fail "DMG nu există: $dmg"
+  [ -f "$zip" ] || fail "ZIP mac nu există: $zip (necesar pentru auto-update)"
   # Nu se urcă nicăieri (hangar își face singur feed-urile), dar absența lui
   # înseamnă că `publish` a dispărut din electron-builder.json5 — iar fără el
   # installerul nu mai știe de unde să-și ia update-urile.
   [ -f "${RELEASE_DIR}/latest-mac.yml" ] || fail "latest-mac.yml lipsă — verifică blocul publish din electron-builder.json5"
-  mark_done mac
-  ok "DMG + ZIP + latest-mac.yml"
-fi
+  mark_done "mac-${arch}"
+  ok "DMG + ZIP ${arch}"
+done
 
 # ── Notary submit (doar upload; polling la pasul 8) ───────────────────────────
 
-if ! step_done notary-id; then
-  step "4/11 Notary submit (--no-wait)"
+for arch in "${MAC_ARCHS[@]}"; do
+  if step_done "notary-id-${arch}"; then continue; fi
+  step "4/11 Notary submit ${arch} (--no-wait)"
   submit_notary() {
-    xcrun notarytool submit "$DMG" "${NOTARY_AUTH[@]}" \
+    xcrun notarytool submit "$(dmg_of "$arch")" "${NOTARY_AUTH[@]}" \
       --no-wait --output-format plist > /tmp/adventshow-notary-submit.plist 2>/tmp/adventshow-notary-submit.err
   }
-  retry "notary submit (upload DMG)" 40 20 -- submit_notary || fail "notary submit"
-  /usr/libexec/PlistBuddy -c "Print :id" /tmp/adventshow-notary-submit.plist > "$STATE/notary-id.done" \
+  retry "notary submit (upload DMG ${arch})" 40 20 -- submit_notary || fail "notary submit ${arch}"
+  /usr/libexec/PlistBuddy -c "Print :id" /tmp/adventshow-notary-submit.plist > "$STATE/notary-id-${arch}.done" \
     || fail "nu pot citi submission id"
-  stamp_done notary-id
-  ok "submission id: $(cat "$STATE/notary-id.done")"
-fi
-NOTARY_ID=$(cat "$STATE/notary-id.done")
+  stamp_done "notary-id-${arch}"
+  ok "submission id ${arch}: $(cat "$STATE/notary-id-${arch}.done")"
+done
 
 # ── Sync sursă pe VM Windows ──────────────────────────────────────────────────
 
@@ -394,17 +418,21 @@ fi
 
 if ! step_done winbuild; then
   step "6/11 Build Windows detașat"
+  retry "Node ${VM_NODE_VERSION} pe VM" 10 15 -- ensure_vm_node || fail "nu pot pune Node ${VM_NODE_VERSION} pe VM"
+  check_vm_node || fail "Node-ul de pe VM nu e v${VM_NODE_VERSION}"
+  ok "Node v${VM_NODE_VERSION} pe VM, doar pentru AdventShow"
   # `winbuild-started` spune „taskul rulează deja pe VM, nu-l porni a doua oară".
   # E ștampilat la fel ca restul: dacă s-a pornit din alt cod, nu-l mai așteptăm.
   rm -f "$STATE/winbuild.started"   # marker din formatul vechi, fără amprentă
   if ! step_done winbuild-started; then
     BAT="${WIN_REPO}\\_build_v${NEW_VERSION}.cmd"
     BAT_LOCAL="/tmp/_build_v${NEW_VERSION}.cmd"
-    WIN_REPO_ENV="$WIN_REPO" WIN_PROJECT_ENV="$WIN_PROJECT" BAT_LOCAL_ENV="$BAT_LOCAL" python3 -c "
+    WIN_REPO_ENV="$WIN_REPO" WIN_PROJECT_ENV="$WIN_PROJECT" BAT_LOCAL_ENV="$BAT_LOCAL" VM_NODE_ENV="$VM_NODE_DIR" python3 -c "
 import os
 repo = os.environ['WIN_REPO_ENV']; proj = os.environ['WIN_PROJECT_ENV']
 lines = [
     '@echo off',
+    'set PATH=' + os.environ['VM_NODE_ENV'] + ';%PATH%',
     'cd /d ' + proj,
     'del /q ' + repo + r'\_build.done 2>nul',
     'call npm ci > ' + repo + r'\_build.log 2>&1 || goto :fail',
@@ -467,27 +495,30 @@ fi
 
 # ── Notary poll + staple ──────────────────────────────────────────────────────
 
-if ! step_done staple; then
-  step "8/11 Notary status + staple"
+for arch in "${MAC_ARCHS[@]}"; do
+  if step_done "staple-${arch}"; then continue; fi
+  step "8/11 Notary status + staple ${arch}"
+  NOTARY_ID=$(cat "$STATE/notary-id-${arch}.done")
+  dmg=$(dmg_of "$arch")
   while true; do
     # PlistBuddy nu poate citi din pipe (cere fișier seekable) → fișier temporar
     xcrun notarytool info "$NOTARY_ID" "${NOTARY_AUTH[@]}" --output-format plist \
       > /tmp/adventshow-notary-info.plist 2>/dev/null
     NSTATUS=$(/usr/libexec/PlistBuddy -c "Print :status" /tmp/adventshow-notary-info.plist 2>/dev/null || echo "NetworkDown")
-    log "  notary: $NSTATUS"
+    log "  notary ${arch}: $NSTATUS"
     case "$NSTATUS" in
       Accepted) break ;;
       Invalid|Rejected)
         xcrun notarytool log "$NOTARY_ID" "${NOTARY_AUTH[@]}" || true
-        fail "notarizare: $NSTATUS" ;;
+        fail "notarizare ${arch}: $NSTATUS" ;;
       *) sleep 30 ;;
     esac
   done
-  retry "stapler staple" 40 15 -- xcrun stapler staple "$DMG" || fail "stapler staple"
-  xcrun stapler validate "$DMG" || fail "stapler validate"
-  mark_done staple
-  ok "DMG notarizat + stapled"
-fi
+  retry "stapler staple" 40 15 -- xcrun stapler staple "$dmg" || fail "stapler staple ${arch}"
+  xcrun stapler validate "$dmg" || fail "stapler validate ${arch}"
+  mark_done "staple-${arch}"
+  ok "DMG ${arch} notarizat + stapled"
+done
 
 # ── Git commit + push main (FĂRĂ tag — tag-ul îl creează publicarea) ──────────
 
@@ -510,7 +541,7 @@ if ! step_done hangar; then
   # Poarta finală: nu urcăm binare care nu vin din codul ăsta. Pașii de build sunt
   # deja ștampilați cu amprenta, dar dacă cineva a șters markere cu mâna sau a
   # copiat fișiere în release/, aici se oprește — după upload e prea târziu.
-  for pas in mac winpull; do
+  for pas in "${MAC_ARCHS[@]/#/mac-}" winpull; do
     [ "$(tr -d '[:space:]' < "$STATE/${pas}.fp" 2>/dev/null)" = "$FP" ] \
       || fail "artefactele de la pasul '${pas}' nu vin din codul de acum — șterge scripts/.release-state/${NEW_VERSION} și reia releaseul"
   done
@@ -532,10 +563,10 @@ if ! step_done hangar; then
   # se dezactivează în tăcere: fiecare biserică descarcă binarul întreg la fiecare
   # versiune, iar singurul semn e traficul. Hangar verifică asta acum automat, dar
   # verificăm și noi aici — mai bine cade release-ul decât să treacă mut.
-  REQUIRED=("$DMG" "$ZIP" "$EXE"
-            "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap"
-            "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg.blockmap"
-            "${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe.blockmap")
+  REQUIRED=("$EXE" "${EXE}.blockmap")
+  for arch in "${MAC_ARCHS[@]}"; do
+    REQUIRED+=("$(dmg_of "$arch")" "$(zip_of "$arch")" "$(dmg_of "$arch").blockmap" "$(zip_of "$arch").blockmap")
+  done
   UPLOAD=()
   for f in "${REQUIRED[@]}"; do
     [ -f "$f" ] || fail "ASSET OBLIGATORIU LIPSĂ: $f — nu urc un release incomplet"
@@ -650,9 +681,7 @@ if [ ! -f "$STATE/gh.done" ]; then
       cp "$f" "$BRIDGE_STAGING/"
       BRIDGE_ASSETS+=("$BRIDGE_STAGING/$(basename "$f")")
     done
-    for f in "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.zip.blockmap" \
-             "${RELEASE_DIR}/AdventShow-Mac-${NEW_VERSION}.dmg.blockmap" \
-             "${RELEASE_DIR}/AdventShow-Setup-${NEW_VERSION}.exe.blockmap"; do
+    for f in "${ZIP}.blockmap" "${DMG}.blockmap" "${EXE}.blockmap"; do
       [ -f "$f" ] && cp "$f" "$BRIDGE_STAGING/" && BRIDGE_ASSETS+=("$BRIDGE_STAGING/$(basename "$f")")
     done
     NOTES="${NOTES}
@@ -705,13 +734,16 @@ aplicația se actualizează singură."
   fi
   retry "fetch tags" 10 10 -- git fetch origin --tags || true
 
-  sleep 20
-  if ! gh run list --workflow=build.yml --json headBranch --jq '.[].headBranch' 2>/dev/null | grep -qx "$TAG"; then
-    log "CI nu a pornit de la tag — declanșez manual (workflow_dispatch)"
-    retry "workflow_dispatch" 20 15 -- gh workflow run build.yml --ref "$TAG" || true
+  # Linux doar la release-urile complete: CI-ul nu mai pornește singur la tag.
+  if [ "$COMPLET" = "1" ]; then
+    if ! gh run list --workflow=build.yml --json headBranch --jq '.[].headBranch' 2>/dev/null | grep -qx "$TAG"; then
+      retry "pornire build Linux" 20 15 -- gh workflow run build.yml --ref "$TAG" || fail "nu pot porni build-ul de Linux"
+    fi
+    ok "tag ${TAG} + note publicate, build Linux pornit"
+  else
+    ok "tag ${TAG} + note publicate (fără Linux — nu e release complet)"
   fi
   touch "$STATE/gh.done"
-  ok "tag ${TAG} + note publicate, CI Linux pornit"
 fi
 
 # ── Oglinda corecturilor pentru instalările de sub 1.4.0 ─────────────────────
@@ -751,7 +783,7 @@ fi
 # reluare nu mai are nevoie de nimic din ce se șterge. Rămâne doar versiunea
 # curentă, fără aplicația despachetată (mac-arm64, ~360 MB); restul e în hangar.
 step "Curățenie în release/"
-rm -rf "${RELEASE_DIR}/mac-arm64"
+rm -rf "${RELEASE_DIR}/mac-arm64" "${RELEASE_DIR}/mac"
 for old in release/*/; do
   old="${old%/}"
   [ "$old" = "$RELEASE_DIR" ] || rm -rf -- "$old"
@@ -765,4 +797,9 @@ echo "  https://hangar.it4all.ro/hub/?p=adventshow&t=releases"
 echo ""
 echo "  Până atunci, v${NEW_VERSION} e în staging: nimeni nu o vede și nimeni nu o"
 echo "  primește prin auto-update. La promovare, hangar generează feed-urile."
-echo "  AppImage-ul de Linux ajunge singur, din CI, în aceeași versiune."
+if [ "$COMPLET" = "1" ]; then
+  echo "  AppImage-ul de Linux ajunge singur, din CI, în aceeași versiune — verifică"
+  echo "  că a apărut înainte să promovezi, altfel Linux rămâne pe versiunea veche."
+else
+  echo "  Release parțial: Windows + Mac Apple. Intel și Linux rămân pe ultimul complet."
+fi

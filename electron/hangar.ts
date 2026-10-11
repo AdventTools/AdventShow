@@ -48,8 +48,29 @@ export interface HangarSettings {
   updateChannel?: UpdateChannel;
 }
 
+/**
+ * Ce fel de calculator e: sistemul, procesorul, memoria, ecranele. Fără nume de
+ * utilizator, de calculator sau numere de serie — doar cât să știm pe ce rulează
+ * aplicația înainte să cerem un sistem mai nou (Electron mută pragul de macOS la
+ * câteva versiuni).
+ */
+export interface SystemInfo {
+  os: string;
+  os_version: string;
+  cpu: string;
+  cores: number;
+  ram_gb: number;
+  /** Aplicația de Intel pornită pe un Mac cu procesor Apple, prin Rosetta. */
+  translated: boolean;
+  displays: string[];
+  gpu?: string;
+  model?: string;
+}
+
 export interface HangarDeps {
   appVersion: string;
+  /** Lipsește la apelurile care nu raportează nimic despre calculator. */
+  system?: () => Promise<SystemInfo>;
   userDataDir: string;
   getSettings: () => HangarSettings;
   patchSettings: (patch: Partial<HangarSettings>) => void;
@@ -169,6 +190,7 @@ export async function track(
   if ((s.churchCity || '').trim()) profile.localitatea = s.churchCity!.trim();
   if ((s.contribName || '').trim()) profile.persoana_contact = s.contribName!.trim();
 
+  const system = deps.system ? await deps.system().catch(() => undefined) : undefined;
   const out = await postJson(TRACK_URL, {
     project: HANGAR_KEY,
     install: installId(deps),
@@ -178,6 +200,7 @@ export async function track(
     channel: updateChannel(deps),
     platform: hangarPlatform(),
     arch: process.arch,
+    ...(system ? { system } : {}),
     ...(Object.keys(profile).length ? { profile } : {}),
   }, 6000);
 

@@ -10,11 +10,11 @@ name: Build Linux (AppImage)
 # regenereaza singur feed-urile. Daca secretul lipseste, AppImage-ul ramane ca
 # artefact de workflow, ca sa nu se piarda build-ul.
 
+# Pornit doar de release.sh, la release-urile complete (COMPLET=1): Linux nu se
+# construiește la fiecare versiune. hangar îi dă cea mai nouă versiune care are
+# AppImage, deci între două release-uri complete rămâne pe ultimul.
+# Manual: gh workflow run build.yml --ref vX.Y.Z
 on:
-  push:
-    tags:
-      - 'v*'
-  # fallback manual: gh workflow run build.yml --ref vX.Y.Z
   workflow_dispatch:
 
 permissions:
