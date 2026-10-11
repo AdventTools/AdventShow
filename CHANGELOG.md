@@ -11,6 +11,8 @@
 
 ### Modificări
 - Iconițele de acompaniament din lista de imnuri sunt mai mari și mai clare: nor cu săgeată = de descărcat, notă = descărcat, notă cu rânduri de text = sincronizat cu versurile. Imnurile fără acompaniament nu mai au niciun semn.
+- Butonul de descărcare scrie acum „Descarcă acompaniamentul”, cu același nor ca în listă.
+- În Setări → Despre: link spre adventhub.ro, unde stau toate proiectele noastre.
 
 ---
 
