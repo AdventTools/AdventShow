@@ -2443,6 +2443,9 @@ function App() {
                             </div>
                         </div>
                     )}
+                    <button className="sidebar-hub" onClick={() => window.electron.openExternal('https://adventhub.ro')}>
+                        adventhub.ro
+                    </button>
                 </aside>
 
                 {/* Resize handle: sidebar | content */}
