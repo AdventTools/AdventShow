@@ -112,6 +112,7 @@ export const EN_APP_3: Record<string, string> = {
     'Autor original, interfață, structura aplicației': 'Original author, interface, app structure',
     'Dezvoltarea versiunilor recente: colecțiile noi de cântări, video & YouTube, căutarea în Biblie, Ceas, Realtime cu prezentări și șabloane, acompaniamentul instrumental al imnurilor — pentru când nu e pianist la biserică — cu trecerea strofelor pe melodie, corecturile care circulă între biserici și autori, parola și recuperarea ei, actualizarea automată pe canal stabil sau beta':
         'Development of recent versions: new song collections, video & YouTube, Bible search, Clock, Realtime presentations and templates, instrumental accompaniment for hymns — for when there is no pianist at church — with verses that follow the music, corrections that flow between churches and authors, the password and its recovery, automatic updates on the stable or beta channel',
+    'Toate proiectele noastre, într-un singur loc': 'All our projects, in one place',
     'Distribuit gratuit. Biblia Cornilescu — text în domeniu public.': 'Distributed for free. The Cornilescu Bible — public domain text.',
     'Cum ajunge textul pe ecranul mare': 'How the text gets onto the big screen',
     'Doi pași, mereu aceiași: întâi pregătești, apoi trimiți.': 'Two steps, always the same: first prepare, then send.',
@@ -405,7 +406,7 @@ export const EN_APP_3: Record<string, string> = {
     'Volum': 'Volume',
     'Descarcă tot dinainte': 'Download everything in advance',
     'Se descarcă… {facute} din {total}': 'Downloading… {facute} of {total}',
-    'Descarcă cele {n} rămase ({gb} GB)': 'Download the remaining {n} ({gb} GB)',
+    'Descarcă acompaniamentul la cele {n} imnuri rămase ({gb} GB)': 'Download accompaniment for the remaining {n} hymns ({gb} GB)',
     'Toate sunt descărcate': 'Everything is downloaded',
     'Șterse {n} fișiere.': 'Deleted {n} files.',
     'Șterge tot': 'Delete all',

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudDownload, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { accTitle } from './accompaniment-ui';
 import { useT } from './i18n';
@@ -190,7 +190,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 {accompaniment.loading ? (
                   <>
                     <Loader className="w-3 h-3 animate-spin" />
-                    {accompaniment.willPlay ? t('Se descarcă… · nu porni') : t('Se descarcă…')}
+                    {accompaniment.willPlay ? t('Se descarcă acompaniamentul… · nu porni') : t('Se descarcă acompaniamentul…')}
                   </>
                 ) : accompaniment.playing ? (
                   <>
@@ -199,8 +199,8 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                   </>
                 ) : accompaniment.needsDownload ? (
                   <>
-                    <Download className="w-3 h-3" />
-                    {accompaniment.willPlay ? t('Descarcă și cântă') : t('Descarcă')}
+                    <CloudDownload className="w-3 h-3" />
+                    {accompaniment.willPlay ? t('Descarcă acompaniamentul și cântă') : t('Descarcă acompaniamentul')}
                     {' '}{accompaniment.sizeMb.toFixed(1)} MB
                   </>
                 ) : accompaniment.hasMarks ? (

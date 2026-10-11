@@ -123,12 +123,12 @@ export const EN_APP_2: Record<string, string> = {
     'Curăță': 'Clear',
 
     // AccompanimentButton
-    'Se descarcă… · nu porni': "Downloading… · won't start",
-    'Se descarcă…': 'Downloading…',
+    'Se descarcă acompaniamentul… · nu porni': "Downloading accompaniment… · won't start",
+    'Se descarcă acompaniamentul…': 'Downloading accompaniment…',
     'Proiecția avansează singură': 'The projection advances on its own',
     'auto': 'auto',
-    'Descarcă și cântă': 'Download and play',
-    'Descarcă': 'Download',
+    'Descarcă acompaniamentul și cântă': 'Download accompaniment and play',
+    'Descarcă acompaniamentul': 'Download accompaniment',
     'Cântă singur': 'Plays on its own',
     'Cântă': 'Play',
     'Doar acompaniamentul — strofele le schimbi tu': 'Accompaniment only — you change the verses',
@@ -136,7 +136,7 @@ export const EN_APP_2: Record<string, string> = {
     // AdminSyncPanel (unealtă ascunsă, doar pentru autori)
     'Administrare — sincronizare': 'Administration — sync',
     'Scrie un număr de imn.': 'Enter a hymn number.',
-    'Acompaniamentul nu e pe calculator. Deschide imnul și apasă o dată „Descarcă".': 'The accompaniment is not on this computer. Open the hymn and press "Download" once.',
+    'Acompaniamentul nu e pe calculator. Deschide imnul și apasă o dată „Descarcă acompaniamentul".': 'The accompaniment is not on this computer. Open the hymn and press "Download accompaniment" once.',
     'Nu s-a putut citi: {err}': "Couldn't read it: {err}",
     'Salvat. Imnul {n} merge de acum singur la proiecție.': 'Saved. Hymn {n} will now advance on its own during projection.',
     'Marcajele imnului {n} au fost șterse.': "Hymn {n}'s marks have been cleared.",
