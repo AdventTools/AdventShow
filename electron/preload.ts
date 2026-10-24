@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('electron', {
       categoryId?: number;
       sections: { type: 'strofa' | 'refren'; text: string }[];
     }) => ipcRenderer.invoke('db:create-hymn-with-sections', payload),
+    nextHymnNumber: () => ipcRenderer.invoke('db:next-hymn-number') as Promise<string>,
+    hymnOnNumber: (number: string, categoryId: number | null, excludeId?: number) =>
+      ipcRenderer.invoke('db:hymn-on-number', number, categoryId, excludeId) as Promise<{ id: number; title: string } | null>,
     updateHymnWithSections: (id: number, payload: {
       number: string;
       title: string;
@@ -338,7 +341,7 @@ contextBridge.exposeInMainWorld('electron', {
 
   youtube: {
     getPlaylist: () => ipcRenderer.invoke('youtube:get-playlist'),
-    add: (url: string, title?: string) => ipcRenderer.invoke('youtube:add', url, title),
+    add: (url: string, title?: string, audioOnly?: boolean) => ipcRenderer.invoke('youtube:add', url, title, audioOnly),
     updateTitle: (id: string, title: string) => ipcRenderer.invoke('youtube:update-title', id, title),
     remove: (id: string) => ipcRenderer.invoke('youtube:remove', id),
     delete: (id: string) => ipcRenderer.invoke('youtube:delete', id),

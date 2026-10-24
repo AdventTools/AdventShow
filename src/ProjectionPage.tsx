@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { keyAction } from './projectionKeys';
 import { zeroMessageSize } from './timerText';
 import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, ProjectionTextData } from './vite-env';
 
@@ -44,6 +45,16 @@ function formatDuration(ms: number): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Distanța dintre rândurile strofei: 1.45 lua aproape jumătate de rând între versuri
+// și o strofă de 10–12 rânduri ieșea mică pe ecranele late.
+const LYRICS_LINE_HEIGHT = 1.3;
+
+// „S-au" nu se rupe la capăt de rând: cratima dintre litere devine cratimă
+// nedespărțitoare (U+2011), care arată la fel. Doar la afișare; baza rămâne neatinsă.
+function faraRupereLaCratima(text: string): string {
+  return text.replace(/(\p{L})-(?=\p{L})/gu, '$1\u2011');
+}
+
 // Timer / clock — full-screen, self-ticking (no IPC per second). Computes its
 // display from the timestamps in `data`, so it stays accurate across lag/pauses.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,7 +170,9 @@ function TimerDisplay({ data, color, fontScale }: {
         <div style={{
           color: lastMinute ? LAST_MINUTE_COLOR : color, fontWeight: 800, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
           lineHeight: 1, letterSpacing: '0.02em', textShadow: '0 4px 28px rgba(0,0,0,0.6)',
-          fontSize: `calc(clamp(4rem, 22vw, 22rem) * ${fontScale})`,
+          // Plafon pe lățime: „12:34:56" la 22vw ieșea din ecran în laterale. O cifră
+          // bold tabulară are cam 0,6em, deci textul încape în 92vw oricât de lung e.
+          fontSize: `min(calc(clamp(4rem, 22vw, 22rem) * ${fontScale}), ${(92 / (display.length * 0.62)).toFixed(2)}vw)`,
         }}>
           {display}
         </div>
@@ -243,7 +256,7 @@ export function ProjectionPage() {
   const [visible, setVisible] = useState(false);
   const [bg, setBg] = useState<AppSettings>({});
   // Doar pentru Ceas și Anunțuri, pe durata proiecției. La imnuri și Biblie,
-  // ↑↓ / A± schimbă mărimea salvată a tabului (vezi `schimbaMarimea`).
+  // + − / A± schimbă mărimea salvată a tabului (vezi `schimbaMarimea`).
   const [zoomLevel, setZoomLevel] = useState(1);
   const schimbaMarimea = useRef<(action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void>(() => { /* până la primul render */ });
 
@@ -398,21 +411,16 @@ export function ProjectionPage() {
   // Keyboard control: arrows navigate, Escape closes — all via main process
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      const tasta = keyAction(e);
+      if (tasta === 'next' || tasta === 'prev') {
         e.preventDefault();
-        window.electron.projection.sendKeyRequest('next');
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-        e.preventDefault();
-        window.electron.projection.sendKeyRequest('prev');
+        window.electron.projection.sendKeyRequest(tasta);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         window.electron.projection.sendKeyRequest('close');
-      } else if (e.key === 'ArrowUp') {
+      } else if (tasta === 'zoom-in' || tasta === 'zoom-out') {
         e.preventDefault();
-        schimbaMarimea.current('zoom-in');
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        schimbaMarimea.current('zoom-out');
+        schimbaMarimea.current(tasta);
       }
     };
     window.addEventListener('keydown', handler);
@@ -430,7 +438,7 @@ export function ProjectionPage() {
   const tabKey: 'imnuri' | 'biblia' = isBible ? 'biblia' : 'imnuri';
 
   // Mărimea textului: cea din Setări, separat pe tab; altfel mărimea generală a
-  // instalărilor vechi. Aceeași valoare o schimbă și ↑↓ / A± în timpul proiecției,
+  // instalărilor vechi. Aceeași valoare o schimbă și + − / A± în timpul proiecției,
   // deci rămâne și după Esc, și după repornire.
   const fontSizeMultiplier = marimeaTextului(bg, tabKey);
 
@@ -504,7 +512,7 @@ export function ProjectionPage() {
   // ── Uniform font size for the entire hymn ──
   // Analyze ALL sections once when the hymn changes, pick the tightest fit,
   // and use that font for every slide so it never varies mid-hymn.
-  // Available area: ~88vh (header ~3vh + footer ~3vh + padding ~6vh = 12vh overhead)
+  // Aria textului: ~90vh (antetul și punctele de jos își păstrează doar cât le trebuie)
   const hymnFontSize = (() => {
     if (!data || data.sections.length === 0) return null;
 
@@ -520,8 +528,7 @@ export function ProjectionPage() {
       const maxLineCharCount = Math.max(1, ...lines.map((l: string) => l.trim().length));
       // Bold weight 700 chars are ~20% wider
       worstVw = Math.min(worstVw, 120 / maxLineCharCount);
-      // 82vh usable area after compact header + footer + padding
-      worstVh = Math.min(worstVh, 82 / (lineCount * 1.45));
+      worstVh = Math.min(worstVh, 90 / (lineCount * LYRICS_LINE_HEIGHT));
     }
 
     const vw = Math.min(10, worstVw).toFixed(2);
@@ -553,6 +560,9 @@ export function ProjectionPage() {
     return `calc(clamp(2.5rem, ${worstVh.toFixed(2)}vh, 11rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   })();
 
+  // Fontul ales în Setări pentru tab (gol = cel al aplicației)
+  const textFont = (isBible ? bg.bibleFont : bg.hymnFont) || undefined;
+
   // Dynamic font size: hymn uniform, bible uniform, sau fallback per-secțiune
   let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   if (hymnFontSize) {
@@ -566,7 +576,7 @@ export function ProjectionPage() {
     const lineCount = Math.max(1, lines.length);
     const maxLineCharCount = Math.max(1, ...lines.map(l => l.trim().length));
     const maxVw = Math.min(10, 150 / maxLineCharCount).toFixed(2);
-    const maxVh = Math.min(14, 82 / (lineCount * 1.45)).toFixed(2);
+    const maxVh = Math.min(14, 90 / (lineCount * LYRICS_LINE_HEIGHT)).toFixed(2);
     dynamicFontSize = `calc(clamp(2rem, min(${maxVw}vw, ${maxVh}vh), 8rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   }
 
@@ -773,9 +783,11 @@ export function ProjectionPage() {
             // să depindă DOAR de viewport, nu de conținut. Altfel ajustarea fontului
             // schimba înălțimea containerului → ResizeObserver → reset shrink → buclă
             // infinită = renderer la 100% CPU (helper-ul macOS care nu se mai oprea).
-            height: '90vh',
-            paddingTop: data && !isBible && data.currentIndex >= 0 ? '3.5vh' : '0',
-            paddingBottom: data && data.sections.length > 1 && data.currentIndex >= 0 ? '4vh' : '0',
+            // Pe toată înălțimea; se rezervă doar locul antetului și al punctelor de
+            // jos (în px pe ecrane mici, unde 5vh nu le-ar mai cuprinde).
+            height: '100vh',
+            paddingTop: data && !isBible && data.currentIndex >= 0 ? 'max(5.5vh, 3.75rem)' : '0',
+            paddingBottom: data && data.sections.length > 1 && data.currentIndex >= 0 ? 'max(4vh, 2.75rem)' : '0',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -789,6 +801,7 @@ export function ProjectionPage() {
                 className="leading-relaxed"
                 style={{
                   color: contentTextColor,
+                  fontFamily: textFont,
                   fontSize: dynamicFontSize,
                   fontWeight: 700,
                   lineHeight: 1.5,
@@ -797,7 +810,7 @@ export function ProjectionPage() {
                   overflowWrap: 'anywhere',
                 }}
               >
-                {section.text}
+                {faraRupereLaCratima(section.text)}
               </p>
               {/* Bible reference below the text */}
               {data.bibleRef && (
@@ -833,6 +846,7 @@ export function ProjectionPage() {
                 className="font-bold uppercase tracking-widest"
                 style={{
                   color: contentTextColor,
+                  fontFamily: textFont,
                   fontSize: `calc(clamp(1.2rem, 3.5vw, 3.5rem) * ${fontSizeMultiplier * shrinkFactor})`,
                   letterSpacing: '0.12em',
                   overflowWrap: 'anywhere',
@@ -855,15 +869,16 @@ export function ProjectionPage() {
                 className="leading-relaxed"
                 style={{
                   color: contentTextColor,
+                  fontFamily: textFont,
                   fontSize: dynamicFontSize,
                   fontWeight: 700,
-                  lineHeight: 1.45,
+                  lineHeight: LYRICS_LINE_HEIGHT,
                   textShadow: '0 2px 48px rgba(0,0,0,0.9), 0 1px 4px rgba(0,0,0,0.8)',
                   whiteSpace: 'pre-line',
                   overflowWrap: 'anywhere',
                 }}
               >
-                {section.text}
+                {faraRupereLaCratima(section.text)}
               </p>
             </div>
           ) : null /* fără placeholder pe proiecție — orice text de sistem

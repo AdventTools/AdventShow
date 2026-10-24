@@ -222,6 +222,8 @@ export interface AppSettings {
   contentTextColor?: string; // hex, e.g. '#ffffff'
   bibleRefScale?: number;    // mărimea trimiterii de sub verset (1 = normal)
   announceFont?: string;     // fontul ales ultima oară la Anunțuri
+  hymnFont?: string;         // fontul strofelor pe proiecție (gol = implicit)
+  bibleFont?: string;        // fontul versetelor pe proiecție (gol = implicit)
   adminPasswordHash?: string; // bcrypt-like hash or empty
   projectionFontSize?: number; // font size multiplier, default 1.2
   /** Mărime separată per tab; lipsă pentru un tab → se folosește `projectionFontSize`. */
@@ -283,6 +285,7 @@ export interface YouTubeEntry {
   status: 'downloading' | 'ready' | 'error';
   error?: string;
   addedAt: string;
+  audioOnly?: boolean; // descărcat fără imagine (.m4a)
   localUrl?: string; // present for local file entries in unified playlist
 }
 
@@ -295,6 +298,8 @@ export interface IElectronAPI {
     searchHymnsContent: (query: string, categoryId?: number) => Promise<Hymn[]>;
     getHymnWithSections: (id: number) => Promise<HymnWithSections | null>;
     createHymnWithSections: (payload: CreateHymnInput) => Promise<number>;
+    nextHymnNumber: () => Promise<string>;
+    hymnOnNumber: (number: string, categoryId: number | null, excludeId?: number) => Promise<{ id: number; title: string } | null>;
     updateHymnWithSections: (id: number, payload: { number: string; title: string; sections: { type: 'strofa' | 'refren'; text: string }[] }) => Promise<void>;
     importPresentations: (dirPath: string, categoryId?: number) => Promise<ImportResult>;
     importPresentationFiles: (filePaths: string[], categoryId?: number) => Promise<ImportResult>;
@@ -523,7 +528,7 @@ export interface IElectronAPI {
   };
   youtube: {
     getPlaylist: () => Promise<YouTubeEntry[]>;
-    add: (url: string, title?: string) => Promise<{ entry?: YouTubeEntry; error?: string }>;
+    add: (url: string, title?: string, audioOnly?: boolean) => Promise<{ entry?: YouTubeEntry; error?: string }>;
     updateTitle: (id: string, title: string) => Promise<void>;
     remove: (id: string) => Promise<void>;
     delete: (id: string) => Promise<void>;

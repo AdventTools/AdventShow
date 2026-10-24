@@ -14,8 +14,8 @@ export const EN_APP_3: Record<string, string> = {
     'Ecranul folosit': 'Screen in use',
     'Mărimea textului la Imnuri: {pct}%': 'Text size for Hymns: {pct}%',
     'Mărimea textului la Biblie: {pct}%': 'Text size for Bible: {pct}%',
-    'Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu ↑↓ sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.':
-        'Each tab keeps its own size; you can also change it while projecting, with ↑↓ or A−/A+, and it stays that way. If a long stanza or passage does not fit the screen, the app shrinks the text on its own, so scrolling is never needed.',
+    'Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu + și − sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.':
+        'Each tab keeps its own size; you can also change it while projecting, with + and − or A−/A+, and it stays that way. If a long stanza or passage does not fit the screen, the app shrinks the text on its own, so scrolling is never needed.',
     'Fundalul proiecției': 'Projection background',
     'Fundalul general: se vede peste tot unde nu alegi altul — la Imnuri și la Biblie, dacă nu le dai mai jos un fundal separat, și la Ceas și Anunțuri. Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.':
         'The general background: it shows everywhere you don\'t pick another one — for Hymns and Bible, unless you give them a separate background below, and for Clock and Announcements. A dark overlay is added automatically over images or video, so the text stays readable.',
@@ -463,4 +463,6 @@ export const EN_APP_3: Record<string, string> = {
     'Normală': 'Normal',
     'Font': 'Font',
     'Implicit': 'Default',
+    'Fontul imnurilor': 'Hymn font',
+    'Fontul versetelor': 'Verse font',
 };

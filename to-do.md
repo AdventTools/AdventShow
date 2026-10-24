@@ -1,29 +1,48 @@
-1. https://github.com/AdventTools/AdventShow/releases/tag/v1.1.28
-pentru a 10-a oara iti soun sa scapi de acolo de source code !!!!!!!!!!!!!!!!!!!!!!!
-ai poza in chat. scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-scoate-l de acolo !!!!!!!!!!
-E clar sau trebuie sa repet de inca 100 de ori????
+## Deschise
 
-2. am descoperit problema cu sagetile in windows: cand deschid un imn sau un verset cu click din butonul proiecteaza, merge corect
-cand deschid cu enter din lista, navigarea cu sageti e busita. merge navigarea cu sageti sus/jos, iar zoom-ul dispare.
-
-3. se pare ca nu am sunet pe video playback din windows. Situatia e asa: cand fac play pe windows la fisierul downloadat de pe youtube de catre aplicatier, are sunet dar nu pare a avea video. Acelasi fisier cand dau play pe aplicatia adventshow, are video dar nu are sunet. Desi am incercat pe toate placile de sunet disponibile. Nu imi dau seama
-
-4. frame-ul principal pentru proiectie (zona principala folosita de strofa sau verset) e prea mic pe inaltime, motiv pentru care unele strofe nu incap. Imi apare scrool vertical, ceea ce e interzis
-- te rog sa pastrezi pentru header si footer, cat mai putin, doar cat e necesar sa se vada. 
-- sa te asiguri ca niciodata nu mai apare scrool, asadar zoomul dinamic trebuie regandit sau corectat. Vreau o solutie care sa se asigure 100% ca face fit la text. Daca nu incap toate randurile in rezolutia monitorului de proiectie, trebuie sa micsoreze fontul automat in asa fel incat sa incapa, niciodata nu vreau sa mai vad scrool. 
-- fondul default atunci cand totul incape, poate fi usor mai mare. dar sa te asiguri ca se micsoreaza dinamic
-
-5. indicatorul de pozitie din footer e prea mic, il vreau mai mare ca sa fie ceva mai vizibil.
-
-6. vreau un audit pe baza de date de imnuri, in sensul ca vreau o lista cu toate imnnurile care au 7 sau mai multe randuri pe o singura pagina/slide.
+- Dupa ce ownerul pune 1.6.14 la dispozitia bisericilor: raspunsurile in hangar la #36, #37, #39, #40, #41, #42 (#35 si #38 trimise pe 2026-10-24).
+- Cererea catre suportul GitHub ca sa stearga din cache commit-urile vechi cu cheia (textul e dat ownerului pe 2026-10-24; o trimite el).
+- Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
+- Lint: 63 de erori vechi (`no-explicit-any` etc.), de dinainte de 1.6.13; `npm run lint` nu trece.
+- Imnurile cu slide-uri de 10+ randuri; ce facem cu ele se decide mai tarziu:
+  - Amicus 024 — Culorile mântuirii: 3 slide-uri, maxim 13 randuri
+  - Exploratori 051 — Călător sunt: 2 slide-uri, maxim 10 randuri
+  - Exploratori 053 — Merg cântând spre casă: 2 slide-uri, maxim 12 randuri
+  - Exploratori 058 — Isus mă așteaptă: 1 slide-uri, maxim 12 randuri
+  - Exploratori 064 — Sunt fericit: 1 slide-uri, maxim 12 randuri
+  - Exploratori 098 — Fii exemplu: 2 slide-uri, maxim 11 randuri
+  - Imnuri Creștine 75 — Doar Tu ne ești cale, adevăr și viață!: 1 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 82 — Nume frumos: 2 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 96 — De ce să nu cânt întruna?: 4 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 120 — Spune-mi povestea iubirii: 3 slide-uri, maxim 12 randuri
+  - Imnuri Creștine 121 — L-am văzut pe Isus: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 133 — Vrednic ești, Doamne!: 2 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 206 — Sigur la Domnu-n brațe!: 3 slide-uri, maxim 12 randuri
+  - Imnuri Creștine 254 — „Pe veci cu Dumnezeu!”: 4 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 259 — Cuvântul Legii lui Isus: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 267 — Domnul ne cheamă pe munte: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 418 — Lucrarea, Doamne, este-a Ta: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 497 — Sfânta speranță: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 513 — Ascultați, străjerul cheamă!: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 517 — Ai curaj, tu, turmă mică!: 4 slide-uri, maxim 12 randuri
+  - Imnuri Creștine 548 — Venim trudiți: 2 slide-uri, maxim 12 randuri
+  - Imnuri Creștine 555 — Vreau să cânt azi un imn: 1 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 583 — Sabatul de Domnul dat nouă: 3 slide-uri, maxim 12 randuri
+  - Imnuri Creștine 687 — Cu șoapte de-amurg: 2 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 773 — Tatăl nostru: 2 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 774 — Doamne sfinte Creator: 2 slide-uri, maxim 11 randuri
+  - Imnuri Creștine 777 — Domnul Isus Hristos: 2 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 782 — Din străluciri: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 797 — Iar cad frunzele pădurii: 2 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 807 — Blând Păstor, condu-mă Tu!: 1 slide-uri, maxim 11 randuri
+  - Imnuri Creștine 813 — Pe-ntinse valuri: 1 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 826 — Mărire lui Isus cântăm: 3 slide-uri, maxim 11 randuri
+  - Imnuri Creștine 827 — Din toată inima Te-ador, Isuse!: 1 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 833 — Iubirea Tatălui vestind: 2 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 838 — Ca peregrin: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 880 — Dumnezeu-i de față!: 1 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 896 — Biruitorul va primi să guste: 1 slide-uri, maxim 11 randuri
+  - Imnuri Creștine 909 — Lucrarea, Doamne,: 3 slide-uri, maxim 10 randuri
+  - Imnuri Creștine 911 — Mi-e dor de-acas’: 1 slide-uri, maxim 10 randuri
+  - Licurici 078 — Blu, cip, mu: 3 slide-uri, maxim 11 randuri
+  - Licurici 079 — Cântecul animalelor: 2 slide-uri, maxim 10 randuri

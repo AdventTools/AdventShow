@@ -10,6 +10,8 @@ import {
   clearAllData,
   createCategory,
   createHymnWithSections,
+  nextHymnNumber,
+  hymnOnNumber,
   deleteCategory,
   deleteHymn,
   deleteSection,
@@ -66,6 +68,7 @@ import {
   saveTemplate, deleteTemplate, reorderTemplates, resetBuiltinTemplate, Presentation,
 } from './presentation'
 import { parsePresentationToHymn } from './import'
+import { findOldCert, removeFromMachine, removeFromUser } from './oldCert'
 import { importPresentationDirectory, importPresentationFiles } from './import'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -119,6 +122,10 @@ interface AppSettings {
   contentTextColor?: string
   bibleRefScale?: number
   announceFont?: string
+  hymnFont?: string
+  bibleFont?: string
+  // certificatul vechi de semnare a fost scos sau nu a existat (vezi oldCert.ts)
+  oldCertDone?: boolean
   adminPasswordHash?: string
   projectionFontSize?: number
   // Mărime separată per tab — dacă lipsește pentru un tab, se folosește
@@ -349,6 +356,68 @@ let contentRoutineDone = false
 function notifyDecisions(deps: ContribDeps) {
   const n = listPendingDecisions(deps).length + listHymnStates(deps).length + unreadReplyCount(deps)
   if (isWinAlive(win)) win.webContents.send('contrib:decisions', n)
+}
+
+/**
+ * Scoate certificatul vechi de semnare (vezi `oldCert.ts`). Rulează la pornire, cât
+ * timp nu s-a terminat; niciodată peste o proiecție. Rezultatul pleacă în hangar ca
+ * raport automat cu cheie fixă, deci acolo se strâng apariții, nu rânduri noi.
+ */
+async function cleanupOldCert() {
+  if (readSettings().oldCertDone) return
+  if (projectionWin && !projectionWin.isDestroyed()) return
+  const raporteaza = (rezultat: 'scos' | 'refuzat' | 'esuat', detaliu: string) => {
+    sendReport(hangarDeps(), {
+      kind: 'crash',
+      subject: `Certificat vechi AdventShow: ${rezultat}`,
+      body: detaliu,
+      severity: 'low',
+      dedup: `certificat-vechi-${rezultat}`,
+      fields: { tip: 'certificat-vechi', platforma: hangarPlatform() },
+    }, true).catch(() => { /* raportarea nu blochează nimic */ })
+  }
+  try {
+    let gasit = await findOldCert()
+    if (gasit.length === 0) {
+      writeSettings({ ...readSettings(), oldCertDone: true })
+      return
+    }
+    debugLog('[certificat-vechi] găsit în:', gasit.join(', '))
+    await removeFromUser(gasit.filter(s => s === 'CurrentUser\\TrustedPublisher'))
+    gasit = await findOldCert()
+    if (gasit.length > 0) {
+      const opts = {
+        type: 'warning' as const,
+        title: 'Curățenie de siguranță',
+        message: 'Un certificat vechi AdventShow a rămas pe acest calculator',
+        detail: 'Versiunile AdventShow din primăvară au pus în Windows un certificat care nu mai e folosit și care, între timp, nu mai e sigur. '
+          + 'Îl scoatem acum; aplicația merge la fel și după. Windows vă va cere confirmarea.',
+        buttons: ['Scoate-l acum', 'Mai târziu'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      }
+      const { response } = win && !win.isDestroyed()
+        ? await dialog.showMessageBox(win, opts)
+        : await dialog.showMessageBox(opts)
+      if (response !== 0) {
+        raporteaza('refuzat', `Rămas în: ${gasit.join(', ')}`)
+        return
+      }
+      await removeFromUser(gasit).catch(err => debugLog('[certificat-vechi] utilizator:', String(err)))
+      await removeFromMachine(gasit).catch(err => debugLog('[certificat-vechi] calculator:', String(err)))
+      gasit = await findOldCert()
+    }
+    if (gasit.length === 0) {
+      writeSettings({ ...readSettings(), oldCertDone: true })
+      raporteaza('scos', 'Certificatul vechi a fost scos de pe calculator.')
+    } else {
+      raporteaza('refuzat', `Rămas în: ${gasit.join(', ')}`)
+    }
+  } catch (err) {
+    debugLog('[certificat-vechi] eroare:', String(err))
+    raporteaza('esuat', String(err).slice(0, 500))
+  }
 }
 
 let crashHandlersWired = false
@@ -924,6 +993,7 @@ interface YouTubeEntry {
   status: 'downloading' | 'ready' | 'error'
   error?: string
   addedAt: string
+  audioOnly?: boolean
 }
 
 function getYouTubeDir(): string {
@@ -985,12 +1055,14 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
   const ffmpegBin = getFFmpegPath()
   const youtubeDir = getYouTubeDir()
   const tmpDir = path.join(youtubeDir, `_tmp_${entry.id}`)
-  const finalFile = `${entry.id}.mp4`
+  // „Doar audio": fără pasul video; sunetul se descarcă pe 0–90% și iese .m4a.
+  const audioOnly = entry.audioOnly === true
+  const finalFile = `${entry.id}.${audioOnly ? 'm4a' : 'mp4'}`
   const finalPath = path.join(youtubeDir, finalFile)
 
   // Stage tracking: progress is scaled across 3 phases
   //   video download:  0–45%
-  //   audio download: 45–90%
+  //   audio download: 45–90%  (0–90% la „doar audio")
   //   ffmpeg mux:     90–99%  (din time= raportat la Duration)
   let stage: 'video' | 'audio' | 'mux' = 'video'
 
@@ -1043,7 +1115,7 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       const m = line.match(/([\d.]+)%/)
       if (m) {
         const pct = parseFloat(m[1])
-        sendProgress(stage === 'video' ? pct * 0.45 : 45 + pct * 0.45, line)
+        sendProgress(stage === 'video' ? pct * 0.45 : audioOnly ? pct * 0.9 : 45 + pct * 0.45, line)
       }
     }
     proc.stdout.on('data', onData)
@@ -1062,14 +1134,16 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       // ── Stage 1: video stream only (prefer H.264 mp4 for Chromium compatibility)
       //    Cel mult 1080p: fără plafon, unde YouTube nu avea H.264 se lua AV1 la 4K,
       //    pe care multe laptopuri de biserică nu-l pot reda.
-      stage = 'video'
-      await runStep(ytdlpBin, [
-        '-f', 'bv*[vcodec^=avc1][height<=1080]/bv*[vcodec^=avc1]/bv*[height<=1080]/bv*',
-        '-o', path.join(tmpDir, 'video.%(ext)s'),
-        '--no-playlist', '--newline', '--no-mtime',
-        '--retries', '10', '--fragment-retries', '10',
-        entry.url,
-      ])
+      if (!audioOnly) {
+        stage = 'video'
+        await runStep(ytdlpBin, [
+          '-f', 'bv*[vcodec^=avc1][height<=1080]/bv*[vcodec^=avc1]/bv*[height<=1080]/bv*',
+          '-o', path.join(tmpDir, 'video.%(ext)s'),
+          '--no-playlist', '--newline', '--no-mtime',
+          '--retries', '10', '--fragment-retries', '10',
+          entry.url,
+        ])
+      }
 
       // ── Stage 2: audio stream only (prefer AAC m4a)
       stage = 'audio'
@@ -1084,8 +1158,21 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       const tmpFiles = fs.readdirSync(tmpDir)
       const videoTmp = tmpFiles.find(f => f.startsWith('video.'))
       const audioTmp = tmpFiles.find(f => f.startsWith('audio.'))
-      if (!videoTmp || !audioTmp) {
+      if ((!audioOnly && !videoTmp) || !audioTmp) {
         throw new Error(`Streams lipsesc după descărcare: ${JSON.stringify(tmpFiles)}`)
+      }
+
+      // Doar audio: AAC stereo în .m4a, din același motiv ca la video (opus din webm
+      // nu se redă peste tot, 5.1 poate ieși mut pe boxele bisericii).
+      if (audioOnly) {
+        stage = 'mux'
+        win?.webContents.send('youtube:progress', entry.id, 90, '[mux] converting audio')
+        await runStep(ffmpegBin, [
+          '-i', path.join(tmpDir, audioTmp),
+          '-vn', '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
+          '-movflags', '+faststart',
+          '-y', finalPath,
+        ])
       }
 
       // ── Stage 3: mux into mp4 with ffmpeg.
@@ -1095,22 +1182,24 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       //    Video altul decât H.264 (AV1, VP9) se convertește: altfel unele calculatoare
       //    nu-l redau deloc. Sunetul iese mereu stereo — o sursă 5.1 lăsată pe 6 canale
       //    poate ieși mută pe boxele bisericii.
-      stage = 'mux'
-      win?.webContents.send('youtube:progress', entry.id, 90, '[mux] merging streams')
-      const vinfo = await probeMedia(path.join(tmpDir, videoTmp))
-      const videoCopy = !vinfo.probed || vinfo.vcodec === 'h264'
-      // Un nucleu rămâne liber pentru aplicație și pentru proiecție.
-      const threads = String(Math.max(1, os.cpus().length - 1))
-      await runStep(ffmpegBin, [
-        '-i', path.join(tmpDir, videoTmp),
-        '-i', path.join(tmpDir, audioTmp),
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        ...(videoCopy ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-threads', threads]),
-        '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
-        '-movflags', '+faststart',
-        '-y', finalPath,
-      ])
+      if (videoTmp) {
+        stage = 'mux'
+        win?.webContents.send('youtube:progress', entry.id, 90, '[mux] merging streams')
+        const vinfo = await probeMedia(path.join(tmpDir, videoTmp))
+        const videoCopy = !vinfo.probed || vinfo.vcodec === 'h264'
+        // Un nucleu rămâne liber pentru aplicație și pentru proiecție.
+        const threads = String(Math.max(1, os.cpus().length - 1))
+        await runStep(ffmpegBin, [
+          '-i', path.join(tmpDir, videoTmp),
+          '-i', path.join(tmpDir, audioTmp),
+          '-map', '0:v:0',
+          '-map', '1:a:0',
+          ...(videoCopy ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-threads', threads]),
+          '-c:a', 'aac', '-b:a', '192k', '-ac', '2',
+          '-movflags', '+faststart',
+          '-y', finalPath,
+        ])
+      }
 
       const stat = fs.statSync(finalPath)
       if (stat.size < 10000) throw new Error(`Fișierul final pare incomplet (${stat.size} bytes)`)
@@ -1683,6 +1772,7 @@ app.whenReady().then(() => {
       // unui dezvoltator ar apărea ca o biserică activă și ar strica exact cifra
       // pe care pagina de instalări o promite ca fiind reală.
       if (app.isPackaged) {
+        if (process.platform === 'win32') setTimeout(() => { void cleanupOldCert() }, 20000)
         checkForcedUpdate('launch').catch(err => debugLog('[startup] track:', String(err)))
         // La fiecare bătaie reluăm și rutina de conținut: o corectură publicată
         // sâmbătă dimineața ajunge peste tot până la amiază, fără repornire.
@@ -1705,7 +1795,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
     const current = readSettings()
     const merged = { ...current, ...patch }
-    // Mărimea textului o scriu două ferestre: Setările și proiecția (↑↓ / A±).
+    // Mărimea textului o scriu două ferestre: Setările și proiecția (+ − / A±).
     // Fiecare trimite doar tabul ei, ca să nu calce una peste valoarea celeilalte.
     if (patch.projectionFontSizeByTab) {
       merged.projectionFontSizeByTab = { ...current.projectionFontSizeByTab, ...patch.projectionFontSizeByTab }
@@ -2031,6 +2121,9 @@ app.whenReady().then(() => {
     categoryId?: number;
     sections: { type: 'strofa' | 'refren'; text: string }[];
   }) => createHymnWithSections(payload))
+  ipcMain.handle('db:next-hymn-number', () => nextHymnNumber())
+  ipcMain.handle('db:hymn-on-number', (_e, number: string, categoryId: number | null, excludeId?: number) =>
+    hymnOnNumber(number, categoryId, excludeId))
 
   // ── Hymn CRUD ─────────────────────────────────────────────────────────────
   ipcMain.handle('hymn:update', (_e, id: number, number: string, title: string) =>
@@ -2588,7 +2681,7 @@ app.whenReady().then(() => {
     return readYouTubePlaylist()
   })
 
-  ipcMain.handle('youtube:add', async (_e, url: string, userTitle?: string) => {
+  ipcMain.handle('youtube:add', async (_e, url: string, userTitle?: string, audioOnly?: boolean) => {
     debugLog('[youtube:add] URL:', url, 'title:', userTitle)
     if (!isYtDlpInstalled()) {
       debugLog('[youtube:add] yt-dlp not installed, auto-installing...')
@@ -2615,6 +2708,7 @@ app.whenReady().then(() => {
       fileName: '',
       status: 'downloading',
       addedAt: new Date().toISOString(),
+      ...(audioOnly ? { audioOnly: true } : {}),
     }
 
     const playlist = readYouTubePlaylist()
