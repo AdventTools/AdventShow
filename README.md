@@ -220,8 +220,8 @@ Ca textele imnurilor să nu fie stricate din greșeală (de copii, de curioși, 
 | `/` | Pune cursorul în câmpul de căutare |
 | `↑` `↓` | Prin lista de imnuri sau prin versete (când nu proiectezi) |
 | `Enter` | Trimite pe ecran ce e în previzualizare |
-| `←` `→` | Strofa anterioară / următoare, în timpul proiecției (merg și `PgUp` / `PgDn`, iar `Spațiu` înainte) |
-| `↑` `↓` | Mărește / micșorează textul de pe ecran, în timpul proiecției |
+| `←` `→` `↑` `↓` | Strofa anterioară / următoare, în timpul proiecției (merg și `PgUp` / `PgDn`, iar `Spațiu` înainte), deci orice telecomandă de prezentare |
+| `+` `−` | Mărește / micșorează textul de pe ecran, în timpul proiecției |
 | `A` | Pornește / oprește acompaniamentul imnului deschis |
 | `Escape` | Oprește proiecția, oprește filmul sau golește previzualizarea (în Anunțuri: întâi închide editorul mare) |
 

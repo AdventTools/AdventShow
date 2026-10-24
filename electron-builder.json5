@@ -50,11 +50,6 @@
       "from": "scripts/web.json",
       "to": "web.json",
       "filter": ["**/*"]
-    },
-    {
-      "from": "electron/certs/adventshow.crt",
-      "to": "adventshow.crt",
-      "filter": ["**/*"]
     }
   ],
   // Chromium aduce traduceri pentru ~55 de limbi (meniurile de sistem: copiere,

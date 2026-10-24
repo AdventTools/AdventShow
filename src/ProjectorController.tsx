@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, CloudDownload, Loader, Monitor, MonitorOff, 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { accTitle } from './accompaniment-ui';
 import { useT } from './i18n';
+import { keyAction } from './projectionKeys';
 
 /** Secțiune de previzualizare — la Biblie `type` e 'verse' și `label` vine deja calculat („v. 5"). */
 interface PreviewSection {
@@ -108,18 +109,18 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
       // Cât timp rulează un video, nu naviga imnul — altfel Space/săgeata trimite un slide peste video.
       if (videoActiveRef.current) return;
 
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      // Telecomenzile trimit fie săgeți (orice pereche), fie PageUp/PageDown: toate
+      // schimbă strofa. Mărimea textului e pe + și −, inclusiv de pe tastatura numerică.
+      const tasta = keyAction(e);
+      if (tasta === 'next') {
         e.preventDefault();
         navigate(currentIndexRef.current + 1);
-      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      } else if (tasta === 'prev') {
         e.preventDefault();
         navigate(currentIndexRef.current - 1);
-      } else if (e.key === 'ArrowUp') {
+      } else if (tasta === 'zoom-in' || tasta === 'zoom-out') {
         e.preventDefault();
-        window.electron.projection.sendKeyRequest('zoom-in');
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        window.electron.projection.sendKeyRequest('zoom-out');
+        window.electron.projection.sendKeyRequest(tasta);
       }
     };
     window.addEventListener('keydown', handler, true);
@@ -253,7 +254,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
             </div>
           </div>
           <kbd className="text-[9px] text-fg/20 bg-fg/5 border border-fg/10 rounded px-1.5 py-0.5">
-            {t('←→ Space: navigare · ↑↓: font')}{accompaniment ? t(' · A: acompaniament') : ''}
+            {t('Săgeți, Space: navigare · + −: font')}{accompaniment ? t(' · A: acompaniament') : ''}
           </kbd>
           <button
             onClick={onClose}

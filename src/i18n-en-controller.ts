@@ -32,7 +32,7 @@ export const EN_CONTROLLER: Record<string, string> = {
     'Înapoi la mărimea implicită (120%)': 'Back to the default size (120%)',
     'Mărește textul (↑)': 'Enlarge the text (↑)',
     'Text: {pct}%': 'Text: {pct}%',
-    '←→ Space: navigare · ↑↓: font': '←→ Space: navigate · ↑↓: font size',
+    'Săgeți, Space: navigare · + −: font': 'Arrows, Space: navigate · + −: font size',
     ' · A: acompaniament': ' · A: accompaniment',
     'Oprește proiecția (Esc)': 'Stop the projection (Esc)',
     'Oprește': 'Stop',

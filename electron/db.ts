@@ -643,6 +643,33 @@ export interface HymnsDbBackup {
   }[];
 }
 
+// Imnurile adăugate de om merg DOAR în „Imnurile mele": colecțiile oficiale le
+// numerotăm noi, iar un imn pus de mână acolo s-ar încurca la prima actualizare
+// cu imnul oficial de pe același număr.
+function myHymnsCategoryId(db: ReturnType<typeof getDb>): number | null {
+  const row = db.prepare("SELECT id FROM categories WHERE name = 'Imnurile mele' LIMIT 1").get() as { id: number } | undefined;
+  return row?.id ?? null;
+}
+
+/** Primul număr liber după cel mai mare număr din colecție (001, 002…). */
+export function nextHymnNumber(categoryId?: number): string {
+  const db = getDb();
+  const cat = categoryId ?? myHymnsCategoryId(db);
+  const rows = db.prepare('SELECT number FROM hymns WHERE category_id IS ?').all(cat ?? null) as { number: string }[];
+  const max = rows.reduce((m, r) => (/^\d+$/.test(String(r.number ?? '').trim()) ? Math.max(m, parseInt(r.number, 10)) : m), 0);
+  return normalizeHymnNumber(String(max + 1));
+}
+
+/** Imnul care ocupă deja numărul în colecția dată (fără `excludeId`), sau null. */
+export function hymnOnNumber(number: string, categoryId: number | null, excludeId?: number): { id: number; title: string } | null {
+  const db = getDb();
+  const n = normalizeHymnNumber(number);
+  if (!n) return null;
+  const row = db.prepare('SELECT id, title FROM hymns WHERE number = ? AND category_id IS ? AND id != ? LIMIT 1')
+    .get(n, categoryId, excludeId ?? -1) as { id: number; title: string } | undefined;
+  return row ?? null;
+}
+
 export function createHymnWithSections(input: CreateHymnInput): number {
   const db = getDb();
   const tx = db.transaction((payload: CreateHymnInput) => {
@@ -656,12 +683,10 @@ export function createHymnWithSections(input: CreateHymnInput): number {
     if (!title) throw new Error('Titlul imnului este obligatoriu.');
     if (sections.length === 0) throw new Error('Adaugă cel puțin o secțiune cu text.');
 
-    const categoryId = payload.categoryId ?? null;
-    const duplicate = categoryId == null
-      ? db.prepare('SELECT id FROM hymns WHERE number = ? AND category_id IS NULL LIMIT 1').get(number)
-      : db.prepare('SELECT id FROM hymns WHERE number = ? AND category_id = ? LIMIT 1').get(number, categoryId);
+    const categoryId = myHymnsCategoryId(db) ?? payload.categoryId ?? null;
+    const duplicate = hymnOnNumber(number, categoryId);
     if (duplicate) {
-      throw new Error(`Există deja un imn cu numărul ${number} în categoria selectată.`);
+      throw new Error(`Numărul ${number} e deja ocupat de «${duplicate.title}». Următorul număr liber: ${nextHymnNumber(categoryId ?? undefined)}.`);
     }
 
     const searchText = normalizeSearchText(`${number} ${title} ${sections.map(s => s.text).join(' ')}`);
@@ -710,6 +735,12 @@ export function updateHymnWithSections(id: number, input: { number: string; titl
     if (!number) throw new Error('Numărul imnului este obligatoriu.');
     if (!title) throw new Error('Titlul imnului este obligatoriu.');
     if (sections.length === 0) throw new Error('Adaugă cel puțin o secțiune cu text.');
+
+    const own = db.prepare('SELECT category_id FROM hymns WHERE id = ?').get(id) as { category_id: number | null } | undefined;
+    const duplicate = hymnOnNumber(number, own?.category_id ?? null, id);
+    if (duplicate) {
+      throw new Error(`Numărul ${number} e deja ocupat de «${duplicate.title}» în aceeași colecție.`);
+    }
 
     const searchText = normalizeSearchText(`${number} ${title} ${sections.map(s => s.text).join(' ')}`);
     // updated_at protejează modificările utilizatorului de suprascrieri la syncSeedContent()

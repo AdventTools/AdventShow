@@ -40,7 +40,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.6.1",
     "daisyui": "5.5.18",
-    "electron": "^43.7.9",
+    "electron": "^43.8.3",
     "electron-builder": "^26.15.3",
     "electron-icon-builder": "^2.0.1",
     "eslint": "^9.39.5",

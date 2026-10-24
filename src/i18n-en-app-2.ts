@@ -68,6 +68,8 @@ export const EN_APP_2: Record<string, string> = {
     'Se adaugă...': 'Adding...',
     'Adaugă în listă': 'Add to list',
     'Se descarcă local și rămâne disponibil și fără internet.': 'It downloads locally and stays available even without internet.',
+    'Doar audio (fără imagine, se descarcă mult mai repede)': 'Audio only (no picture, downloads much faster)',
+    'Doar audio': 'Audio only',
     'Dublu-click pentru a edita titlul': 'Double-click to edit the title',
     'Gata': 'Done',
     'Eroare': 'Error',
@@ -203,6 +205,8 @@ export const EN_APP_2: Record<string, string> = {
 
     // HymnEditorModal
     'Numărul este obligatoriu.': 'The number is required.',
+    'Numărul {num} e deja ocupat de «{title}». Alege alt număr.': 'Number {num} is already taken by «{title}». Pick another number.',
+    'Ocupat: «{title}»': 'Taken: «{title}»',
     'Titlul este obligatoriu.': 'The title is required.',
     'Adaugă cel puțin o secțiune cu text.': 'Add at least one section with text.',
     'Imn salvat: {num} — {title}': 'Hymn saved: {num} — {title}',

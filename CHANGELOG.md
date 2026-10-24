@@ -12,7 +12,18 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- **Tastele s-au schimbat:** în timpul proiecției, toate săgețile (și Page Up / Page Down, Space) trec la strofa sau versetul următor ori anterior, așa că merge orice telecomandă de prezentare. Textul se mărește și se micșorează acum cu tastele **+** și **−**.
+- Strofele lungi ies mai mari pe ecran: textul folosește aproape toată înălțimea, iar rândurile sunt puțin mai apropiate.
+- Poți alege fontul pentru imnuri și pentru versete, în Setări → Proiecție; „implicit", de lângă nume, îl readuce pe cel obișnuit.
+- Un imn nou primește singur următorul număr liber din „Imnurile mele". Îl poți schimba, dar aplicația nu te lasă să salvezi peste un imn care are deja numărul acela.
+- La descărcările de pe YouTube poți bifa „Doar audio": fișierul vine fără imagine și se descarcă mult mai repede.
+- Cuvintele cu cratimă („S-au", „Domnu-n") nu se mai rup la capăt de rând.
+- Ceasul cu secunde nu mai iese din ecran în laterale.
+- Anunțul scris nu se mai pierde când treci pe altă rubrică și revii.
+- Numărul de lângă „Imnurile mele" se actualizează imediat când un imn al tău e acceptat în colecția oficială.
+- Pe Windows, aplicația scoate un certificat vechi rămas de la versiunile din primăvară, care nu mai era sigur; unde Windows cere drepturi de administrator, aplicația întreabă întâi.
+- Reparații de securitate la motorul aplicației.
 
 ---
 

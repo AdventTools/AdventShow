@@ -72,6 +72,7 @@ import { initLang, setLang, useLang, useT } from './i18n';
 import { versionsBetween } from './changelog';
 import { WhatsNewModal } from './WhatsNew';
 import { ProjectorController } from './ProjectorController';
+import { keyAction } from './projectionKeys';
 import type { AccompanimentControl } from './ProjectorController';
 import { accTitle } from './accompaniment-ui';
 import { zeroMessageSize } from './timerText';
@@ -458,6 +459,9 @@ function App() {
     const [decisionsOpen, setDecisionsOpen] = useState(false);
     // Recalcularea contorului, ca s-o poată cere și fereastra de avertismente.
     const numaraRaspunsuriRef = useRef<(() => void) | null>(null);
+    // Rutina de conținut poate muta un imn acceptat din „Imnurile mele" în colecția
+    // oficială; fără reîncărcare, numărul din dreptul colecției rămânea vechi.
+    const reincarcaListeleRef = useRef<(() => void) | null>(null);
     // Update OBLIGATORIU (decis în hangar). Nu se poate refuza, dar nici nu întrerupe
     // o proiecție în curs — instalarea așteaptă închiderea ecranului.
     const [forcedUpdate, setForcedUpdate] = useState<{
@@ -722,7 +726,7 @@ function App() {
             }
         }).catch(() => { });
         vestiDecizii();
-        window.electron.contrib.onDecisions(() => { numaraRaspunsuri(); vestiDecizii(); });
+        window.electron.contrib.onDecisions(() => { numaraRaspunsuri(); vestiDecizii(); reincarcaListeleRef.current?.(); });
         window.electron.update.forcedState()
             .then(s => { if (s.required) setForcedUpdate({ version: s.version, reason: s.reason, waitingForProjection: false }); })
             .catch(() => { /* fără rețea, se reia la următoarea pornire */ });
@@ -814,6 +818,10 @@ function App() {
             return [];
         }
     }, [refSearch, contentSearch, activeCategoryId, tab]);
+
+    useEffect(() => {
+        reincarcaListeleRef.current = () => { loadCategories(); if (tab === 'imnuri') loadHymns(); };
+    }, [loadCategories, loadHymns, tab]);
 
     useEffect(() => {
         if (tab !== 'imnuri') return;
@@ -1494,8 +1502,8 @@ function App() {
     }, [videoVolume]);
 
     // YouTube playlist actions
-    const youtubeAdd = useCallback(async (url: string) => {
-        const result = await window.electron.youtube.add(url);
+    const youtubeAdd = useCallback(async (url: string, audioOnly: boolean) => {
+        const result = await window.electron.youtube.add(url, undefined, audioOnly);
         if (result.error) {
             return result.error;
         }
@@ -1869,12 +1877,11 @@ function App() {
 
             // Realtime: navighează slide-urile prezentării proiectate din fereastra
             // principală — aceeași rută ca butoanele ‹ › (goSlide → projection.updateText).
-            // ←/→/PageUp/PageDown/Space; nu fură tastele când scrii în editor (!inInput).
-            if (realtimeCtl.presSlides > 1 && !inInput
-                && (e.key === 'ArrowRight' || e.key === 'ArrowLeft'
-                    || e.key === 'PageDown' || e.key === 'PageUp' || e.key === ' ')) {
+            // Săgeți/PageUp/PageDown/Space; nu fură tastele când scrii în editor (!inInput).
+            const tastaPrez = keyAction(e);
+            if (realtimeCtl.presSlides > 1 && !inInput && (tastaPrez === 'next' || tastaPrez === 'prev')) {
                 e.preventDefault();
-                if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') realtimeCtl.nextSlide();
+                if (tastaPrez === 'next') realtimeCtl.nextSlide();
                 else realtimeCtl.prevSlide();
                 return;
             }
@@ -2025,19 +2032,21 @@ function App() {
             return;
         }
 
-        // When projecting, arrow keys control projection (same as ProjectorController):
-        // Right/Left = navigate slides, Up/Down = zoom
-        if (projecting && previewLive && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
-            e.preventDefault();
-            if (e.key === 'ArrowRight') navigateSlide(projSlideIndex + 1);
-            else navigateSlide(projSlideIndex - 1);
-            return;
-        }
-
-        if (projecting && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-            e.preventDefault();
-            window.electron.projection.sendKeyRequest(e.key === 'ArrowUp' ? 'zoom-in' : 'zoom-out');
-            return;
+        // Din căutare, cu imnul de pe ecran în previzualizare, săgețile și PageUp/PageDown
+        // schimbă strofa (ca în bara de proiecție); Space rămâne literă. + și − măresc
+        // textul doar cât căutarea e deja proiectată: într-una nouă „ps 23:1-4" are nevoie de −.
+        if (projecting && previewLive) {
+            const tasta = keyAction(e.nativeEvent);
+            if ((tasta === 'next' || tasta === 'prev') && e.key !== ' ') {
+                e.preventDefault();
+                navigateSlide(projSlideIndex + (tasta === 'next' ? 1 : -1));
+                return;
+            }
+            if ((tasta === 'zoom-in' || tasta === 'zoom-out') && searchConsumedRef.current) {
+                e.preventDefault();
+                window.electron.projection.sendKeyRequest(tasta);
+                return;
+            }
         }
 
         if (e.key === 'ArrowDown') {
@@ -3260,7 +3269,7 @@ function VideoController({
     onSeek: (time: number) => void;
     onVolume: (vol: number) => void;
     onToggleMute: () => void;
-    onYoutubeAdd: (url: string) => Promise<string | null>;
+    onYoutubeAdd: (url: string, audioOnly: boolean) => Promise<string | null>;
     onYoutubeRemove: (id: string) => void;
     onYoutubeDelete: (id: string) => void;
     onYoutubePlay: (id: string) => void;
@@ -3289,6 +3298,7 @@ function VideoController({
 
     // YouTube URL input
     const [ytUrl, setYtUrl] = useState('');
+    const [ytAudioOnly, setYtAudioOnly] = useState(false);
     const [ytError, setYtError] = useState('');
     const [ytAdding, setYtAdding] = useState(false);
 
@@ -3371,7 +3381,7 @@ function VideoController({
         if (!ytUrl.trim()) return;
         setYtAdding(true);
         setYtError('');
-        const error = await onYoutubeAdd(ytUrl.trim());
+        const error = await onYoutubeAdd(ytUrl.trim(), ytAudioOnly);
         if (error) {
             setYtError(error);
         } else {
@@ -3534,6 +3544,10 @@ function VideoController({
                                     {ytAdding ? <Loader className="icon-sm animate-spin" /> : <Plus className="icon-sm" />}
                                     <span>{ytAdding ? t('Se adaugă...') : t('Adaugă în listă')}</span>
                                 </button>
+                                <label className="video-audio-only">
+                                    <input type="checkbox" checked={ytAudioOnly} onChange={e => setYtAudioOnly(e.target.checked)} />
+                                    <span>{t('Doar audio (fără imagine, se descarcă mult mai repede)')}</span>
+                                </label>
                                 <p className="video-add-hint">{t('Se descarcă local și rămâne disponibil și fără internet.')}</p>
                             </>
                         )}
@@ -3583,6 +3597,7 @@ function VideoController({
                                             }}
                                             title={t('Dublu-click pentru a edita titlul')}
                                         >
+                                            {entry.audioOnly && <Headphones className="icon-xs yt-audio-icon" aria-label={t('Doar audio')} />}
                                             {entry.title}
                                         </span>
                                     )}
@@ -4923,6 +4938,25 @@ function HymnEditorModal({
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
     const [importing, setImporting] = useState(false);
+    // Imnul care ocupă deja numărul scris, verificat la fiecare tastă: nimic nu se
+    // salvează peste un imn existent din aceeași colecție.
+    const [numberTaken, setNumberTaken] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (editor.mode !== 'add' || editor.number) return;
+        window.electron.db.nextHymnNumber().then(n => setNumber(cur => cur || n)).catch(() => { });
+    }, [editor.mode, editor.number]);
+
+    useEffect(() => {
+        if (!number.trim()) { setNumberTaken(null); return; }
+        let viu = true;
+        const tm = setTimeout(() => {
+            window.electron.db.hymnOnNumber(number, editor.categoryId ?? null, editor.hymnId)
+                .then(h => { if (viu) setNumberTaken(h ? h.title : null); })
+                .catch(() => { });
+        }, 150);
+        return () => { viu = false; clearTimeout(tm); };
+    }, [number, editor.categoryId, editor.hymnId]);
     // Închidem pe click pe fundal DOAR dacă apăsarea a început tot pe fundal.
     // Altfel, o selecție de text cu mouse-ul (mousedown în textarea, mouseup pe
     // fundal) genera un „click" pe overlay și închidea editorul, pierzând tot.
@@ -4955,6 +4989,7 @@ function HymnEditorModal({
     const handleSave = async () => {
         setError('');
         if (!number.trim()) { setError(t('Numărul este obligatoriu.')); return; }
+        if (numberTaken !== null) { setError(t('Numărul {num} e deja ocupat de «{title}». Alege alt număr.', { num: number.trim(), title: numberTaken })); return; }
         if (!title.trim()) { setError(t('Titlul este obligatoriu.')); return; }
         const validSections = sections.filter(s => s.text.trim());
         if (validSections.length === 0) { setError(t('Adaugă cel puțin o secțiune cu text.')); return; }
@@ -5039,7 +5074,11 @@ function HymnEditorModal({
                                     value={number}
                                     onChange={e => setNumber(e.target.value)}
                                     placeholder="001"
+                                    aria-invalid={numberTaken !== null}
                                 />
+                                {numberTaken !== null && (
+                                    <div className="editor-error">{t('Ocupat: «{title}»', { title: numberTaken })}</div>
+                                )}
                             </div>
                             <div className="field" style={{ flex: 1 }}>
                                 <label>{t('Titlu')}</label>
@@ -5117,7 +5156,7 @@ function HymnEditorModal({
                         {error && <div className="editor-error">{error}</div>}
 
                         <div className="editor-actions">
-                            <button className="btn-project" onClick={handleSave} disabled={saving}>
+                            <button className="btn-project" onClick={handleSave} disabled={saving || numberTaken !== null}>
                                 {saving ? t('Se salvează...') : t('Salvează')}
                             </button>
                             <button className="btn-clear" onClick={onClose}>{t('Anulează')}</button>
@@ -6164,7 +6203,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     }, [onClose]);
 
     // Doar tabul atins pleacă spre salvare: cealaltă mărime o poate schimba chiar acum
-    // proiecția (↑↓ / A±), iar valoarea ținută aici ar fi deja veche.
+    // proiecția (+ − / A±), iar valoarea ținută aici ar fi deja veche.
     const saveFontSize = async (tab: 'imnuri' | 'biblia', value: number) => {
         setSettings(s => ({ ...s, projectionFontSizeByTab: { ...s.projectionFontSizeByTab, [tab]: value } }));
         await window.electron.settings.set({ projectionFontSizeByTab: { [tab]: value } });
@@ -6227,7 +6266,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                             onChange={e => saveFontSize('biblia', parseFloat(e.target.value))}
                                         />
                                         <p className="text-fg/40 text-xs mt-1">
-                                            {t('Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu ↑↓ sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.')}
+                                            {t('Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu + și − sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.')}
                                         </p>
                                     </div>
                                 </div>
@@ -6326,6 +6365,12 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                         <option value="1.5">{t('Mare')}</option>
                                         <option value="2">{t('Foarte mare')}</option>
                                     </select>
+                                </div>
+                                <div className="sgrid2" style={{ marginTop: 12 }}>
+                                    <ProjectionFontPicker label={t('Fontul imnurilor')} value={settings.hymnFont ?? ''}
+                                        onChange={f => saveSettings({ hymnFont: f })} />
+                                    <ProjectionFontPicker label={t('Fontul versetelor')} value={settings.bibleFont ?? ''}
+                                        onChange={f => saveSettings({ bibleFont: f })} />
                                 </div>
                             </section>
 
@@ -7647,6 +7692,28 @@ function AnnounceFontPicker({ value, onChange }: { value: string; onChange: (css
     );
 }
 
+// Fontul textului pe proiecție. Revenirea la cel implicit e un link mic, vizibil
+// doar cât e ales altul.
+function ProjectionFontPicker({ label, value, onChange }: { label: string; value: string; onChange: (css: string) => void }) {
+    const t = useT();
+    return (
+        <div className="field">
+            <label>
+                {label}
+                {value && (
+                    <button type="button" className="font-reset" onClick={() => onChange('')}>{t('implicit')}</button>
+                )}
+            </label>
+            <select value={value} onChange={e => onChange(e.target.value)} style={value ? { fontFamily: value } : undefined}>
+                <option value="">{t('Implicit')}</option>
+                {ANNOUNCE_FONTS.map(f => (
+                    <option key={f.css} value={f.css} style={{ fontFamily: f.css }}>{f.label}</option>
+                ))}
+            </select>
+        </div>
+    );
+}
+
 function BackgroundPicker({ bg, onChange, existingLabel }: {
     bg: BgChoice; onChange: (b: BgChoice) => void; existingLabel?: string;
 }) {
@@ -7710,12 +7777,17 @@ function BackgroundPicker({ bg, onChange, existingLabel }: {
     );
 }
 
+// Textul anunțului trăiește cât aplicația, nu cât panoul: la o trecere pe Biblie
+// și înapoi panoul se demontează, iar omul își găsea anunțul șters.
+let anuntScris = '';
+
 function MessagePanel() {
     const t = useT();
     const [mode, setMode] = useState<'text' | 'pres'>('text');
 
     // ── Text simplu ──────────────────────────────────────────────────────────
-    const [text, setText] = useState('');
+    const [text, setTextState] = useState(anuntScris);
+    const setText = useCallback((v: string) => { anuntScris = v; setTextState(v); }, []);
     const [live, setLive] = useState(true);
     const [projected, setProjected] = useState(false);
     const [bgChoice, setBgChoice] = useState<BgChoice>({ kind: 'preset', css: '' });
