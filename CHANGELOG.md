@@ -1,16 +1,6 @@
 # Changelog — AdventShow
 
-## v1.6.13 (11 Octombrie 2026)
-
-### Modificări
-- Aplicația rulează pe o versiune nouă a motorului ei, cu reparațiile de securitate la zi. Pe Mac cere macOS 12 (Monterey) sau mai nou; pe Windows, ca până acum, Windows 10 sau 11.
-- Pachet separat pentru Mac-urile cu procesor Intel; până acum exista doar varianta pentru procesoarele Apple (M1 și mai noi).
-- Pachetul de instalare e mai curat: am scos fișiere care nu erau folosite.
-- Aplicația trimite autorilor și date tehnice despre calculator (sistemul, procesorul, memoria, ecranele), fără nume și fără fișiere, ca să știm pe ce calculatoare rulează înainte de a cere un sistem mai nou.
-
----
-
-## Nepublicat
+## v1.6.14 (24 Octombrie 2026)
 
 ### Modificări
 - **Tastele s-au schimbat:** în timpul proiecției, toate săgețile (și Page Up / Page Down, Space) trec la strofa sau versetul următor ori anterior, așa că merge orice telecomandă de prezentare. Textul se mărește și se micșorează acum cu tastele **+** și **−**.
@@ -24,6 +14,22 @@
 - Numărul de lângă „Imnurile mele" se actualizează imediat când un imn al tău e acceptat în colecția oficială.
 - Pe Windows, aplicația scoate un certificat vechi rămas de la versiunile din primăvară, care nu mai era sigur; unde Windows cere drepturi de administrator, aplicația întreabă întâi.
 - Reparații de securitate la motorul aplicației.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
+## v1.6.13 (11 Octombrie 2026)
+
+### Modificări
+- Aplicația rulează pe o versiune nouă a motorului ei, cu reparațiile de securitate la zi. Pe Mac cere macOS 12 (Monterey) sau mai nou; pe Windows, ca până acum, Windows 10 sau 11.
+- Pachet separat pentru Mac-urile cu procesor Intel; până acum exista doar varianta pentru procesoarele Apple (M1 și mai noi).
+- Pachetul de instalare e mai curat: am scos fișiere care nu erau folosite.
+- Aplicația trimite autorilor și date tehnice despre calculator (sistemul, procesorul, memoria, ecranele), fără nume și fără fișiere, ca să știm pe ce calculatoare rulează înainte de a cere un sistem mai nou.
 
 ---
 
