@@ -349,7 +349,7 @@ export function ProjectionPage() {
   }, []);
 
   useEffect(() => {
-    window.electron.video.onLoad((url, _name) => {
+    window.electron.video.onLoad((url) => {
       setVideoUrl(url);
       setData(null); // hide hymn/bible content
       // Ceasul și anunțul stau deasupra videoului; rămase, îl acopereau.
@@ -359,7 +359,7 @@ export function ProjectionPage() {
       window.electron.settings.get().then(async s => {
         if (s.audioOutputDeviceId && videoRef.current) {
           try {
-            await (videoRef.current as any).setSinkId(s.audioOutputDeviceId);
+            await videoRef.current.setSinkId(s.audioOutputDeviceId);
           } catch (err) {
             console.warn('[Projection] setSinkId failed, using default audio output:', err);
           }

@@ -92,6 +92,7 @@ import type {
     PendingDecision,
     Presentation,
     PresShape,
+    DisplayInfo,
     ProjectionTextData,
     SentMessage,
     TemplateInfo,
@@ -923,7 +924,7 @@ function App() {
         // Hymns start at title slide (-1), Bible starts at first verse (0)
         const idx = startIndex ?? (ct === 'hymn' ? -1 : 0);
         const br = ct === 'bible' && previewSections[idx]
-            ? `${previewTitle}:${(previewSections[idx] as any).label?.replace('v. ', '') ?? ''}`
+            ? `${previewTitle}:${previewSections[idx].label?.replace('v. ', '') ?? ''}`
             : undefined;
         await window.electron.projection.open(secs, previewTitle, previewNumber, idx, ct, br);
         setProjecting(true);
@@ -972,7 +973,7 @@ function App() {
         const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
         const ct = previewType ?? 'hymn';
         const br = ct === 'bible' && previewSections[newIdx]
-            ? `${previewTitle}:${(previewSections[newIdx] as any).label?.replace('v. ', '') ?? ''}`
+            ? `${previewTitle}:${previewSections[newIdx].label?.replace('v. ', '') ?? ''}`
             : undefined;
         await window.electron.projection.navigate(secs, newIdx, previewTitle, previewNumber, ct, br);
     }, [projecting, previewSections, previewTitle, previewNumber, previewType]);
@@ -2094,7 +2095,7 @@ function App() {
         selectedHymnId, hymns, previewHymn, loadHymns, loadBibleReference,
         navigateSlide, contentSearch, doBibleContentSearch, refSearch, biblePassage,
         previewLive, goLivePreview,
-        verses, selectedVerseIdx, books, selectedBookId, selectedChapter, alegeVersetul, t]);
+        verses, selectedVerseIdx, alegeVersetul, t]);
 
     // ── Close context menu on click elsewhere ──
     useEffect(() => {
@@ -2939,8 +2940,8 @@ function SidebarVideoFilter({
     youtubePlaylist: YouTubeEntry[];
 }) {
     const t = useT();
-    const localCount = youtubePlaylist.filter(e => !!(e as any).localUrl).length;
-    const ytCount = youtubePlaylist.filter(e => !(e as any).localUrl).length;
+    const localCount = youtubePlaylist.filter(e => !!e.localUrl).length;
+    const ytCount = youtubePlaylist.filter(e => !e.localUrl).length;
 
     return (
         <>
@@ -3333,7 +3334,7 @@ function VideoController({
     const filteredPlaylist = useMemo(() => {
         if (videoFilter === 'all') return youtubePlaylist;
         return youtubePlaylist.filter(e => {
-            const isLocal = !!(e as any).localUrl;
+            const isLocal = !!e.localUrl;
             return videoFilter === 'local' ? isLocal : !isLocal;
         });
     }, [youtubePlaylist, videoFilter]);
@@ -3355,8 +3356,8 @@ function VideoController({
             } else {
                 setYtError(t('Instalare eșuată: {err}', { err: r.error ?? '' }));
             }
-        } catch (err: any) {
-            setYtError(err.message ?? t('Eroare necunoscută'));
+        } catch (err) {
+            setYtError((err as Error)?.message ?? t('Eroare necunoscută'));
         }
         setYtdlpBusy(false);
     };
@@ -3371,8 +3372,8 @@ function VideoController({
             } else {
                 setYtError(t('Actualizare eșuată: {err}', { err: r.error ?? '' }));
             }
-        } catch (err: any) {
-            setYtError(err.message ?? t('Eroare necunoscută'));
+        } catch (err) {
+            setYtError((err as Error)?.message ?? t('Eroare necunoscută'));
         }
         setYtdlpBusy(false);
     };
@@ -3561,7 +3562,7 @@ function VideoController({
             {filteredPlaylist.length > 0 && (
                 <div className="yt-playlist">
                     {filteredPlaylist.map(entry => {
-                        const isLocal = !!(entry as any).localUrl;
+                        const isLocal = !!entry.localUrl;
                         const fp = filePaths[entry.id];
                         const shortPath = fp ? (fp.length > 60 ? '…' + fp.slice(-58) : fp) : '';
                         return (
@@ -5012,8 +5013,8 @@ function HymnEditorModal({
             }
             showToast(t('Imn salvat: {num} — {title}', { num: number.trim(), title: title.trim() }));
             onSave();
-        } catch (err: any) {
-            setError(err?.message ?? t('Eroare la salvare'));
+        } catch (err) {
+            setError((err as Error)?.message ?? t('Eroare la salvare'));
         } finally {
             setSaving(false);
         }
@@ -8774,8 +8775,8 @@ function YtDlpSettings() {
             const v = await window.electron.ytdlp.version();
             setVersion(v);
             setStatus(t('yt-dlp instalat cu succes!'));
-        } catch (err: any) {
-            setStatus(t('Eroare: {msg}', { msg: err.message ?? t('necunoscută') }));
+        } catch (err) {
+            setStatus(t('Eroare: {msg}', { msg: (err as Error)?.message ?? t('necunoscută') }));
         }
         setLoading(false);
     };
@@ -8788,8 +8789,8 @@ function YtDlpSettings() {
             const v = await window.electron.ytdlp.version();
             setVersion(v);
             setStatus(t('yt-dlp actualizat!'));
-        } catch (err: any) {
-            setStatus(t('Eroare: {msg}', { msg: err.message ?? t('necunoscută') }));
+        } catch (err) {
+            setStatus(t('Eroare: {msg}', { msg: (err as Error)?.message ?? t('necunoscută') }));
         }
         setLoading(false);
     };
@@ -9035,7 +9036,7 @@ function DisplayPicker({ settings, onSave }: {
     onSave: (p: Partial<AppSettings>) => void;
 }) {
     const t = useT();
-    const [displays, setDisplays] = useState<any[]>([]);
+    const [displays, setDisplays] = useState<DisplayInfo[]>([]);
     const [loaded, setLoaded] = useState(false);
 
     return (
@@ -9047,7 +9048,7 @@ function DisplayPicker({ settings, onSave }: {
             }}>{t('Detectează ecrane')}</button>
             {loaded && (
                 <div className="display-list">
-                    {displays.map((d: any) => (
+                    {displays.map(d => (
                         <button
                             key={d.id}
                             className={`display-btn ${settings.projectionDisplayId === d.id ? 'active' : ''}`}

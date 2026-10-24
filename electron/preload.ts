@@ -181,16 +181,16 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   projection: {
-    open: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
+    open: (sections: unknown[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
       ipcRenderer.invoke('projection:open', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
-    navigate: (sections: any[], index: number, hymnTitle: string, hymnNumber: string, contentType?: string, bibleRef?: string) =>
+    navigate: (sections: unknown[], index: number, hymnTitle: string, hymnNumber: string, contentType?: string, bibleRef?: string) =>
       ipcRenderer.invoke('projection:navigate', sections, index, hymnTitle, hymnNumber, contentType, bibleRef),
-    updateHymn: (sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
+    updateHymn: (sections: unknown[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
       ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
     close: () => ipcRenderer.invoke('projection:close'),
     sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') =>
       ipcRenderer.invoke('projection:key-request', action),
-    onSlide: (cb: (data: any) => void) =>
+    onSlide: (cb: (data: unknown) => void) =>
       ipcRenderer.on('projection:slide', (_e, data) => cb(data)),
     offSlide: () => ipcRenderer.removeAllListeners('projection:slide'),
     onControllerSync: (cb: (data: { currentIndex: number }) => void) =>
@@ -214,14 +214,14 @@ contextBridge.exposeInMainWorld('electron', {
     offZoomLevel: () => ipcRenderer.removeAllListeners('projection:zoom-level'),
     signalReady: () => ipcRenderer.send('projection:renderer-ready'),
     // Special full-screen modes (timer/clock/free text)
-    showTimer: (data: any) => ipcRenderer.invoke('projection:show-timer', data),
-    showText: (data: any) => ipcRenderer.invoke('projection:show-text', data),
+    showTimer: (data: unknown) => ipcRenderer.invoke('projection:show-timer', data),
+    showText: (data: unknown) => ipcRenderer.invoke('projection:show-text', data),
     updateText: (data: unknown) => ipcRenderer.invoke('projection:update-text', data),
     updateTimer: (data: unknown) => ipcRenderer.invoke('projection:update-timer', data),
-    onTimer: (cb: (data: any) => void) =>
+    onTimer: (cb: (data: unknown) => void) =>
       ipcRenderer.on('projection:timer', (_e, data) => cb(data)),
     offTimer: () => ipcRenderer.removeAllListeners('projection:timer'),
-    onText: (cb: (data: any) => void) =>
+    onText: (cb: (data: unknown) => void) =>
       ipcRenderer.on('projection:text', (_e, data) => cb(data)),
     offText: () => ipcRenderer.removeAllListeners('projection:text'),
   },

@@ -3,7 +3,7 @@
 - Dupa ce ownerul pune 1.6.14 la dispozitia bisericilor: raspunsurile in hangar la #36, #37, #39, #40, #41, #42 (#35 si #38 trimise pe 2026-10-24).
 - Cererea catre suportul GitHub ca sa stearga din cache commit-urile vechi cu cheia (textul e dat ownerului pe 2026-10-24; o trimite el).
 - Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
-- Lint: 63 de erori vechi (`no-explicit-any` etc.), de dinainte de 1.6.13; `npm run lint` nu trece.
+- Test pe Windows pentru scoaterea certificatului vechi cu drepturi de administrator (fereastra UAC): neincercat, asteapta decizia ownerului.
 - Imnurile cu slide-uri de 10+ randuri; ce facem cu ele se decide mai tarziu:
   - Amicus 024 — Culorile mântuirii: 3 slide-uri, maxim 13 randuri
   - Exploratori 051 — Călător sunt: 2 slide-uri, maxim 10 randuri
