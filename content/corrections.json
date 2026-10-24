@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-10-10T19:50:47+00:00",
+    "generated": "2026-10-19T05:21:50+00:00",
     "entries": [
         {
             "seq": 1,
@@ -1129,6 +1129,174 @@
             "force": false,
             "ts": "2026-10-10T19:50:47.000Z",
             "text_hash": "33e22de96477303702c59302c95cea8daee1dba60fd3f2e947b2262f26d2dc3a",
+            "only_if_absent": true
+        },
+        {
+            "seq": 36,
+            "category": "Imnuri Speciale",
+            "number": "014",
+            "title": "Până ajungem în Casa din cer",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Până ajungem în casa din cer,\nMai sunt furtuni, mai sunt dureri,\nDar ne-a promis, în Cuvânt, Dumnezeu,\nCă e cu noi mereu."
+                },
+                {
+                    "type": "refren",
+                    "text": "Să nu te temi, Isus este la cârmă!\nEl nu mai doarme, veghează Dumnezeu!\nEl ceartă vântul și valul din furtună,\n„Taci, fără gură!” vorbește Dumnezeu."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Îmbracă cerul în mii de culori,\nStele și lună, soare și nori,\nFirul de păr știe când nu-l mai ai,\nGândul și teama ce-o ai."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Pacea divină, venită de sus,\nÎn inimă, de la Isus,\nDomnească-n mintea și sufletul tău,\nCopil iubit al Său."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-17T06:16:05.000Z",
+            "text_hash": "0ad6eba1e0f68694ae1eadd572f0c2e3c34aa42859be69b91290f5b8a079ada6",
+            "only_if_absent": true
+        },
+        {
+            "seq": 37,
+            "category": "Imnuri Speciale",
+            "number": "015",
+            "title": "Nu te-ndoi, ci crede",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Nu te-ndoi, ci crede\nCă dincolo de nor\nE-un soare și mai dulce,\nȘi mai strălucitor."
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu norul este veșnic,\nCi soarele-i acel\nCe-nvinge și rămâne\nStăpân în urmă el!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Nu te uita la tine,\nCă ești atât de slab,\nNici la vrăjmașul care\nTe-ar nimici degrab"
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu te uita la ziduri,\nLa porțile de fier,\nLa ura ce scrâșnește,\nCi uită-te la cer!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Nu te-ndoi, ci crede\nCă dincolo de tot\nVeghează Dumnezeul\nPuternic, Savaot,"
+                },
+                {
+                    "type": "refren",
+                    "text": "Căci nici un păr nu-ți cade\nȘi nici o clipă nu-i,\nCă nu-i nici o-ncercare\nDecât prin voia Lui."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Iar dacă crezi puternic,\nNimica nu-i spre rău,\nCi totul se va-ntoarce\nSpre-un și mai bine-al tău."
+                },
+                {
+                    "type": "refren",
+                    "text": "Nu te-ndoi, ci crede\nCă-n ceasul cel mai greu,\nÎn fiecare clipă\nVeghează Dumnezeu!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-17T06:29:17.000Z",
+            "text_hash": "a7900c8aa3be496bd89debe11d217a57eda75fbf438ed63e479d5cc0204137ac",
+            "only_if_absent": true
+        },
+        {
+            "seq": 38,
+            "category": "Imnuri Speciale",
+            "number": "016",
+            "title": "POARTĂ-ȚI LUMINA!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "În orice suflet e-un tainic dor\nAprins în noapte sau stins și gol,\nDor de lumină, de veșnicie,\nAscuns în inimi de Dumnezeu."
+                },
+                {
+                    "type": "refren",
+                    "text": "Poartă-ți lumina prin întuneric,\nPrin noaptea făr` de nădejdi pe drum."
+                },
+                {
+                    "type": "refren",
+                    "text": "Far neclintit să-ți fie viața,\nPași să-ndrepte spre drumul bun.\nLasă-n inimi un dor de cer!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Pe calea noastră se află-aievea\nLumini căzute sau stinse-n vânt.\nȘi mulți încearcă să țină-aprinsă\nO amăgire, un dor străin!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Poartă-ți lumina prin întuneric,\nPrin noaptea făr` de nădejdi pe drum."
+                },
+                {
+                    "type": "refren",
+                    "text": "Far neclintit să-ți fie viața,\nPași să-ndrepte spre drumul bun.\nLasă-n inimi un dor de cer!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Să lași în urmă ploi de lumină\nPe drumul celor ce-au rătăcit.\nArată calea, aprinde inimi\nȘi dă speranță prin Duhul Sfânt."
+                },
+                {
+                    "type": "refren",
+                    "text": "Poartă-ți lumina prin întuneric,\nPrin noaptea făr` de nădejdi pe drum."
+                },
+                {
+                    "type": "refren",
+                    "text": "Far neclintit să-ți fie viața,\nPași să-ndrepte spre drumul bun.\nLasă-n inimi un dor de cer!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-17T06:30:05.000Z",
+            "text_hash": "58c4af4a353a9119ae5bd9c2ca83800904f384bc9810aebb133403f9bfee825c",
+            "only_if_absent": true
+        },
+        {
+            "seq": 39,
+            "category": "Imnuri Speciale",
+            "number": "017",
+            "title": "Eu Te voi lăuda",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Eu Te voi lăuda cu inima mea\nVoi spune la toți minunea ce-ai făcut,\nVoi lăuda-al Tău nume.\nEu Te voi lăuda și inima mea\nVa fi orișicând umplută de-al Tău cânt;\nAleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Tu m-ai răscumpărat, cu ce aș plăti?\nCuvinte nu sunt, dar inima-i un cânt\nDe sfântă bucurie.\nTu m-ai răscumpărat și rodul Tău sunt,\nDe-acum până-n veci, iubirea-Ți voi cânta;\nAleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Când împreună-om fi vecii de vecii,\nCuvintele flori vor răsări din zori\nDe veșnică iubire.\nCând împreună-om fi trăind bucurii,\nEu nu voi uita de marea jertfă-a Ta;\nAleluia!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-17T06:33:01.000Z",
+            "text_hash": "9d110c99e20daa3d7529945a9d745b4436e77fe3d37571eab69c5d21a7c79c89",
+            "only_if_absent": true
+        },
+        {
+            "seq": 40,
+            "category": "Imnuri Speciale",
+            "number": "018",
+            "title": "Canta inima, cantecul tau frumos",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Canta inima, cantecul tau frumos,\nCanta lacrima dragostei lui Hristos!\nEl te-a rascumparat, El te-a eliberat,\nCanta dragostea Celui ce te-a salvat!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Canta inima, cantecul tau dorit,\nCanta dragostea Celui ce te-a iubit,\nDoar prin dragostea Sa in veci vei tresalta,\nCanta inima, toata iubirea ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Canta inima, cantecul tau curat,\nCanta cantecul cerului minunat!\nCanta, nu te opri, canta, orice ar fi,\nCanta slava iubirii in vesnicii!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-17T06:43:14.000Z",
+            "text_hash": "ecbceeda9b5423075ed7b80daf8bdae490819eb47e9abf316cb96afbcb198ff6",
             "only_if_absent": true
         }
     ]
