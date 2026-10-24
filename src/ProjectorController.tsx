@@ -126,7 +126,6 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
     // navigate is a stable useCallback — intentionally no currentIndex dep
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   // Un scurt toast „Text: NNN%" la fiecare schimbare de mărime — nu la montare,

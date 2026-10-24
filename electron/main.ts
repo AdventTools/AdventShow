@@ -85,6 +85,11 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 let win: BrowserWindow | null
 let projectionWin: BrowserWindow | null = null
+
+/** Mesajul unei erori prinse, oricare ar fi tipul ei (în catch vine `unknown`). */
+function errMsg(err: unknown): string | undefined {
+  return err instanceof Error ? err.message : err == null ? undefined : String(err)
+}
 // true cât rulează auto-update-ul: ferestrele se distrug intenționat, deci
 // închiderea ferestrei principale NU trebuie să declanșeze app.quit() concurent
 let isInstalling = false
@@ -906,9 +911,9 @@ async function downloadYtDlp(): Promise<{ success: boolean; error?: string }> {
     }
     console.log('[yt-dlp] Downloaded to:', dest)
     return { success: true }
-  } catch (err: any) {
+  } catch (err) {
     console.error('[yt-dlp] Download failed:', err)
-    return { success: false, error: err.message ?? 'Descărcarea a eșuat' }
+    return { success: false, error: errMsg(err) ?? 'Descărcarea a eșuat' }
   }
 }
 
@@ -994,6 +999,7 @@ interface YouTubeEntry {
   error?: string
   addedAt: string
   audioOnly?: boolean
+  localUrl?: string // fișier de pe calculator: se redă direct de la adresa asta
 }
 
 function getYouTubeDir(): string {
@@ -1208,23 +1214,32 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
 
       updateStatus('ready', undefined, finalFile)
       win?.webContents.send('youtube:progress', entry.id, 100, 'done')
-    } catch (err: any) {
-      debugLog('[yt-dlp-download] ERROR:', err.message)
+    } catch (err) {
+      debugLog('[yt-dlp-download] ERROR:', errMsg(err))
       try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* best effort */ }
       try { fs.unlinkSync(finalPath) } catch { /* best effort */ }
-      updateStatus('error', err.message || String(err))
+      updateStatus('error', errMsg(err) || String(err))
     }
   })()
 }
 
 // ── Projection state ──────────────────────────────────────────────────────────
 
+// Strofă sau verset, așa cum le trimite fereastra principală (doar ce afișează proiecția).
+interface ProjSection {
+  text: string
+  type: string
+  label?: string
+}
+
+type ProjContentType = 'hymn' | 'bible'
+
 interface ProjState {
-  sections: any[]
+  sections: ProjSection[]
   currentIndex: number
   hymnTitle: string
   hymnNumber: string
-  contentType?: 'hymn' | 'bible'
+  contentType?: ProjContentType
   bibleRef?: string
 }
 let projState: ProjState | null = null
@@ -1369,7 +1384,7 @@ function createProjectionWindow() {
   const displays = screen.getAllDisplays()
   const primary = screen.getPrimaryDisplay()
 
-  let targetDisplay =
+  const targetDisplay =
     (settings.projectionDisplayId != null
       ? displays.find(d => d.id === settings.projectionDisplayId)
       : null)
@@ -2184,14 +2199,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('db:import-presentations', async (_e, dirPath: string, categoryId?: number) => {
     try { return await importPresentationDirectory(dirPath, categoryId) }
-    catch (err: any) {
-      return { success: 0, failed: 0, errors: [err?.message ?? 'Unknown error'] }
+    catch (err) {
+      return { success: 0, failed: 0, errors: [errMsg(err) ?? 'Unknown error'] }
     }
   })
   ipcMain.handle('db:import-presentation-files', async (_e, filePaths: string[], categoryId?: number) => {
     try { return await importPresentationFiles(filePaths, categoryId) }
-    catch (err: any) {
-      return { success: 0, failed: 0, errors: [err?.message ?? 'Unknown error'] }
+    catch (err) {
+      return { success: 0, failed: 0, errors: [errMsg(err) ?? 'Unknown error'] }
     }
   })
 
@@ -2263,10 +2278,10 @@ app.whenReady().then(() => {
 
   // ── Projection ────────────────────────────────────────────────────────────
 
-  ipcMain.handle('projection:open', async (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
+  ipcMain.handle('projection:open', async (_e, sections: ProjSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: ProjContentType, bibleRef?: string) => {
     debugLog('[Projection] Open request:', hymnTitle, hymnNumber, 'sections:', sections.length, 'type:', contentType)
     const idx = typeof startIndex === 'number' ? startIndex : 0
-    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType: contentType as any, bibleRef }
+    projState = { sections, currentIndex: idx, hymnTitle, hymnNumber, contentType, bibleRef }
     // isWinAlive — la deschide/închide/deschide rapid, instanța poate fi distrusă
     // dar încă ne-null-ificată (race cu evenimentul 'closed')
     if (isWinAlive(projectionWin)) {
@@ -2284,26 +2299,26 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('projection:navigate', (_e, _sections: any[], index: number, _hymnTitle: string, _hymnNumber: string, contentType?: string, bibleRef?: string) => {
+  ipcMain.handle('projection:navigate', (_e, _sections: ProjSection[], index: number, _hymnTitle: string, _hymnNumber: string, contentType?: ProjContentType, bibleRef?: string) => {
     // proiecția a murit între timp → UI-ul credea că navighează în gol; îl anunțăm
     if (!projState || !isWinAlive(projectionWin)) {
       if (isWinAlive(win)) win.webContents.send('projection:closed')
       return
     }
-    if (contentType) projState.contentType = contentType as any
+    if (contentType) projState.contentType = contentType
     if (bibleRef) projState.bibleRef = bibleRef
     const minIndex = projState.contentType === 'bible' ? 0 : -1
     const clamped = Math.max(minIndex, Math.min(index, projState.sections.length - 1))
     sendSlideToProjection(clamped)
   })
 
-  ipcMain.handle('projection:update-hymn', (_e, sections: any[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) => {
+  ipcMain.handle('projection:update-hymn', (_e, sections: ProjSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: ProjContentType, bibleRef?: string) => {
     const idx = typeof startIndex === 'number' ? startIndex : 0
     // bibleRef se păstrează DOAR pentru conținut biblic — altfel referința veche
     // putea pâlpâi pe primul slide al imnului următor
     projState = {
       sections, currentIndex: idx, hymnTitle, hymnNumber,
-      contentType: contentType as any,
+      contentType,
       bibleRef: contentType === 'bible' ? bibleRef : undefined,
     }
     sendSlideToProjection(idx)
@@ -2410,8 +2425,8 @@ app.whenReady().then(() => {
         : Array.isArray(rn) ? rn.map(n => n.note ?? '').filter(Boolean).join('\n\n') : '')
         .replace(/<[^>]+>/g, '').trim()
       return { available, version: latest ?? undefined, notes: notes || undefined }
-    } catch (err: any) {
-      debugLog('[Update] check failed:', err?.message ?? String(err))
+    } catch (err) {
+      debugLog('[Update] check failed:', errMsg(err) ?? String(err))
       return { available: false }
     }
   })
@@ -2420,9 +2435,9 @@ app.whenReady().then(() => {
     try {
       wireAutoUpdater()
       await autoUpdater.downloadUpdate()
-    } catch (err: any) {
-      debugLog('[Update] download failed:', err?.message ?? String(err))
-      if (isWinAlive(win)) win.webContents.send('update:error', err?.message ?? 'Descărcarea a eșuat')
+    } catch (err) {
+      debugLog('[Update] download failed:', errMsg(err) ?? String(err))
+      if (isWinAlive(win)) win.webContents.send('update:error', errMsg(err) ?? 'Descărcarea a eșuat')
     }
   })
   // Un click pe „Instalează" în timpul serviciului închidea proiecția din sală.
@@ -2539,10 +2554,10 @@ app.whenReady().then(() => {
       const videoUrl = pathToFileURL(servePath).href
       debugLog('[video:prepare] Prepared URL:', videoUrl, 'converted:', converted)
       return { url: videoUrl, name: path.basename(filePath), converted }
-    } catch (err: any) {
-      debugLog('[video:prepare] Failed:', err.message)
+    } catch (err) {
+      debugLog('[video:prepare] Failed:', errMsg(err))
       win?.webContents.send('video:converting', false)
-      return { error: err.message ?? 'Conversia video a eșuat' }
+      return { error: errMsg(err) ?? 'Conversia video a eșuat' }
     }
   })
 
@@ -2579,9 +2594,9 @@ app.whenReady().then(() => {
       const prep = await prepareVideoForPlayback(filePath)
       servePath = prep.servePath
       converted = prep.converted
-    } catch (err: any) {
+    } catch (err) {
       win?.webContents.send('video:converting', false)
-      return { error: err.message ?? 'Conversia video a eșuat' }
+      return { error: errMsg(err) ?? 'Conversia video a eșuat' }
     }
     const videoUrl = pathToFileURL(servePath).href
     if (!isWinAlive(projectionWin)) createProjectionWindow()
@@ -2776,11 +2791,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('playlist:get-file-path', (_e, id: string) => {
     const playlist = readYouTubePlaylist()
-    const entry = playlist.find(e => e.id === id) as any
+    const entry = playlist.find(e => e.id === id)
     if (!entry) return null
     if (entry.localUrl) {
       // localfile:///path → /path
-      const raw = (entry.localUrl as string).replace(/^localfile:\/\//, '')
+      const raw = entry.localUrl.replace(/^localfile:\/\//, '')
       return decodeURIComponent(raw)
     }
     if (entry.fileName) {
@@ -2804,9 +2819,8 @@ app.whenReady().then(() => {
       fileName: '',  // not in youtube dir, url serves directly
       status: 'ready',
       addedAt: new Date().toISOString(),
+      localUrl: url,
     }
-      // Store the localfile URL in a special field
-      ; (entry as any).localUrl = url
     playlist.push(entry)
     writeYouTubePlaylist(playlist)
     return { entry: { ...entry, localUrl: url } }
@@ -2814,7 +2828,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('playlist:get-file-url', (_e, id: string) => {
     const playlist = readYouTubePlaylist()
-    const entry = playlist.find(e => e.id === id) as any
+    const entry = playlist.find(e => e.id === id)
     if (!entry) return { error: 'Intrarea nu a fost găsită' }
     // Local file: has localUrl — verifică existența pe disc (fișier mutat/șters
     // = altfel ecran negru tăcut în sală)

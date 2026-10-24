@@ -7,17 +7,18 @@ import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const Database = require('better-sqlite3');
 
-// @ts-ignore
-if (typeof global.__filename === 'undefined') {
-  // @ts-ignore
-  global.__filename = fileURLToPath(import.meta.url);
+// better-sqlite3 (CommonJS) caută __filename / __dirname globale, pe care un modul ES nu le are.
+const globalCjs = globalThis as { __filename?: string; __dirname?: string };
+if (typeof globalCjs.__filename === 'undefined') {
+  globalCjs.__filename = fileURLToPath(import.meta.url);
 }
-// @ts-ignore
-if (typeof global.__dirname === 'undefined') {
-  // @ts-ignore
-  global.__dirname = path.dirname(fileURLToPath(import.meta.url));
+if (typeof globalCjs.__dirname === 'undefined') {
+  globalCjs.__dirname = path.dirname(fileURLToPath(import.meta.url));
 }
 
+// Biblioteca vine prin createRequire, deci fără tipuri; tiparea completă a tuturor
+// interogărilor ar fi o rescriere a fișierului.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- vezi mai sus
 let _db: any = null;
 
 function normalizeHymnNumber(number: string): string {
@@ -73,7 +74,7 @@ function allWords(expr: string, query: string) {
   };
 }
 
-function hasLegacyGlobalNumberUnique(db: any): boolean {
+function hasLegacyGlobalNumberUnique(db: ReturnType<typeof getDb>): boolean {
   const indexes = db.prepare("PRAGMA index_list('hymns')").all() as {
     name: string;
     unique: number;
@@ -90,7 +91,7 @@ function hasLegacyGlobalNumberUnique(db: any): boolean {
   return false;
 }
 
-function migrateLegacyHymnsNumberConstraint(db: any) {
+function migrateLegacyHymnsNumberConstraint(db: ReturnType<typeof getDb>) {
   if (!hasLegacyGlobalNumberUnique(db)) return;
 
   db.exec('PRAGMA foreign_keys = OFF;');
@@ -324,7 +325,7 @@ function migrateOwnHymnsOutOfSpecial(db: ReturnType<typeof getDb>) {
 // că renumerotăm varianta veche în 664b; altfel sincronizarea cu seed-ul ar insera un al
 // doilea exemplar al variantei B, lăsând un duplicat în lista utilizatorului.
 // Idempotentă: dacă există deja un 664b, nu face nimic.
-function migrateHymn664Variants(db: any) {
+function migrateHymn664Variants(db: ReturnType<typeof getDb>) {
   const category = db
     .prepare("SELECT id FROM categories WHERE name = 'Imnuri Creștine'")
     .get() as { id: number } | undefined;
@@ -353,7 +354,7 @@ function migrateHymn664Variants(db: any) {
 // logica pe timestamp din syncSeedContent nu e afectată. char(N) evită scrierea de
 // caractere non-ASCII în sursă: ş=351 Ş=350 ţ=355 Ţ=354 → ș=537 Ș=536 ț=539 Ț=538.
 const CEDILLA_MIGRATION_VERSION = 1;
-function migrateCedillaToCommaBelow(db: any) {
+function migrateCedillaToCommaBelow(db: ReturnType<typeof getDb>) {
   const current = Number(db.pragma('user_version', { simple: true })) || 0;
   if (current >= CEDILLA_MIGRATION_VERSION) return;
 
@@ -1188,7 +1189,7 @@ function migrateBibleTranslationColumn(db: ReturnType<typeof getDb>) {
   }
 }
 
-function migrateBibleSearchText(db: any) {
+function migrateBibleSearchText(db: ReturnType<typeof getDb>) {
   const cols = db.prepare("PRAGMA table_info('bible_verses')").all() as { name: string }[];
   const hasSearchText = cols.some((c: { name: string }) => c.name === 'search_text');
   if (!hasSearchText) {
@@ -1269,7 +1270,7 @@ export function getBibleChapters(bookId: number): number[] {
   return getDb()
     .prepare('SELECT DISTINCT chapter FROM bible_verses WHERE book_id = ? ORDER BY chapter')
     .all(bookId)
-    .map((r: any) => r.chapter);
+    .map((r: { chapter: number }) => r.chapter);
 }
 
 export function getBibleVerses(bookId: number, chapter: number) {
@@ -1391,7 +1392,10 @@ function seedBibleTranslation(jsonPath: string, translation: string, idOffset: n
   try {
     const raw = fs.readFileSync(jsonPath, 'utf-8');
     const data = JSON.parse(raw);
-    const books: any[] = data.books;
+    const books: {
+      nr: number; name: string; abbreviation?: string; testament?: string;
+      chapters?: { chapter: number; verses?: { verse: number; text?: string }[] }[];
+    }[] = data.books;
     if (!books || !books.length) return;
 
     const db = getDb();

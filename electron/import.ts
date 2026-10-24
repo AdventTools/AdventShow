@@ -94,8 +94,8 @@ function walkPptRecords(
 
 function normalizeLegacyPptText(text: string): string {
   return text
-    .replace(/\u0000/g, '')
-    .replace(/\u000b/g, '\n')
+    .split('\u0000').join('')
+    .split('\u000b').join('\n')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .split('\n')
@@ -416,7 +416,8 @@ async function parseShapes(zip: JSZip, filename: string): Promise<Shape[]> {
     const spTree = result?.['p:sld']?.['p:cSld']?.[0]?.['p:spTree']?.[0];
     if (!spTree) return [];
 
-    const spList: any[] = spTree['p:sp'] ?? [];
+    // xml2js întoarce noduri netipizate; forma lor e cea din comentariul de mai sus.
+    const spList = spTree['p:sp'] ?? [];
 
     for (const sp of spList) {
       // Position & size
@@ -432,13 +433,13 @@ async function parseShapes(zip: JSZip, filename: string): Promise<Shape[]> {
       const txBody = sp?.['p:txBody']?.[0];
       if (!txBody) continue;
 
-      const paras: any[] = txBody['a:p'] ?? [];
+      const paras = txBody['a:p'] ?? [];
       const paragraphs: string[] = [];
 
       for (const para of paras) {
         let text = '';
         // Text runs
-        const runs: any[] = para['a:r'] ?? [];
+        const runs = para['a:r'] ?? [];
         for (const run of runs) {
           const t = run['a:t'];
           if (Array.isArray(t)) text += t.map(String).join('');
@@ -446,7 +447,7 @@ async function parseShapes(zip: JSZip, filename: string): Promise<Shape[]> {
           else if (t?._) text += String(t._);
         }
         // Fields (e.g. link text)
-        const fields: any[] = para['a:fld'] ?? [];
+        const fields = para['a:fld'] ?? [];
         for (const fld of fields) {
           const t = fld['a:t'];
           if (Array.isArray(t)) text += t.map(String).join('');
@@ -743,7 +744,7 @@ export async function importPresentationFiles(
     if (batch.length > 0) {
       ids = bulkInsertHymns(batch);
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error importing PowerPoint files:', err);
     throw err;
   }
@@ -761,7 +762,7 @@ export async function importPresentationDirectory(
       .filter(file => isPowerPointFile(file))
       .map(f => path.join(dirPath, f));
     return await importPresentationFiles(filePaths, categoryId);
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error reading directory:', err);
     throw err;
   }
