@@ -1760,6 +1760,15 @@ function App() {
             setActiveCategoryId(mine.id);
             const r = rezultat;
             if (r.failed) showToast(t('{success} imnuri adăugate, {failed} eșuate', { success: r.success, failed: r.failed }));
+            // Dublurile imnurilor oficiale nu intră: le spunem unde le găsește.
+            if (r.skipped.length === 1) {
+                showToast(t('«{title}» există deja: {official}. Nu l-am mai adăugat.',
+                    { title: r.skipped[0].title, official: r.skipped[0].official }), 8000);
+            } else if (r.skipped.length > 1) {
+                const exemple = r.skipped.slice(0, 3).map(s => s.official).join(', ');
+                showToast(t('{n} imnuri existau deja în colecțiile oficiale ({exemple}…) și nu le-am mai adăugat.',
+                    { n: r.skipped.length, exemple }), 8000);
+            }
 
             // Un singur imn: îl deschidem pe loc, ca să poată fi îndreptat imediat —
             // conversia din slide-uri rareori nimerește totul din prima.

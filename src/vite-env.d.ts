@@ -62,6 +62,8 @@ export interface ImportResult {
   errors: string[];
   /** Id-urile imnurilor scrise — la un singur fișier, editorul se deschide pe el. */
   ids: number[];
+  /** Imnuri lăsate deoparte fiindcă erau deja în colecțiile oficiale. */
+  skipped: { title: string; official: string }[];
 }
 
 /** Imn adus dintr-un PowerPoint și încă necitit de om. */

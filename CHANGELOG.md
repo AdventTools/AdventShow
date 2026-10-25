@@ -4,6 +4,7 @@
 
 ### Modificări
 - Imnurile ies mai mari pe ecran, mai ales cele cu rânduri lungi: textul se întinde acum pe lățime până aproape de margini, păstrând o margine liberă, cu orice font ales. Mărimea rămâne aceeași pe toate strofele și pe refren, și când apeși **+**.
+- La importul din PowerPoint, imnurile care există deja în colecțiile oficiale nu se mai adaugă în „Imnurile mele”; aplicația spune unde le găsești.
 - Texte corectate în 260 de imnuri, unele după propunerile trimise de biserici: greșeli de scriere, versuri lipite pe același rând, resturi de import („. ”, „R .”, „continuare1.”, titlul repetat ca ultimă strofă). „Culorile mântuirii” (Amicus 24) e refăcut după partitură. Repetările se scriu peste tot la fel: [: … :]. Imnurile pe care le-ai modificat tu rămân cum le-ai lăsat.
 
 ## v1.6.14 (24 Octombrie 2026)

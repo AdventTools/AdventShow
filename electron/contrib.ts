@@ -2,6 +2,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { createRequire } from 'module';
 import { getDb, MY_HYMNS_CATEGORY, syncSeedContent } from './db';
+import { copieOficiala, ImnOficial, indexOficial } from './copieOficiala';
 import {
   HANGAR_CORRECTIONS_URL, HangarDeps, HangarSettings, LocalInventoryItem, fetchProposalVerdicts,
   sendLocalInventory, sendProposals,
@@ -456,6 +457,9 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
 
     const cutoff = new Date(Date.now() - QUARANTINE_HOURS * 3600 * 1000).toISOString();
     const otaApplied = deps.getSettings().otaApplied ?? {};
+    // Construit doar dacă are imnuri proprii de verificat — e o trecere prin toată baza.
+    let indexSeed: ImnOficial[] | null = null;
+    const oficiale = () => (indexSeed ??= indexOficial(seed));
     const out: Candidate[] = [];
 
     for (const h of db.prepare('SELECT id, number, title, category_id, created_at, updated_at FROM hymns').all() as
@@ -495,6 +499,9 @@ function collectCandidates(deps: ContribDeps): Candidate[] {
         // Și copia reimportată, care diferă doar prin cum e scris: diacritice,
         // apostrofuri, rânduri goale. Tot textul nostru e, doar trecut prin PowerPoint.
         if (seedEcouri.has(amprentaEcou(content))) continue;
+        // Și copia trecută prin PowerPoint cu rânduri mutate, refrene scoase, cuvinte
+        // despărțite: nicio amprentă n-o prinde, dar cuvintele sunt ale noastre.
+        if (copieOficiala(oficiale(), content.title, content.sections)) continue;
         action = 'adaugat';
         before = null;
       } else if (seedContent) {

@@ -3,11 +3,21 @@ import JSZip from 'jszip';
 import path from 'node:path';
 import * as CFB from 'cfb';
 import { parseStringPromise } from 'xml2js';
-import { bulkInsertHymns, HymnImportData } from './db';
+import { bulkInsertHymns, getDb, HymnImportData } from './db';
+import { copieOficiala, indexOficial } from './copieOficiala';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shape — one text box extracted from a slide
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Rezultatul unui import; `skipped` = imnuri care erau deja în colecțiile oficiale. */
+export interface ImportResult {
+  success: number;
+  failed: number;
+  errors: string[];
+  ids: number[];
+  skipped: { title: string; official: string }[];
+}
 
 interface Shape {
   paragraphs: string[];  // one entry per <a:p>, joined runs
@@ -706,11 +716,12 @@ export async function parsePresentationToHymn(filePath: string): Promise<HymnImp
 export async function importPresentationFiles(
   filePaths: string[],
   categoryId?: number
-): Promise<{ success: number; failed: number; errors: string[]; ids: number[] }> {
+): Promise<ImportResult> {
   let success = 0;
   let failed = 0;
   let ids: number[] = [];
   const errors: string[] = [];
+  const skipped: { title: string; official: string }[] = [];
   const batch: HymnImportData[] = [];
   const presentationFiles = getPowerPointFiles(filePaths);
 
@@ -720,8 +731,12 @@ export async function importPresentationFiles(
       failed: 0,
       errors: ['Nu au fost găsite fișiere PowerPoint compatibile. Folosește .ppt sau .pptx.'],
       ids: [],
+      skipped: [],
     };
   }
+  // Imnurile pe care le are deja în colecțiile oficiale nu se mai adaugă: ar fi doar
+  // dubluri, plecate apoi spre autori ca „imnuri noi".
+  const oficiale = indexOficial(getDb());
 
   try {
     for (const filePath of presentationFiles) {
@@ -732,6 +747,11 @@ export async function importPresentationFiles(
         const hymn = ext === '.ppt'
           ? await extractLegacyPptImportData(filePath, filePath, categoryId)
           : await extractPptxImportData(filePath, filePath, categoryId);
+        const oficial = copieOficiala(oficiale, hymn.title, hymn.sections);
+        if (oficial) {
+          skipped.push({ title: hymn.title, official: `${oficial.category} ${oficial.number}` });
+          continue;
+        }
         batch.push(hymn);
         success++;
       } catch (err: unknown) {
@@ -749,13 +769,13 @@ export async function importPresentationFiles(
     throw err;
   }
 
-  return { success, failed, errors, ids };
+  return { success, failed, errors, ids, skipped };
 }
 
 export async function importPresentationDirectory(
   dirPath: string,
   categoryId?: number
-): Promise<{ success: number; failed: number; errors: string[]; ids: number[] }> {
+): Promise<ImportResult> {
   try {
     const files = await fs.readdir(dirPath);
     const filePaths = files
