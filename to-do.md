@@ -1,6 +1,5 @@
 ## Deschise
 
-- Dupa ce ownerul pune 1.6.14 la dispozitia bisericilor: raspunsurile in hangar la #36, #37, #39, #40, #41, #42 (#35 si #38 trimise pe 2026-10-24).
 - Cererea catre suportul GitHub ca sa stearga din cache commit-urile vechi cu cheia (textul e dat ownerului pe 2026-10-24; o trimite el).
 - Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
 - Imnurile cu slide-uri de 10+ randuri; ce facem cu ele se decide mai tarziu:
