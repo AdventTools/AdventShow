@@ -1,6 +1,5 @@
 ## Deschise
 
-- Cererea catre suportul GitHub ca sa stearga din cache commit-urile vechi cu cheia (textul e dat ownerului pe 2026-10-24; o trimite el).
 - Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
 - Imnurile cu slide-uri de 10+ randuri; ce facem cu ele se decide mai tarziu:
   - Amicus 024 — Culorile mântuirii: 3 slide-uri, maxim 13 randuri

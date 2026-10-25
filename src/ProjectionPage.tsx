@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { keyAction } from './projectionKeys';
 import { zeroMessageSize } from './timerText';
 import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, ProjectionTextData } from './vite-env';
@@ -48,6 +48,9 @@ function formatDuration(ms: number): string {
 // Distanța dintre rândurile strofei: 1.45 lua aproape jumătate de rând între versuri
 // și o strofă de 10–12 rânduri ieșea mică pe ecranele late.
 const LYRICS_LINE_HEIGHT = 1.3;
+
+// Fontul ecranului de proiecție când nu e ales altul în Setări; măsurarea rândurilor îl folosește pe același
+const FONT_PROIECTIE = "'Inter', 'Segoe UI', sans-serif";
 
 // „S-au" nu se rupe la capăt de rând: cratima dintre litere devine cratimă
 // nedespărțitoare (U+2011), care arată la fel. Doar la afișare; baza rămâne neatinsă.
@@ -509,32 +512,46 @@ export function ProjectionPage() {
     // (resizeTick) și după fiecare pas de micșorare (shrinkFactor), până încape
   }, [shrinkFactor, resizeTick, data?.currentIndex, data?.hymnNumber, isBible, section?.text, fontSizeMultiplier]);
 
-  // ── Uniform font size for the entire hymn ──
-  // Analyze ALL sections once when the hymn changes, pick the tightest fit,
-  // and use that font for every slide so it never varies mid-hymn.
-  // Aria textului: ~90vh (antetul și punctele de jos își păstrează doar cât le trebuie)
-  const hymnFontSize = (() => {
+  // Fontul ales în Setări pentru tab (gol = cel al aplicației)
+  const textFont = (isBible ? bg.bibleFont : bg.hymnFont) || undefined;
+
+  // ── Mărime uniformă pentru tot imnul ──
+  // Rândurile se MĂSOARĂ cu fontul real (cel ales sau cel pus de sistem în locul lui),
+  // pe toate slide-urile, și cel mai strâns dă mărimea pentru tot imnul, ca să nu sară
+  // între strofe. La mărimea implicită, slide-ul cel mai mare umple 85% din lățime sau
+  // 88% din înălțime; + și − pornesc de aici, iar plafonul de 7rem oprește imnurile scurte.
+  // + nu trece de cât încape slide-ul cel mai mare, deci micșorarea de urgență de mai sus
+  // nu mai lucrează pe un singur slide și mărimea rămâne aceeași pe tot imnul.
+  const hymnFontSize = useMemo(() => {
     if (!data || data.sections.length === 0) return null;
 
     // Biblia se uniformizează separat, mai jos (proză, nu strofe cu rânduri fixe)
     if (isBible) return null;
 
-    let worstVw = 10;
-    let worstVh = 14;
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (!ctx) return null;
+    const family = textFont ?? FONT_PROIECTIE;
+    ctx.font = `700 100px ${family}`;
 
+    let latimeMax = 1;   // cel mai lat rând, în px la un font de 100px
+    let randuriMax = 1;
     for (const sec of data.sections) {
-      const lines = sec.text.split('\n');
-      const lineCount = Math.max(1, lines.length);
-      const maxLineCharCount = Math.max(1, ...lines.map((l: string) => l.trim().length));
-      // Bold weight 700 chars are ~20% wider
-      worstVw = Math.min(worstVw, 120 / maxLineCharCount);
-      worstVh = Math.min(worstVh, 90 / (lineCount * LYRICS_LINE_HEIGHT));
+      const lines = faraRupereLaCratima(sec.text).split('\n');
+      randuriMax = Math.max(randuriMax, lines.length);
+      for (const l of lines) latimeMax = Math.max(latimeMax, ctx.measureText(l.trim()).width);
     }
 
-    const vw = Math.min(10, worstVw).toFixed(2);
-    const vh = Math.min(14, worstVh).toFixed(2);
-    return `calc(clamp(1.5rem, min(${vw}vw, ${vh}vh), 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
-  })();
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const dupaLatime = (0.85 * W * 100) / latimeMax;
+    const dupaInaltime = (0.88 * H) / (randuriMax * LYRICS_LINE_HEIGHT);
+    const baza = Math.min(Math.max(Math.min(dupaLatime, dupaInaltime) / MARIME_IMPLICITA, 24), 112);
+    const incape = Math.min((0.95 * W * 100) / latimeMax, (0.9 * H) / (randuriMax * LYRICS_LINE_HEIGHT));
+    return Math.min(baza * fontSizeMultiplier, incape);
+    // resizeTick: alt ecran sau altă rezoluție = altă potrivire
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.sections, isBible, textFont, fontSizeMultiplier, resizeTick]);
+  const hymnFontCss = hymnFontSize ? `calc(${hymnFontSize.toFixed(1)}px * ${shrinkFactor})` : null;
 
   // ── Font uniform pentru toată pasajul biblic încărcat ──
   // Aceeași idee ca la imnuri: analizăm TOATE versetele încărcate acum (nu doar
@@ -560,14 +577,11 @@ export function ProjectionPage() {
     return `calc(clamp(2.5rem, ${worstVh.toFixed(2)}vh, 11rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
   })();
 
-  // Fontul ales în Setări pentru tab (gol = cel al aplicației)
-  const textFont = (isBible ? bg.bibleFont : bg.hymnFont) || undefined;
-
   // Dynamic font size: hymn uniform, bible uniform, sau fallback per-secțiune
   let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
-  if (hymnFontSize) {
+  if (hymnFontCss) {
     // Hymn: consistent font across all slides
-    dynamicFontSize = hymnFontSize;
+    dynamicFontSize = hymnFontCss;
   } else if (bibleFontSize) {
     dynamicFontSize = bibleFontSize;
   } else if (section) {
@@ -598,7 +612,7 @@ export function ProjectionPage() {
     <div
       className="fixed inset-0 flex flex-col items-center justify-center select-none overflow-hidden"
       style={{
-        fontFamily: "'Inter', 'Segoe UI', sans-serif",
+        fontFamily: FONT_PROIECTIE,
         ...bgStyle,
       }}
     >
