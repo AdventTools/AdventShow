@@ -1,45 +1,10 @@
 ## Deschise
 
 - Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
-- Imnurile cu slide-uri de 10+ randuri; ce facem cu ele se decide mai tarziu:
-  - Amicus 024 — Culorile mântuirii: 3 slide-uri, maxim 13 randuri
-  - Exploratori 051 — Călător sunt: 2 slide-uri, maxim 10 randuri
-  - Exploratori 053 — Merg cântând spre casă: 2 slide-uri, maxim 12 randuri
-  - Exploratori 058 — Isus mă așteaptă: 1 slide-uri, maxim 12 randuri
-  - Exploratori 064 — Sunt fericit: 1 slide-uri, maxim 12 randuri
-  - Exploratori 098 — Fii exemplu: 2 slide-uri, maxim 11 randuri
-  - Imnuri Creștine 75 — Doar Tu ne ești cale, adevăr și viață!: 1 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 82 — Nume frumos: 2 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 96 — De ce să nu cânt întruna?: 4 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 120 — Spune-mi povestea iubirii: 3 slide-uri, maxim 12 randuri
-  - Imnuri Creștine 121 — L-am văzut pe Isus: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 133 — Vrednic ești, Doamne!: 2 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 206 — Sigur la Domnu-n brațe!: 3 slide-uri, maxim 12 randuri
-  - Imnuri Creștine 254 — „Pe veci cu Dumnezeu!”: 4 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 259 — Cuvântul Legii lui Isus: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 267 — Domnul ne cheamă pe munte: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 418 — Lucrarea, Doamne, este-a Ta: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 497 — Sfânta speranță: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 513 — Ascultați, străjerul cheamă!: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 517 — Ai curaj, tu, turmă mică!: 4 slide-uri, maxim 12 randuri
-  - Imnuri Creștine 548 — Venim trudiți: 2 slide-uri, maxim 12 randuri
-  - Imnuri Creștine 555 — Vreau să cânt azi un imn: 1 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 583 — Sabatul de Domnul dat nouă: 3 slide-uri, maxim 12 randuri
-  - Imnuri Creștine 687 — Cu șoapte de-amurg: 2 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 773 — Tatăl nostru: 2 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 774 — Doamne sfinte Creator: 2 slide-uri, maxim 11 randuri
-  - Imnuri Creștine 777 — Domnul Isus Hristos: 2 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 782 — Din străluciri: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 797 — Iar cad frunzele pădurii: 2 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 807 — Blând Păstor, condu-mă Tu!: 1 slide-uri, maxim 11 randuri
-  - Imnuri Creștine 813 — Pe-ntinse valuri: 1 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 826 — Mărire lui Isus cântăm: 3 slide-uri, maxim 11 randuri
-  - Imnuri Creștine 827 — Din toată inima Te-ador, Isuse!: 1 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 833 — Iubirea Tatălui vestind: 2 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 838 — Ca peregrin: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 880 — Dumnezeu-i de față!: 1 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 896 — Biruitorul va primi să guste: 1 slide-uri, maxim 11 randuri
-  - Imnuri Creștine 909 — Lucrarea, Doamne,: 3 slide-uri, maxim 10 randuri
-  - Imnuri Creștine 911 — Mi-e dor de-acas’: 1 slide-uri, maxim 10 randuri
-  - Licurici 078 — Blu, cip, mu: 3 slide-uri, maxim 11 randuri
-  - Licurici 079 — Cântecul animalelor: 2 slide-uri, maxim 10 randuri
+- Corecturile la 251 de imnuri (2026-10-25) sunt in `public/hymns.db`; pleaca la biserici cu urmatorul release, dupa care ruleaza `scripts/push_baseline.py`.
+- Imnuri de verificat de un om din biserica: 22, cu comentariu fiecare, in `docs/ops/de-verificat-imnuri.json`. Asteapta coada „De verificat” din hangar (textul pentru agentul hangar i-a fost dat ownerului pe 2026-10-25); dupa ce exista, se importa lista acolo.
+- Partiturile pentru imnurile scoase automat din partitura (Amicus 001, 009, 012, 015, 023, 026, 029, 032; Exploratori 130; Tineret 059): ownerul le cauta.
+- De decis de owner:
+  - spargerea strofelor de 11-12 randuri in doua slide-uri („Strofa 1 (continuare)”, cere o mica schimbare in aplicatie): IC 120, 206, 517, 548, 583, 774, 807, 826, 896, Exploratori 053, 058, 064, 098, Licurici 078;
+  - scurtarea celor 50 de imnuri care au acelasi vers scris de doua ori la rand, cu [: … :] (si [: … :] ×3);
+  - ruperea randurilor la cele 15 imnuri scrise cu cate doua versuri pe rand (Tineret 067, 022; Exploratori 124, 104, 113, 114, 026, 106, 003; Companioni 031, 003; Amicus 026, 033; Licurici 029, 027).
