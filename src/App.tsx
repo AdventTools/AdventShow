@@ -132,26 +132,34 @@ function stripStanzaNumber(text: string): string {
  * cu refrene diferite (IC 500: alt vers final la fiecare) le arată pe fiecare la locul
  * lui. Strofa fără refren după ea îl primește pe ultimul de dinaintea ei, sau pe primul
  * din imn: un refren scris o singură dată se repetă după toate strofele.
+ * O strofă sau un refren prea lung pentru un ecran are în text un rând „---”: se arată
+ * pe mai multe slide-uri cu aceeași etichetă, iar refrenul vine după ultima parte a strofei.
  */
 function expandHymnSections(sections: HymnSection[]) {
     const primulRefren = sections.find(s => s.type === 'refren');
-    const result: { text: string; type: string; label: string }[] = [];
+    const result: { text: string; type: string; label: string; continuare?: boolean }[] = [];
     let stanzaNum = 0;
     let ultimulRefren: HymnSection | undefined;
+    const adauga = (text: string, type: 'strofa' | 'refren', label: string) =>
+        text.split(/\n-{3,}\n/).forEach((parte, i) => {
+            result.push(i === 0
+                ? { text: parte, type, label }
+                : { text: parte, type, label: `${label} (continuare)`, continuare: true });
+        });
     sections.forEach((sec, idx) => {
         if (sec.type === 'strofa') {
             stanzaNum++;
-            result.push({ text: stripStanzaNumber(sec.text), type: 'strofa', label: `Strofa ${stanzaNum}` });
+            adauga(stripStanzaNumber(sec.text), 'strofa', `Strofa ${stanzaNum}`);
             const urmator = sections[idx + 1];
             const refren = urmator?.type === 'refren' ? urmator : (ultimulRefren ?? primulRefren);
             if (refren) {
                 ultimulRefren = refren;
-                result.push({ text: refren.text, type: 'refren', label: 'Refren' });
+                adauga(refren.text, 'refren', 'Refren');
             }
         } else if (idx === 0 || sections[idx - 1].type !== 'strofa') {
             // refrenul de la început (sau unul după alt refren) se arată o dată, la locul lui
             ultimulRefren = sec;
-            result.push({ text: sec.text, type: 'refren', label: 'Refren' });
+            adauga(sec.text, 'refren', 'Refren');
         }
     });
     return result;
@@ -371,7 +379,7 @@ function App() {
 
     // ── Preview state ──
     const [previewType, setPreviewType] = useState<'hymn' | 'bible' | null>(null);
-    const [previewSections, setPreviewSections] = useState<{ text: string; type: string; label: string }[]>([]);
+    const [previewSections, setPreviewSections] = useState<{ text: string; type: string; label: string; continuare?: boolean }[]>([]);
     const [previewTitle, setPreviewTitle] = useState('');
     const [previewNumber, setPreviewNumber] = useState('');
     // Categoria imnului pregătit — acompaniamentul (numerotat 1-921, doar Imnuri Creștine
@@ -919,7 +927,7 @@ function App() {
     // ── Projection control ──
     const startProjection = useCallback(async (startIndex?: number) => {
         if (!previewSections.length) return;
-        const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
+        const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren', continuare: s.continuare } as HymnSection));
         const ct = previewType ?? 'hymn';
         // Hymns start at title slide (-1), Bible starts at first verse (0)
         const idx = startIndex ?? (ct === 'hymn' ? -1 : 0);
@@ -937,7 +945,7 @@ function App() {
     // Apelată doar în timpul proiecției, când previzualizarea nu e deja live.
     const goLivePreview = useCallback(async () => {
         if (!projecting || !previewSections.length) return;
-        const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
+        const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren', continuare: s.continuare } as HymnSection));
         const ct = previewType ?? 'hymn';
         const idx = ct === 'bible' ? Math.max(0, projSlideIndexRef.current) : -1;
         const br = ct === 'bible' && previewSections[idx]
@@ -970,7 +978,7 @@ function App() {
         const minIdx = previewType === 'bible' ? 0 : -1;
         if (newIdx < minIdx || newIdx >= n) return;
         setProjSlideIndex(newIdx);
-        const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren' } as HymnSection));
+        const secs = previewSections.map(s => ({ text: s.text, type: s.type as 'strofa' | 'refren', continuare: s.continuare } as HymnSection));
         const ct = previewType ?? 'hymn';
         const br = ct === 'bible' && previewSections[newIdx]
             ? `${previewTitle}:${previewSections[newIdx].label?.replace('v. ', '') ?? ''}`
@@ -5162,6 +5170,9 @@ function HymnEditorModal({
                                 <Plus className="icon-xs" /> {t('Refren')}
                             </button>
                         </div>
+                        <p className="field-hint">
+                            {t('O strofă prea lungă pentru ecran se poate împărți: pune un rând cu „---” unde vrei să treacă pe ecranul următor.')}
+                        </p>
 
                         {error && <div className="editor-error">{error}</div>}
 

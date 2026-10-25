@@ -9,6 +9,7 @@ interface PreviewSection {
   text: string;
   type: string;
   label?: string;
+  continuare?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -154,8 +155,8 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
 
   // Etichetă scurtă pentru butonul de salt: „R" refren, numărul strofei, sau doar cifra versetului
   const dotLabel = (s: PreviewSection) => {
-    if (s.type === 'refren') return 'R';
-    return (s.label ?? '').replace(/^v\.\s*/, '').replace(/^Strofa\s*/, '');
+    if (s.type === 'refren') return s.continuare ? 'R…' : 'R';
+    return (s.label ?? '').replace(/^v\.\s*/, '').replace(/^Strofa\s*/, '').replace(' (continuare)', '…');
   };
 
   return (

@@ -778,7 +778,7 @@ export function ProjectionPage() {
             >
               {section.type === 'refren' ? 'Refren' : `Strofa ${(data?.sections
                 .slice(0, data.currentIndex + 1)
-                .filter(s => s.type === 'strofa').length) ?? ''}`}
+                .filter(s => s.type === 'strofa' && !s.continuare).length) ?? ''}`}
             </span>
           )}
         </div>

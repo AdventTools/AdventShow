@@ -225,6 +225,7 @@ export const EN_APP_2: Record<string, string> = {
     'Mută mai jos': 'Move down',
     'Șterge secțiunea': 'Delete section',
     'Textul secțiunii...': "The section's text...",
+    'O strofă prea lungă pentru ecran se poate împărți: pune un rând cu „---” unde vrei să treacă pe ecranul următor.': 'A verse too long for the screen can be split: put a line with “---” where it should move to the next screen.',
     'Se salvează...': 'Saving...',
 
     // ForgotPasswordHint
