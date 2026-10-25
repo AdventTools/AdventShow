@@ -2374,8 +2374,12 @@ function App() {
                             activeCategoryId={activeCategoryId}
                             onSelect={id => {
                                 setActiveCategoryId(id);
-                                // după alegerea colecției se poate scrie direct numărul imnului
-                                requestAnimationFrame(() => refSearchRef.current?.focus());
+                                // după alegerea colecției se poate scrie direct numărul imnului;
+                                // numărul vechi rămâne marcat, așa că tastarea îl înlocuiește
+                                requestAnimationFrame(() => {
+                                    refSearchRef.current?.focus();
+                                    refSearchRef.current?.select();
+                                });
                             }}
                         />
                     ) : tab === 'biblia' ? (
