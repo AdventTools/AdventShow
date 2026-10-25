@@ -6,6 +6,8 @@ export interface HymnSection {
   order_index: number;
   type: 'strofa' | 'refren';
   text: string;
+  /** Pe proiecție: a doua parte a unei strofe tăiate cu „---" (același număr de strofă). */
+  continuare?: boolean;
 }
 
 export interface Category {
