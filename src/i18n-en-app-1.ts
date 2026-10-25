@@ -35,6 +35,8 @@ export const EN_APP_1: Record<string, string> = {
     'Nu găsesc colecția «Imnurile mele»': 'Cannot find the «Imnurile mele» collection',
     'Se importă imnurile…': 'Importing hymns…',
     '{success} imnuri adăugate, {failed} eșuate': '{success} hymns added, {failed} failed',
+    '«{title}» există deja: {official}. Nu l-am mai adăugat.': '“{title}” already exists: {official}. Not added again.',
+    '{n} imnuri existau deja în colecțiile oficiale ({exemple}…) și nu le-am mai adăugat.': '{n} hymns were already in the official collections ({exemple}…) and were not added again.',
     '{success} imnuri adăugate în «Imnurile mele» — te așteaptă la verificat': '{success} hymns added to «Imnurile mele» — waiting for you to review',
     'Import imnuri din folder': 'Import hymns from a folder',
     'Import imnuri din PowerPoint': 'Import hymns from PowerPoint',
