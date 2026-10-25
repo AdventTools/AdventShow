@@ -1,6 +1,6 @@
 # Changelog — AdventShow
 
-## Nepublicat
+## v1.6.15 (25 Octombrie 2026)
 
 ### Modificări
 - Imnurile ies mai mari pe ecran, mai ales cele cu rânduri lungi: textul se întinde acum pe lățime până aproape de margini, păstrând o margine liberă, cu orice font ales. Mărimea rămâne aceeași pe toate strofele și pe refren, și când apeși **+**.
@@ -8,10 +8,6 @@
 - Când alegi altă colecție, cursorul rămâne în căutare: numărul scris rămâne marcat și arată imnul cu același număr din noua colecție, iar dacă tastezi alt număr, îl înlocuiește. Căsuța în care scrii are acum un chenar colorat, ca să se vadă de departe unde ajunge ce tastezi.
 - La importul din PowerPoint, imnurile care există deja în colecțiile oficiale nu se mai adaugă în „Imnurile mele”; aplicația spune unde le găsești.
 - Texte corectate în 266 de imnuri, unele după propunerile trimise de biserici: greșeli de scriere, diacritice lipsă, versuri lipite pe același rând, resturi de import („. ”, „R .”, „continuare1.”, titlul repetat ca ultimă strofă). „Culorile mântuirii” (Amicus 24) e refăcut după partitură, iar „Cântă inimă, cântecul tău frumos” (Imnuri Speciale 18) are acum diacritice. Repetările se scriu peste tot la fel: [: … :]. Imnurile pe care le-ai modificat tu rămân cum le-ai lăsat.
-
-## v1.6.14 (24 Octombrie 2026)
-
-### Modificări
 - **Tastele s-au schimbat:** în timpul proiecției, toate săgețile (și Page Up / Page Down, Space) trec la strofa sau versetul următor ori anterior, așa că merge orice telecomandă de prezentare. Textul se mărește și se micșorează acum cu tastele **+** și **−**.
 - Strofele lungi ies mai mari pe ecran: textul folosește aproape toată înălțimea, iar rândurile sunt puțin mai apropiate.
 - Poți alege fontul pentru imnuri și pentru versete, în Setări → Proiecție; „implicit", de lângă nume, îl readuce pe cel obișnuit.
@@ -23,6 +19,12 @@
 - Numărul de lângă „Imnurile mele" se actualizează imediat când un imn al tău e acceptat în colecția oficială.
 - Pe Windows, aplicația scoate un certificat vechi rămas de la versiunile din primăvară, care nu mai era sigur; unde Windows cere drepturi de administrator, aplicația întreabă întâi.
 - Reparații de securitate la motorul aplicației.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
 
 ---
 
