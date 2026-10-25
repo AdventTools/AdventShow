@@ -1,5 +1,10 @@
 # Changelog — AdventShow
 
+## Nepublicat
+
+### Modificări
+- Imnurile ies mai mari pe ecran, mai ales cele cu rânduri lungi: textul se întinde acum pe lățime până aproape de margini, păstrând o margine liberă, cu orice font ales. Mărimea rămâne aceeași pe toate strofele și pe refren, și când apeși **+**.
+
 ## v1.6.14 (24 Octombrie 2026)
 
 ### Modificări
