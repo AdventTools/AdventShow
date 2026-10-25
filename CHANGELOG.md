@@ -5,7 +5,7 @@
 ### Modificări
 - Imnurile ies mai mari pe ecran, mai ales cele cu rânduri lungi: textul se întinde acum pe lățime până aproape de margini, păstrând o margine liberă, cu orice font ales. Mărimea rămâne aceeași pe toate strofele și pe refren, și când apeși **+**.
 - Strofele prea lungi pentru un ecran se arată pe două slide-uri („Strofa 1 (continuare)”), cu refrenul după a doua parte, iar textul iese mai mare. În editor, un rând „---” într-o strofă o împarte. Versurile repetate se scriu scurt: [: … :] pentru de două ori, [: … :] ×3 pentru mai multe.
-- Când alegi altă colecție, cursorul rămâne în căutare, deci poți scrie direct numărul. Căsuța în care scrii are acum un chenar colorat, ca să se vadă de departe unde ajunge ce tastezi.
+- Când alegi altă colecție, cursorul rămâne în căutare: numărul scris rămâne marcat și arată imnul cu același număr din noua colecție, iar dacă tastezi alt număr, îl înlocuiește. Căsuța în care scrii are acum un chenar colorat, ca să se vadă de departe unde ajunge ce tastezi.
 - La importul din PowerPoint, imnurile care există deja în colecțiile oficiale nu se mai adaugă în „Imnurile mele”; aplicația spune unde le găsești.
 - Texte corectate în 260 de imnuri, unele după propunerile trimise de biserici: greșeli de scriere, versuri lipite pe același rând, resturi de import („. ”, „R .”, „continuare1.”, titlul repetat ca ultimă strofă). „Culorile mântuirii” (Amicus 24) e refăcut după partitură. Repetările se scriu peste tot la fel: [: … :]. Imnurile pe care le-ai modificat tu rămân cum le-ai lăsat.
 
