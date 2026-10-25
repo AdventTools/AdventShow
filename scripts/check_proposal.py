@@ -66,14 +66,22 @@ def read_hymn(db_path: Path, category: str, number: str) -> dict | None:
             num = int(str(number).strip())
         except ValueError:
             return None
+        # bazele vechi din istoric nu au inca coloanele updated_at, cele mai vechi nici tabelele
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'hymns'").fetchone():
+            return None
+
+        def are(tabel: str) -> bool:
+            return any(r[1] == 'updated_at' for r in con.execute(f'PRAGMA table_info({tabel})'))
+        h_upd = 'h.updated_at' if are('hymns') else "''"
+        s_upd = 'updated_at' if are('hymn_sections') else "''"
         row = con.execute(
-            'SELECT h.id, h.title, h.updated_at FROM hymns h JOIN categories c ON c.id = h.category_id '
+            f'SELECT h.id, h.title, {h_upd} FROM hymns h JOIN categories c ON c.id = h.category_id '
             'WHERE c.name = ? AND CAST(h.number AS INTEGER) = ? LIMIT 1', (category, num)).fetchone()
         if not row:
             return None
         hid, title, updated = row
         sections = [{'type': t, 'text': tx, 'updated_at': u} for t, tx, u in con.execute(
-            'SELECT type, text, updated_at FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index', (hid,))]
+            f'SELECT type, text, {s_upd} FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index', (hid,))]
         newest = max([updated or ''] + [s['updated_at'] or '' for s in sections])
         return {'id': hid, 'title': title, 'sections': sections, 'updated_at': newest}
     finally:
