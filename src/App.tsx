@@ -2372,7 +2372,11 @@ function App() {
                         <SidebarCategories
                             categories={categories}
                             activeCategoryId={activeCategoryId}
-                            onSelect={setActiveCategoryId}
+                            onSelect={id => {
+                                setActiveCategoryId(id);
+                                // după alegerea colecției se poate scrie direct numărul imnului
+                                requestAnimationFrame(() => refSearchRef.current?.focus());
+                            }}
                         />
                     ) : tab === 'biblia' ? (
                         <SidebarBibleBooks
