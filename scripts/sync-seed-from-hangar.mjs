@@ -112,6 +112,10 @@ const colectiiNoi = [];
 const tx = db.transaction(() => {
   for (const e of [...intrari].sort((a, b) => a.seq - b.seq)) {
     const numeColectie = String(e.category ?? '').trim();
+    // Doar ultima corectură a fiecărui imn: cele dinainte ar rescrie rândul și l-ar
+    // pune la loc, iar baza s-ar schimba la fiecare rulare fără ca textul să difere —
+    // la reluarea unui release, asta reface toate build-urile degeaba.
+    if (ultima.get(`${numeColectie}|${numarNormalizat(e.number)}`) !== e) continue;
     // Sfârșiturile de rând în stil Windows vin din propunerile trimise de biserici.
     // Baza livrată ține „\n"; dacă am scrie „\r\n", amprenta calculată de aplicație
     // pe baza livrată n-ar mai coincide cu cea de pe textul primit prin feed.
