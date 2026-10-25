@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-10-25T09:21:29+00:00",
+    "generated": "2026-10-25T12:54:15+00:00",
     "entries": [
         {
             "seq": 1,
@@ -1333,6 +1333,358 @@
             "force": false,
             "ts": "2026-10-25T09:21:29.000Z",
             "text_hash": "fc1eae318c69ebfd9089d252a6587553c9c83eaba8f29fc6c953358eb6f692d8"
+        },
+        {
+            "seq": 42,
+            "category": "Imnuri Creștine",
+            "number": "104",
+            "title": "Noapte de vis, noapte de har",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nTotu-i lin, totu-i clar…\nDe Maria privegheat,\nPrunc divin preaminunat\n[:Doarme-n liniștea Sa.:]"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nMagi, păstori vin cu dar;\nÎngeri sfinți, Aleluia,\nCântă-n străluciri de stea:\n[:„Mesia S-a născut!”:]"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nPentru cânt nu-i hotar!\nToată slava cea de sus\nStă pe chipul Tău, Isus,\n[:Jos la nașterea Ta.:]"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Noapte de vis, noapte de har,\nO, Isus, vino iar!\nTe coboară-n viața mea,\nSă-Ți tot cânt, Aleluia,\n[:Veșnic Ție, Hristos!:]"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "2e5056e1c8bb07a93c8f74bad006e0eb436729ab2dec517cb2d93667c8801c5c"
+        },
+        {
+            "seq": 43,
+            "category": "Imnuri Creștine",
+            "number": "110",
+            "title": "O, ce veste minunată!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "O, ce veste minunată\nÎn Betleem ni se-arată:\n[:Astăzi S-a născut\nCel făr’ de-nceput,\nCum au scris prorocii!:]"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Că la Betleem, Maria,\nSăvârșind călătoria,\n[:Într-un mic sălaș,\nLângă-acel oraș,\nA născut pe Mesia!:]"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Mesia, Cel din vecie,\nDumnezeu mi-L dete mie\n[:Să Se nască\nȘi să crească,\nSă ne mântuiască!:]"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "c2264e5360489b7ee452952fb7e538c182df36e5f18b06f96391e75772281d0e"
+        },
+        {
+            "seq": 44,
+            "category": "Imnuri Creștine",
+            "number": "130",
+            "title": "A-nviat Isus Hristos!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "A-nviat Isus Hristos, Slavă Lui, Aleluia!\nA ieșit victorios! Slavă Lui, Aleluia!\nCel pe cruce răstignit, Slavă Lui, Aleluia!\nBoldul morții-a biruit! Slavă Lui, Aleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Domnul nostru S-a ’nălțat, Slavă Lui, Aleluia!\nMare-Preot și-Mpărat! Slavă Lui, Aleluia!\nMoartea-a doua suferind, Slavă Lui, Aleluia!\nPăcătoșii mântuind! Slavă Lui, Aleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Suferința ne-a purtat, Slavă Lui, Aleluia!\nSufletul ne-a vindecat! Slavă Lui, Aleluia!\nMântuiții cântă-n cor, Slavă Lui, Aleluia!\nDomnului oștirilor! Slavă Lui, Aleluia!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Slavă Celui Înviat! Slavă Lui, Aleluia!\nEl cu Tatăl ne-a-mpăcat! Slavă Lui, Aleluia!\nFie înălțat în cânt, Slavă Lui, Aleluia!\nTatăl, Fiul, Duhul Sfânt! Slavă Lui, Aleluia!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "0c9cd22ab65bc4b0bc600fd2b89c88595bf62bf8322fd3b487bd4ebbbfaa66c6"
+        },
+        {
+            "seq": 45,
+            "category": "Imnuri Speciale",
+            "number": "002",
+            "title": "Domnul e aici",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Când mă tem să lupt și cad,\nDomnul e aici!\nȘi când valuri mari se sparg,\nDomnul e aici!\nN-aș putea să fac un pas,\nSă visez acas’!\nPeste noaptea fără glas,\nMâna Lui e-aici!"
+                },
+                {
+                    "type": "refren",
+                    "text": "[: Domnul e aici! :]\nCăci iubirea Lui mi-e far,\nSă trăiesc cu har!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Dacă mrejele se rup,\nDomnul e aici!\nLângă masa de belșug,\nDomnul e aici!\nEl mă poartă neîncetat,\nBinecuvântat!\nȘi mă spală de păcat\nHarul Său curat!"
+                },
+                {
+                    "type": "refren",
+                    "text": "[: Domnul e aici! :]\nCăci iubirea Lui mi-e far,\nSă trăiesc cu har!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Când sunt singur și străin,\nDomnul e aici!\nMerg spre țara de lumini,\nDomnul e aici!\nȘtiu că eu Îl voi vedea,\nMă va-mbrățișa,\nPeste toată noaptea mea,\nEl îmi este stea!"
+                },
+                {
+                    "type": "refren",
+                    "text": "[: Domnul e aici! :]\nCăci iubirea Lui mi-e far,\nSă trăiesc cu har!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "266358a8315c86ed69420426fdac503983993bbf5c554f801c837226e2cfba91"
+        },
+        {
+            "seq": 46,
+            "category": "Imnuri Speciale",
+            "number": "003",
+            "title": "Așteptând marea zi",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Așteptând marea zi\nCând Isus va reveni,\nSă ajungem acas’\nDoar puțin a mai rămas !\nSă-ntâlnim pe cei plecați\nDintre noi, surori și frați…\nO, ce zi, minunată va fi !"
+                },
+                {
+                    "type": "refren",
+                    "text": "O, ce zi de bucurii\nCu sclipiri de veșnicii,\nCu Isus cel Minunat,\nCare ne-a răscumpărat!\nÎmpreună printre sori\nVom zbura biruitori !\nO, ce zi, scumpă zi vom trăi !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "În curând vom zări\nÎnceput de veșnicii,\nFără lacrimi, fără plâns\nCe durerile le-au strâns…\nȘi-n coroană câte-o stea\nFiecare vom purta !\nO, ce zi, minunată va fi !"
+                },
+                {
+                    "type": "refren",
+                    "text": "O, ce zi de bucurii\nCu sclipiri de veșnicii,\nCu Isus cel Minunat,\nCare ne-a răscumpărat!\nÎmpreună printre sori\nVom zbura biruitori !\nO, ce zi, scumpă zi vom trăi !"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Așteptăm marea zi,\nCând răsplata vom primi !\nPoposind, chiar pe mal,\nLângă marea de cristal !\nPeste aur să umblăm,\nOsanale să-I cântăm !\nO, ce zi, minunată va fi !"
+                },
+                {
+                    "type": "refren",
+                    "text": "O, ce zi de bucurii\nCu sclipiri de veșnicii,\nCu Isus cel Minunat,\nCare ne-a răscumpărat!\nÎmpreună printre sori\nVom zbura biruitori !\nO, ce zi, scumpă zi vom trăi !"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "88caba5e0423ffbecec7fdc8bcc576fb5c28143a2c3f4da50b3e5b9ca7fb0532"
+        },
+        {
+            "seq": 47,
+            "category": "Imnuri Speciale",
+            "number": "005",
+            "title": "De-aș putea ca vulturul să zbor",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "De-aș putea ca vulturul să zbor\nCătre Bunul meu Mântuitor,\n[: Să colind prin sferele cerești\nȘi să cânt cu cete îngerești :]"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Vinovat am fost mereu și sunt,\nTrecător ca iarba de pe câmp,\n[: Doamne ia-mă Tu în slujba Ta,\nFă-mă Tu unealtă scumpă-a Ta :]"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Și atunci putea-voi ca să zbor,\nCăci Tu mi-ești singur Mântuitor.\n[: Numai Tu dacă-mi vei ajuta,\nFața sfântă-atunci Ți-o voi vedea :]"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "7ff81cbb7c857fb5a729a773c8c55e6d25da0061a0bf19044919e57369306ae8"
+        },
+        {
+            "seq": 48,
+            "category": "Imnuri Speciale",
+            "number": "006",
+            "title": "Doar o colibă",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Doar o colibă aici jos îmi ajunge\nArgint și aur n-am în casa mea.\nDar în orașul strălucirii divine,\nNumai în aur eu voi umbla."
+                },
+                {
+                    "type": "refren",
+                    "text": "Eu am locașul dincolo-n mărire\nÎn strălucirea ce n-o pot visa\nCândva acolo voi sfârși alergarea,\nPe străzi de aur în slava Sa."
+                },
+                {
+                    "type": "strofa",
+                    "text": "De vreo ispită îmi chinuie gândul\nȘi ca profetul pe piatră adorm,\nEu știu că-n ceruri, dincolo de stele,\nVoi sta la masă lângă-al meu Domn."
+                },
+                {
+                    "type": "refren",
+                    "text": "Eu am locașul dincolo-n mărire\nÎn strălucirea ce n-o pot visa\nCândva acolo voi sfârși alergarea,\nPe străzi de aur în slava Sa."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Să nu mă credeți sărman și nici singur\nSufletul meu e de ceruri legat.\nSunt călătorul ce-și caută țara\nUnde-i lumină neîncetat!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Eu am locașul dincolo-n mărire\nÎn strălucirea ce n-o pot visa\nCândva acolo voi sfârși alergarea,\nPe străzi de aur în slava Sa."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "4e1898c596b68c6cda4937190183ff59c39bf62781338b9ac1f640a45d5d9c28"
+        },
+        {
+            "seq": 49,
+            "category": "Imnuri Speciale",
+            "number": "010",
+            "title": "Viața-i plină de întristări  ( La Calvar )",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Viața-i plină de întristări,\nGriji ce vin zi de zi,\nIsus ia toată povara ta,\nEl poate mântui."
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul ia toată povara ta,\nLa Calvar, la Calvar,\nDomnul ia toată povara ta,\nEl poate mântui."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Chinuit și îngrijorat,\nLa El acum să vii,\nDomnul ia toată povara ta,\nEl poate mântui."
+                },
+                {
+                    "type": "strofa",
+                    "text": "El ascultă suspinul tău,\nStrigătul inimii,\nDomnul ia toată povara ta,\nEl poate mântui."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "bff5c9615759afa901ac812c9efcb0461e63b81a2be362cb8fd002ca88c0ca6f"
+        },
+        {
+            "seq": 50,
+            "category": "Imnuri Speciale",
+            "number": "011",
+            "title": "Mama mea m-a iubit",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Mama mea m-a iubit și cu drag m-a-ngrijit,\nCa să nu mi se-ntâmple vreun rău.\nÎmi dădea tot ce-avea, iar în suflet purta\nDor adânc pentru binele meu."
+                },
+                {
+                    "type": "refren",
+                    "text": "Voi iubi mama mea neîncetat\nCăci, prin ea, Domnul viața mi-a dat!\nȘi-mpreună, Te rog, o, Doamne,\nFă să fim sus în cer la Tine!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Ne-ncetat lângă pat nopți întregi a vegheat,\nCând eu în suferinți mă zbăteam;\nNu mânca, nu dormea, bucuroasă se jertfea,\nCăci așa m-a iubit mama mea."
+                },
+                {
+                    "type": "refren",
+                    "text": "Voi iubi mama mea neîncetat\nCăci, prin ea, Domnul viața mi-a dat!\nȘi-mpreună, Te rog, o, Doamne,\nFă să fim sus în cer la Tine!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "5ebee856133d008cf4f40626829f3dc7a20ee9b77dbb1c0584e28d1dd22bf4d0"
+        },
+        {
+            "seq": 51,
+            "category": "Imnuri Speciale",
+            "number": "013",
+            "title": "Nu va fi o veste mai frumoasă",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Nu va fi o veste mai frumoasă\nCa salvarea dată prin Isus\nNici iubire care să jertfească\nPentru noi cât a jertfit Isus."
+                },
+                {
+                    "type": "refren",
+                    "text": "Dragostea Lui e darul\nCel mai minunat! Minunat, minunat\nO, dragostea Lui e darul cel mai minunat\nMinunat și pentru noi."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Zilnic mă-nconjoară cu-ndurare\nVăd la orice pas cât e de bun\nEl mi-a dat pe veci răscumpărare\nPot și eu voios acum să spun."
+                },
+                {
+                    "type": "refren",
+                    "text": "Dragostea Lui e darul\nCel mai minunat! Minunat, minunat\nO, dragostea Lui e darul cel mai minunat\nMinunat și pentru noi."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Nu vom înțelege niciodată\nCe măreață e iubirea sa\nȘi atunci în slava nevisată\nTot iubirea Lui o vom cânta."
+                },
+                {
+                    "type": "refren",
+                    "text": "Dragostea Lui e darul\nCel mai minunat! Minunat, minunat\nO, dragostea Lui e darul cel mai minunat\nMinunat și pentru noi."
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "d5ee3033110672acb185b3b9f12f41da66b2ee98406edc4a82eecaa8602f3f61"
+        },
+        {
+            "seq": 52,
+            "category": "Imnuri Speciale",
+            "number": "018",
+            "title": "Cântă inimă, cântecul tău frumos",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Cântă inimă, cântecul tău frumos,\nCântă lacrima dragostei lui Hristos!\nEl te-a răscumpărat, El te-a eliberat,\nCântă dragostea Celui ce te-a salvat!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cântă inimă, cântecul tău dorit,\nCântă dragostea Celui ce te-a iubit,\nDoar prin dragostea Sa în veci vei tresălta,\nCântă inimă, toată iubirea ta!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cântă inimă, cântecul tău curat,\nCântă cântecul cerului minunat!\nCântă, nu te opri, cântă, orice ar fi,\nCântă slava iubirii în veșnicii!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "8258f595347100dcafa5220e159e0087ab117802dc3bde5434947222580ac17e"
+        },
+        {
+            "seq": 53,
+            "category": "Tineret",
+            "number": "053",
+            "title": "Din zori de zi",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Din zori de zi viața\nîn șoaptă a zâmbit,\nNeliniștiți munții\nspre soare-au pornit."
+                },
+                {
+                    "type": "refren",
+                    "text": "În pacea Ta, Doamne inima s-a stins,\nDe mână cu Tatăl am cerul deschis."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Doar mână în mână\nspre zâmbet ușor,\nLacrima din suflet,\nsemn de prea mult dor..."
+                },
+                {
+                    "type": "refren",
+                    "text": "În pacea Ta, Doamne inima s-a stins,\nDe mână cu Tatăl am cerul deschis."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Pe cruce iubirea din cer ne-a urzit,\nÎn veci fericirea\nprin El am primit."
+                },
+                {
+                    "type": "refren",
+                    "text": "În pacea Ta, Doamne inima s-a stins,\nDe mână cu Tatăl am cerul deschis.\nSpre slava Ta,\nDoamne ne-am strâns într-un glas,\nCerul sfânt e-al nostru,\npământ bun rămas!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T12:54:15.000Z",
+            "text_hash": "952b4a12e3b2e4d33c01a2edbccc2f6013448fc7946fe47879a01ded5b1c5b26"
         }
     ]
 }
