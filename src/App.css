@@ -253,6 +253,22 @@
     flex: 1;
     min-width: 0;
     position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+
+/* Câmpul în care se tastează se vede de departe: chenar în culoarea temei și un halou. */
+.search-box:focus-within {
+    border-color: var(--accent);
+    background: rgb(var(--fg-rgb) / 0.08);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 0 5px var(--accent-glow), 0 0 18px var(--accent-glow);
+}
+
+.search-box:focus-within .search-icon {
+    color: var(--accent);
+}
+
+.search-box input {
+    caret-color: var(--accent);
 }
 
 .search-box.search-box-wide {
