@@ -70,6 +70,40 @@ if (nepotriviri > esantion.length * 0.1) {
       'Compară cu normalizeSearchText din electron/db.ts înainte să mergi mai departe.');
 }
 
+// ── Baza e mai nouă decât hangarul? ───────────────────────────────────────────
+//
+// `updated_at` din baza livrată e arbitrul. Un imn corectat în bază DUPĂ ultima lui
+// corectură din hangar nu se calcă — scriptul îl întorcea în tăcere la textul vechi.
+// Dar nici nu e destul să-l sărim: o instalare nouă aplică tot feed-ul peste baza din
+// installer și ar ajunge tot la textul vechi. Textul nou trebuie publicat întâi în
+// hangar, ca intrare nouă; până atunci release-ul se oprește.
+
+const ultima = new Map();
+for (const e of intrari) {
+  const cheie = `${String(e.category ?? '').trim()}|${numarNormalizat(e.number)}`;
+  if (!ultima.has(cheie) || ultima.get(cheie).seq < e.seq) ultima.set(cheie, e);
+}
+const textImn = (titlu, sectiuni) => [titlu, ...sectiuni.map(s => `${s.type}\n${s.text}`)]
+  .map(t => String(t).replace(/\r\n?/g, '\n').normalize('NFC').trim()).join('\n\n');
+const maiNoiInBaza = [];
+for (const [cheie, e] of ultima) {
+  const [numeColectie, numar] = cheie.split('|');
+  const imn = db.prepare(`SELECT h.id, h.title, h.number, h.updated_at FROM hymns h
+    JOIN categories c ON c.id = h.category_id WHERE c.name = ?`).all(numeColectie)
+    .find(h => numarNormalizat(h.number) === numar);
+  if (!imn || !e.ts || !(imn.updated_at > e.ts)) continue;
+  const sectiuni = db.prepare('SELECT type, text FROM hymn_sections WHERE hymn_id = ? ORDER BY order_index').all(imn.id);
+  if (textImn(imn.title, sectiuni) !== textImn(e.title, Array.isArray(e.sections) ? e.sections : [])) {
+    maiNoiInBaza.push(`${numeColectie} ${numar} (corectura seq ${e.seq} din ${e.ts.slice(0, 10)}, baza din ${imn.updated_at.slice(0, 10)})`);
+  }
+}
+if (maiNoiInBaza.length) {
+  db.close();
+  mor(`baza livrată are text mai nou decât ultima corectură din hangar la ${maiNoiInBaza.length} imnuri:\n   ` +
+      maiNoiInBaza.join('\n   ') +
+      '\n   Publică întâi textul din bază ca o corectură nouă în hangar (fără force), altfel instalările noi primesc textul vechi.');
+}
+
 // ── Aplicăm ───────────────────────────────────────────────────────────────────
 
 let adaugate = 0, actualizate = 0, lasate = 0;
