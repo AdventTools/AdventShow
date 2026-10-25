@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-10-19T05:21:50+00:00",
+    "generated": "2026-10-25T09:21:29+00:00",
     "entries": [
         {
             "seq": 1,
@@ -1298,6 +1298,41 @@
             "ts": "2026-10-17T06:43:14.000Z",
             "text_hash": "ecbceeda9b5423075ed7b80daf8bdae490819eb47e9abf316cb96afbcb198ff6",
             "only_if_absent": true
+        },
+        {
+            "seq": 41,
+            "category": "Imnuri Creștine",
+            "number": "790",
+            "title": "Flori frumoase",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Flori frumoase-n calea mea \n mi-apar mereu,\nCât timp pe Isus Hristos mă sprijin eu…\nȘi astfel pornesc în viață cu avânt\nȘi păzesc al Său Cuvânt."
+                },
+                {
+                    "type": "refren",
+                    "text": "Făr’ Isus nu pot trăi,\nEl e totul ce-aș dori;\nDe Isus mă prind și-L rog: „Rămâi, rămâi,\nNumai Tu să mă mângâi!”"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Și de stau întruna numai cu Isus,\nEl m-atrage către sferele de sus\nȘi mă simt atât de bine și voios,\nCât timp am pe-Isus Hristos."
+                },
+                {
+                    "type": "refren",
+                    "text": "Făr’ Isus nu pot trăi,\nEl e totul ce-aș dori;\nDe Isus mă prind și-L rog: „Rămâi, rămâi,\nNumai Tu să mă mângâi!”"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Dacă-n viață, griji, nevoi apar mereu,\nNu mă sperii, căci nu lupt cu ele eu!\nLui Isus eu le predau și voi avea,\nFlori frumoase-n calea mea…"
+                },
+                {
+                    "type": "refren",
+                    "text": "Făr’ Isus nu pot trăi,\nEl e totul ce-aș dori;\nDe Isus mă prind și-L rog: „Rămâi, rămâi,\nNumai Tu să mă mângâi!”"
+                }
+            ],
+            "force": false,
+            "ts": "2026-10-25T09:21:29.000Z",
+            "text_hash": "fc1eae318c69ebfd9089d252a6587553c9c83eaba8f29fc6c953358eb6f692d8"
         }
     ]
 }
