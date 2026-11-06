@@ -11,7 +11,7 @@
      - Meniul: primul pas „sfarsitul preludiului (cand incepe cantarea)", apoi strofele; buton „fara preludiu" (marcaj la 0); contorul „preludiu + N bucati".
      - Redarea: cu marcaj de preludiu, de pe titlu se trece la `sfarsit_preludiu - syncLeadMs`; fara el, ramane `syncTitleDelayMs`. `acoperaTot` (oprirea proiectiei la final) numara doar marcajele de strofa.
      - Instalarile vechi: din cod, bucla de avans trece corect de pe titlu pe strofa 1 la marcajul -1; `acoperaTot` le-ar numara unul in plus. De incercat pe 1.6.15 inainte de publicare.
-     - Cele 55 de imnuri publicate: marcajul de preludiu calculat cu `docs/sincronizare/detect.py`, verificat cu urechea pe cateva.
+     - Marcajele calculate (`docs/sincronizare/detect.py`) primesc si preludiul; detectorul il stie deja (`intro` in `rezultate.json`). Nimic nu e publicat: `sync.json` din hangar da 404, aplicatia n-a primit niciodata marcaje de pe server (jurnalul n-are niciun „Marcaje pentru"); cele 55 din cache-ul Mac-ului ownerului sunt lotul de calibrare, pus local pe 2026-08-16 pentru test.
      - Hangarul: regula noua in `docs/ops/contract-hangar-moderare.md`, punctul 3 (pagina de proba + validarea la publicarea `sync.json` sa accepte -1).
      - Imnul 003: marcajele locale de acum (preludiu la 10,4 s, strofele 1–3) se refac in formatul nou.
   3. **Meniul nu explica destul.** Lipseste: ce faci cu preludiul, ca ultima strofa se marcheaza si ea, ca trecerea automata merge doar cu proiectia pornita si imnul pe ecran, ca dupa salvare imnul trebuie ales din nou (pana se repara punctul 1).
