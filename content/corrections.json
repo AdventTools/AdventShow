@@ -1,6 +1,6 @@
 {
     "_descriere": "Feed de corecturi — aplicatia il citeste periodic si aplica intrarile cu seq mai mare decat ultimul aplicat local. Se publica din interfata Hangar, la tabul Propuneri al proiectului. force=true suprascrie inclusiv modificarile proprii ale utilizatorului; altfel ele au prioritate.",
-    "generated": "2026-10-25T12:54:15+00:00",
+    "generated": "2026-11-06T22:08:42+00:00",
     "entries": [
         {
             "seq": 1,
@@ -1685,6 +1685,204 @@
             "force": false,
             "ts": "2026-10-25T12:54:15.000Z",
             "text_hash": "952b4a12e3b2e4d33c01a2edbccc2f6013448fc7946fe47879a01ded5b1c5b26"
+        },
+        {
+            "seq": 54,
+            "category": "Imnuri Speciale",
+            "number": "019",
+            "title": "Mulțumește-I",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Dacă prin furtună te găsești mereu\nNu uita că-n viață nu e totul greu\nTu cu mulțumire să pășești voios\nDomnul te conduce pe drum luminos"
+                },
+                {
+                    "type": "refren",
+                    "text": "Mulțumește-I pentru tot ce ai,\nEști salvat deși pierdut erai,\nMulțumește-I, recnuoscător,\nDomnul totdeauna-ți este ajutor!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Dacă sub povară ești zdrobit, înfrânt,\nȘi sub crucea grea căzut ești la pământ\nNu uita că Domnul poartă crucea ta\nTu voios pe cale să Îi poți cânta"
+                },
+                {
+                    "type": "refren",
+                    "text": "Mulțumește-I pentru tot ce ai,\nEști salvat deși pierdut erai,\nMulțumește-I, recnuoscător,\nDomnul totdeauna-ți este ajutor!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Dacă prea adesea ești îngrijorat\nNu privi la tine, Domnul te-a salvat\nMulțumeește-i astâzi pentru mila Sa,\nDomnul este tot mereu de partea ta"
+                },
+                {
+                    "type": "refren",
+                    "text": "Mulțumește-I pentru tot ce ai,\nEști salvat deși pierdut erai,\nMulțumește-I, recnuoscător,\nDomnul totdeauna-ți este ajutor!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-11-06T20:00:57.000Z",
+            "text_hash": "8bba4f99b58ae0af2ecf45d510a6f36c05319837b38b7aa16c07413b9750c37a",
+            "only_if_absent": true
+        },
+        {
+            "seq": 55,
+            "category": "Imnuri Creștine",
+            "number": "692",
+            "title": "Iar o noapte-am odihnit",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Iar o noapte-am odihnit,\nDe-orice rău am fost păzit…\nTată, cum mereu mi-ai fost,\nFi-mi și astăzi adăpost."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Spirit Sfânt, să-mi dai și sfat,\nSă mă aperi de păcat!\nPe al vieții drum spinos,\nFă să merg victorios!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Binele să-l săvârșesc,\nOrice rău să ocolesc,\nLegea Ta mereu s-o țin\nȘi de Tine demn să fiu!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-11-06T20:09:50.000Z",
+            "text_hash": "bdf7d6486020f62a1dc97500601a9fad9571b80f6ea1a9a9a43fcd6874f0414b"
+        },
+        {
+            "seq": 56,
+            "category": "Imnuri Creștine",
+            "number": "664b",
+            "title": "Ți-aducem, Doamne-acești copii!",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Ți-aducem, Doamne-acești copii\nSă-i binecuvântezi,\nCu mâna Ta, un cer senin\nDeasupra lor s-așezi!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Păstrează-i Tu, în grija Ta,\nSă crească-n har mereu,\nCurați, cu toată inima\nIubind pe Dumnezeu!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Le-ndreaptă ochii către cer\nSă-nvingă lumea rea,\nSă-nvețe-al dragostei mister,\nPe Tine-a Te urma!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Trimite, Doamne, îngeri buni\nSă-i poarte, iubitor,\nSpre cerul plin de mari minuni\nSă fii al lor Păstor!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cu binecuvântarea Ta\nZidește-ne deplin,\nSă fim, când Tu ne vei chema,\nCu Tine-n veci! Amin."
+                }
+            ],
+            "force": false,
+            "ts": "2026-11-06T20:21:38.000Z",
+            "text_hash": "ed13476f8d6094f32074bb97e285d1da2e0f528cf61964df041c3c67ad7b2643"
+        },
+        {
+            "seq": 57,
+            "category": "Imnuri Creștine",
+            "number": "711",
+            "title": "Stau și privesc cerul minunat",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Stau și privesc cerul minunat\nȘi mă întreb cine l-a creat?\nCine conduce strălucitor\nMersul stelelor?"
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul toate le-a creat,\nO, cât e de minunat!\nFără de margini, iubirea Sa\nE speranța mea!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cine-a făcut mierea florilor,\nMii de albine s-o ducă-n zbor,\nIar prin păduri, ciripind zglobii,\nPăsărele mii?"
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul toate le-a creat,\nO, cât e de minunat!\nFără de margini, iubirea Sa\nE speranța mea!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cine aprinde lumina-n zori\nȘi strânge apă s-o pună-n nori?\nCine veghează s-avem oricând\nPâine pe pământ?"
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul toate le-a creat,\nO, cât e de minunat!\nFără de margini, iubirea Sa\nE speranța mea!"
+                },
+                {
+                    "type": "strofa",
+                    "text": "Cine-a făcut după chipul Său\nOameni, copii ai lui Dumnezeu?\nCine-a țesut, bun și iubitor,\nFericirea lor?"
+                },
+                {
+                    "type": "refren",
+                    "text": "Domnul toate le-a creat,\nO, cât e de minunat!\nFără de margini, iubirea Sa\nE speranța mea!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-11-06T20:21:56.000Z",
+            "text_hash": "082ec52c7d4d7bf8ade84f2312c701c6786d647b81644b423b83702b844636b5"
+        },
+        {
+            "seq": 58,
+            "category": "Imnuri Creștine",
+            "number": "730",
+            "title": "Inima e plină de avânt",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Inima e plină, plină de avânt,\nCăci ne cheamă munții să pornim cântând;\nCătre zări senine vulturi suie-n zbor,\nHai și noi pe urma lor!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Dealuri și câmpii, flori și păsări mii,\nToate ne aduc în cale bucurii;\nIar deasupra lor, bun și iubitor,\nEste-al nostru Creator."
+                },
+                {
+                    "type": "strofa",
+                    "text": "O, ce fericire, vesel să privești\nDe pe-un vârf de munte slăvile cerești!\nFarmecul naturii nu te va-nșela\nCând te prinde-n vraja sa!"
+                },
+                {
+                    "type": "refren",
+                    "text": "Dealuri și câmpii, flori și păsări mii,\nToate ne aduc în cale bucurii;\nIar deasupra lor, bun și iubitor,\nEste-al nostru Creator."
+                },
+                {
+                    "type": "strofa",
+                    "text": "Șoapte de iubire se aud în flori\nCa să ne-nsoțească pașii călători,\nPrin păduri înalte, iată, s-au deschis\nDrumuri către Paradis!…"
+                },
+                {
+                    "type": "refren",
+                    "text": "Dealuri și câmpii, flori și păsări mii,\nToate ne aduc în cale bucurii;\nIar deasupra lor, bun și iubitor,\nEste-al nostru Creator."
+                }
+            ],
+            "force": false,
+            "ts": "2026-11-06T20:24:29.000Z",
+            "text_hash": "c65d7c82bd9d56962154cb3ce1ebf225b2c67f2be54b3e1f7d36ede889db05d0"
+        },
+        {
+            "seq": 59,
+            "category": "Imnuri Creștine",
+            "number": "729",
+            "title": "Vine primăvara! (canon)",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Vine, vine primăvara\nCu cântări de bucurii!\nSă ne veselim ca fluturii la soare,\nIarăși, dragi copii!\nSă răspundem cu iubire Domnului,\nCe va face primăvară-n veșnicii!"
+                }
+            ],
+            "force": false,
+            "ts": "2026-11-06T20:25:47.000Z",
+            "text_hash": "8b4ee117460d3a645d573eee00dcc10649b9a3b6cc0807baa5089b5ac9fd9a36"
+        },
+        {
+            "seq": 60,
+            "category": "Imnuri Creștine",
+            "number": "651",
+            "title": "Când și cum? (canon)",
+            "sections": [
+                {
+                    "type": "strofa",
+                    "text": "Când și cum? Când și cum\nNe-om revedea din nou de-acum?"
+                }
+            ],
+            "force": false,
+            "ts": "2026-11-06T20:27:56.000Z",
+            "text_hash": "a56aa73464b47dcabac99452b87661e2cdd668a1cadcbfebcd5d16795cc101e3"
         }
     ]
 }
