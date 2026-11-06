@@ -56,12 +56,14 @@ import {
   AccompanimentDeps, AccompanimentManifest, accompanimentDir, cachedManifest,
   downloadMissing, downloadOne, findItem, localPath, presentNumbers, refreshManifest,
   removeAll as removeAllAccompaniment, stats as accompanimentStats,
-  SyncFile, SyncMark, cachedSync, refreshSync, marksFor, localMarks, setLocalMarks,
+  SyncFile, SyncMark, SyncWarning, cachedSync, refreshSync, syncFor, syncChangedAt, localMarks,
+  setLocalMarks, markLocalSent, pendingLocal,
 } from './accompaniment'
 import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, SystemInfo, compareVersions, flushReportQueue,
   hangarPlatform, listMessages, markRepliesRead, pendingReportCount, refreshMessages, sendReport,
   startHeartbeat, track, unreadReplyCount, updateChannel,
+  syncLogin, syncLogout, syncKeyValid, syncSubmit, syncWork, trackTakeover,
 } from './hangar'
 import {
   parsePresentationFile, seedTemplatesIfNeeded, listTemplates, loadTemplate,
@@ -348,6 +350,8 @@ let contentRoutine: (() => Promise<void>) | null = null
 // Rutina a trecut măcar o dată: abia atunci vestea despre o decizie („imnul tău a
 // fost acceptat") știe și dacă imnul s-a mutat deja în colecția oficială.
 let contentRoutineDone = false
+/** Trimite în hangar marcajele salvate și încă neplecate. Se reia la fiecare heartbeat. */
+let syncFlush: (() => Promise<unknown>) | null = null
 
 /**
  * Îi spunem interfeței câte lucruri îl așteaptă, ca să apară butonul din antet.
@@ -1791,7 +1795,10 @@ app.whenReady().then(() => {
         checkForcedUpdate('launch').catch(err => debugLog('[startup] track:', String(err)))
         // La fiecare bătaie reluăm și rutina de conținut: o corectură publicată
         // sâmbătă dimineața ajunge peste tot până la amiază, fără repornire.
-        startHeartbeat(hangarDeps(), () => contentRoutine?.())
+        startHeartbeat(hangarDeps(), async () => {
+          await contentRoutine?.()
+          await syncFlush?.()
+        })
       } else {
         debugLog('[startup] telemetrie sărită — build nepachetat (dev)')
       }
@@ -1843,7 +1850,43 @@ app.whenReady().then(() => {
   const accAnuntaSchimbarea = () => { if (isWinAlive(win)) win.webContents.send('accompaniment:changed') }
   setImmediate(() => {
     void refreshSync(accDeps).then(s => { accSync = s ?? accSync; accAnuntaSchimbarea() })
+      .then(() => syncFlush?.())
   })
+
+  /**
+   * Marcajele salvate pleacă în hangar, în ordine. Se oprește la prima trimitere
+   * care trebuie reluată (fără internet, limită, cheie căzută): următoarele ar
+   * păți la fel. Un refuz definitiv (`422`, `404`) rămâne scris la imn și nu se
+   * mai retrimite — omul îl vede în meniu.
+   */
+  let syncFlushing: Promise<{ sent: number; pending: number; needLogin: boolean }> | null = null
+  const accFlush = () => {
+    syncFlushing ??= (async () => {
+      let sent = 0
+      let needLogin = false
+      try {
+        for (const p of pendingLocal(accDeps)) {
+          const r = await syncSubmit(hangarDeps(), {
+            n: p.n, variant: '', form: p.form, marks: p.marks, raw: p.raw, at: p.at,
+          })
+          if (r.ok) {
+            markLocalSent(accDeps, p.n, p.at, { ok: true })
+            sent++
+            continue
+          }
+          if (r.retry) { needLogin = r.login; break }
+          markLocalSent(accDeps, p.n, p.at, { ok: false, error: r.error })
+        }
+      } finally {
+        syncFlushing = null
+      }
+      if (sent) debugLog('[Acompaniament] marcaje trimise în hangar:', sent)
+      accAnuntaSchimbarea()
+      return { sent, pending: pendingLocal(accDeps).length, needLogin }
+    })()
+    return syncFlushing
+  }
+  syncFlush = accFlush
 
   /** Manifestul, cu o singură încercare de împrospătare dacă nu-l avem încă. */
   const accEnsureManifest = async (): Promise<AccompanimentManifest | null> => {
@@ -1869,10 +1912,15 @@ app.whenReady().then(() => {
   ipcMain.handle('accompaniment:states', async () => {
     const m = await accEnsureManifest()
     const marcate = new Set([...Object.keys(accSync?.h ?? {}), ...Object.keys(localMarks(accDeps).h)])
+    const warn: Record<number, SyncWarning> = {}
+    for (const [k, w] of Object.entries(accSync?.w ?? {})) {
+      if (Number.isFinite(Number(k)) && (w?.kind === 'short' || w?.kind === 'long')) warn[Number(k)] = w
+    }
     return {
       available: m ? m.items.map(i => i.n) : [],
       present: presentNumbers(accDeps, m),
       synced: [...marcate].map(Number).filter(n => Number.isFinite(n)),
+      warn,
     }
   })
 
@@ -1942,22 +1990,54 @@ app.whenReady().then(() => {
   ipcMain.handle('accompaniment:folder', () => accompanimentDir(accDeps))
 
   /**
-   * Marcajele imnului: întâi cele făcute cu mâna aici, apoi cele publicate.
-   *
-   * Localul bate feed-ul. Cine a stat să marcheze imnul în panou știe mai bine
-   * decât ce a ghicit detectorul, iar o publicare ulterioară n-are voie să-i
-   * șteargă munca sub picioare.
+   * Marcajele imnului, cu forma pentru care s-au făcut și problema înregistrării.
+   * Alegerea între cele făcute aici și cele publicate: `syncFor`.
    */
-  ipcMain.handle('accompaniment:marks', (_e, numar: number) =>
-    marksFor(localMarks(accDeps), Number(numar)) ?? marksFor(accSync, Number(numar)))
+  ipcMain.handle('accompaniment:sync', (_e, numar: number) =>
+    syncFor(localMarks(accDeps), accSync, syncChangedAt(accDeps), Number(numar)))
 
-  /** Scrie marcajele făcute cu mâna. `null` = șterge-le, revino la feed. */
-  ipcMain.handle('accompaniment:set-marks', (_e, numar: number, marks: SyncMark[] | null) => {
-    const n = setLocalMarks(accDeps, Number(numar), marks)
+  ipcMain.handle('accompaniment:marks', (_e, numar: number) =>
+    syncFor(localMarks(accDeps), accSync, syncChangedAt(accDeps), Number(numar))?.marks ?? null)
+
+  /**
+   * Scrie marcajele făcute cu mâna. `null` = șterge-le, revino la feed. Salvarea
+   * pleacă apoi singură în hangar, dacă omul a intrat ca marcator.
+   */
+  ipcMain.handle('accompaniment:set-marks', (_e, numar: number, marks: SyncMark[] | null,
+    extra?: { form?: string | null; raw?: number[] }) => {
+    const n = setLocalMarks(accDeps, Number(numar), marks, extra ?? {})
     debugLog('[Acompaniament] marcaje locale pentru', numar, marks ? marks.length : 0,
       '— imnuri marcate cu mâna:', n)
     accAnuntaSchimbarea()
+    void accFlush()
     return n
+  })
+
+  // ── Marcatorii: parola comună, trimiterea, lista de lucru ──
+  ipcMain.handle('sync:login', async (_e, password: string) => {
+    const r = await syncLogin(hangarDeps(), String(password ?? ''))
+    if (r.ok) void accFlush()
+    return r
+  })
+  ipcMain.handle('sync:logout', () => { syncLogout(hangarDeps()) })
+  ipcMain.handle('sync:status', () => {
+    const k = syncKeyValid(hangarDeps())
+    const f = localMarks(accDeps)
+    const refuzate = Object.entries(f.m ?? {})
+      .filter(([, i]) => i.error).map(([n, i]) => ({ n: Number(n), error: String(i.error) }))
+    const trimise = Object.entries(f.m ?? {}).filter(([, i]) => i.sent).map(([n]) => Number(n))
+    return {
+      loggedIn: !!k, expires: k?.expires ?? 0,
+      pending: pendingLocal(accDeps).map(p => p.n), sent: trimise, refused: refuzate,
+    }
+  })
+  ipcMain.handle('sync:flush', () => accFlush())
+  ipcMain.handle('sync:work', () => syncWork(hangarDeps()))
+  ipcMain.handle('sync:takeover', (_e, numar: number, ms: number) => {
+    // Ca telemetria: doar din aplicația împachetată, ca testele de pe mașina
+    // dezvoltatorului să nu umfle numărătoarea preluărilor.
+    if (!app.isPackaged) return
+    void trackTakeover(hangarDeps(), Number(numar), Number(ms)).catch(() => { /* tăcere */ })
   })
 
   /** Tot ce s-a marcat cu mâna, ca fișier de trimis mai departe. */
@@ -2371,6 +2451,10 @@ app.whenReady().then(() => {
     const ref = projState.contentType === 'bible' ? projState.bibleRef?.match(/^(.*:)(\d+)$/) : null
     if (ref) projState.bibleRef = ref[1] + (parseInt(ref[2], 10) + newIndex - projState.currentIndex)
     sendSlideToProjection(newIndex)
+    // Navigarea de aici e a operatorului (taste apăsate în fereastra de proiecție),
+    // nu a avansului automat: fereastra principală trebuie să știe că a preluat
+    // comanda, altfel avansul automat l-ar împinge înapoi pe strofa lui.
+    if (isWinAlive(win)) win.webContents.send('projection:operator-nav', { currentIndex: newIndex })
   })
 
   // Fereastra de proiecție raportează nivelul de zoom curent → bara de control

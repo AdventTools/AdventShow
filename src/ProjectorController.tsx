@@ -1,6 +1,7 @@
-import { ChevronLeft, ChevronRight, CloudDownload, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudDownload, ListMusic, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { accTitle } from './accompaniment-ui';
+import { accStateLabel, accStateText, accTitle, accWarnText } from './accompaniment-ui';
+import type { SyncWarning } from './vite-env';
 import { useT } from './i18n';
 import { keyAction } from './projectionKeys';
 
@@ -38,8 +39,13 @@ export interface AccompanimentControl {
    * eticheta din asta: ce scrie pe el e ce se întâmplă.
    */
   willPlay?: boolean;
-  /** 'auto' = merge singur; 'preluat' = operatorul a navigat, s-a oprit. */
-  autoState?: 'auto' | 'preluat' | null;
+  /**
+   * Cât cântă: 'auto' = merge singur; 'preluat' = operatorul a navigat, avansul s-a
+   * oprit; 'doar' = doar muzica, strofele au fost de la început ale operatorului.
+   */
+  autoState?: 'auto' | 'preluat' | 'doar' | null;
+  /** Înregistrarea nu se potrivește cu textul; se arată înainte de apăsare. */
+  warn?: SyncWarning | null;
   onToggle: () => void;
   /** Pornește sunetul fără avans automat. Doar la imnurile cu marcaje. */
   onPlayOnly?: () => void;
@@ -184,7 +190,9 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 className={`mr-1 flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
                   accompaniment.playing
                     ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/30 text-emerald-300'
-                    : 'bg-fg/5 hover:bg-fg/10 border-fg/10 text-fg/70 hover:text-fg'
+                    : accompaniment.hasMarks && !accompaniment.needsDownload && !accompaniment.loading
+                      ? 'bg-indigo-500/15 hover:bg-indigo-500/25 border-indigo-400/35 text-indigo-300'
+                      : 'bg-fg/5 hover:bg-fg/10 border-fg/10 text-fg/70 hover:text-fg'
                 }`}
                 title={accTitle(accompaniment)}
               >
@@ -205,7 +213,7 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                     {' '}{accompaniment.sizeMb.toFixed(1)} MB
                   </>
                 ) : accompaniment.hasMarks ? (
-                  <><Music className="w-3 h-3" /> {t('Cântă singur')}</>
+                  <><ListMusic className="w-3 h-3" /> {t('Cântă singur')}</>
                 ) : (
                   <><Music className="w-3 h-3" /> {t('Cântă')}</>
                 )}
@@ -214,10 +222,10 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
                 && accompaniment.onPlayOnly && (
                 <button
                   onClick={accompaniment.onPlayOnly}
-                  className="mr-1 flex items-center px-2 py-1 rounded-lg border border-fg/10 bg-fg/5 hover:bg-fg/10 text-xs text-fg/60 hover:text-fg transition-all"
+                  className="mr-1 flex items-center gap-1.5 px-2 py-1 rounded-lg border border-fg/10 bg-fg/5 hover:bg-fg/10 text-xs text-fg/60 hover:text-fg transition-all"
                   title={t('Doar acompaniamentul — strofele le schimbi tu')}
                 >
-                  <Music className="w-3 h-3" />
+                  <Music className="w-3 h-3" /> {t('Doar muzica')}
                 </button>
               )}
             </>
@@ -270,19 +278,29 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
           că n-are ce face. Iar în clipa în care atinge o săgeată, indicatorul
           verde DISPARE — altfel ar minți exact când contează mai mult. */}
       {accompaniment?.autoState === 'auto' && (
-        <div className="flex items-center gap-2.5 px-4 py-2 bg-emerald-500/15 border-b border-emerald-400/25">
-          <span className="text-xs font-black tracking-widest text-emerald-300">{t('AUTOMAT')}</span>
-          <span className="text-xs text-emerald-100/85">
-            {t('Strofele se schimbă singure. Nu atinge nimic.')}
-          </span>
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-500/20 border-b border-emerald-400/30">
+          <span className="text-sm font-black tracking-widest text-emerald-300">{accStateLabel('auto')}</span>
+          <span className="text-xs text-emerald-100/90">{accStateText('auto')}</span>
         </div>
       )}
       {accompaniment?.autoState === 'preluat' && (
-        <div className="flex items-center gap-2.5 px-4 py-2 bg-amber-500/15 border-b border-amber-400/25">
-          <span className="text-xs font-black tracking-widest text-amber-300">{t('MANUAL')}</span>
-          <span className="text-xs text-amber-100/85">
-            {t('Ai preluat — de aici schimbi tu. Acompaniamentul merge înainte.')}
-          </span>
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-500/20 border-b border-amber-400/30">
+          <span className="text-sm font-black tracking-widest text-amber-300">{accStateLabel('preluat')}</span>
+          <span className="text-xs text-amber-100/90">{accStateText('preluat')}</span>
+        </div>
+      )}
+      {accompaniment?.autoState === 'doar' && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-sky-500/15 border-b border-sky-400/25">
+          <span className="text-sm font-black tracking-widest text-sky-300">{accStateLabel('doar')}</span>
+          <span className="text-xs text-sky-100/90">{accStateText('doar')}</span>
+        </div>
+      )}
+      {/* Problema înregistrării se vede înainte și în timpul cântării: la un imn
+          unde pianul se oprește mai devreme, operatorul trebuie să știe dinainte. */}
+      {accompaniment?.warn && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-500/10 border-b border-amber-400/20">
+          <TriangleAlert className="w-3.5 h-3.5 text-amber-300 flex-shrink-0" />
+          <span className="text-xs text-amber-100/90">{accWarnText(accompaniment.warn)}</span>
         </div>
       )}
 

@@ -36,10 +36,21 @@ export const EN_CONTROLLER: Record<string, string> = {
     ' · A: acompaniament': ' · A: accompaniment',
     'Oprește proiecția (Esc)': 'Stop the projection (Esc)',
     'Oprește': 'Stop',
-    'AUTOMAT': 'AUTOMATIC',
-    'Strofele se schimbă singure. Nu atinge nimic.': "The verses change on their own. Don't touch anything.",
-    'MANUAL': 'MANUAL',
-    'Ai preluat — de aici schimbi tu. Acompaniamentul merge înainte.': "You've taken over — from here you change them. The accompaniment keeps playing.",
+    'MERGE SINGUR': 'RUNS ON ITS OWN',
+    'AI PRELUAT': 'YOU TOOK OVER',
+    'DOAR MUZICA': 'MUSIC ONLY',
+    'Strofele se schimbă singure, pe muzică. Poți prelua oricând, cu săgețile.':
+        'The verses change on their own, with the music. You can take over at any time with the arrow keys.',
+    'Sincronizarea s-a oprit, pentru că ai schimbat tu strofa. De aici le schimbi tu; muzica merge înainte.':
+        'Sync stopped because you changed the verse yourself. From here you change them; the music keeps playing.',
+    'Imnul nu merge singur: strofele le schimbi tu.': 'The hymn does not run on its own: you change the verses.',
+    'Doar muzica': 'Music only',
+    'Pianul cântă {a} strofe din {b}. După strofa {a}, strofele le schimbi tu.':
+        'The piano plays {a} of {b} verses. After verse {a}, you change the verses.',
+    'Pianul mai cântă de {n} ori la final. Ultima strofă rămâne pe ecran.':
+        'The piano plays {n} more times at the end. The last verse stays on screen.',
+    'Pianul mai cântă o dată la final. Ultima strofă rămâne pe ecran.':
+        'The piano plays once more at the end. The last verse stays on screen.',
     'Anterior (←)': 'Previous (←)',
     'Următor (→)': 'Next (→)',
     'T': 'T',

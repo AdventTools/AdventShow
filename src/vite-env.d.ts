@@ -215,6 +215,44 @@ export interface AccompanimentInfo {
   path: string | null;
 }
 
+/** Înregistrarea nu se potrivește cu textul: pianul cântă mai puțin (`short`) sau mai mult (`long`). */
+export interface SyncWarning {
+  kind: 'short' | 'long';
+  /** Câte tururi cântă înregistrarea. */
+  audio: number;
+  /** Câte strofe are textul. */
+  text: number;
+}
+
+export interface HymnSync {
+  /** `[slide, sfarsit_ms, reintrare_ms]`; `slide = -1` e preludiul. */
+  marks: [number, number, number][];
+  /** O literă pe slide (`S` / `R`), forma textului pentru care s-au făcut marcajele. */
+  form: string | null;
+  warn: SyncWarning | null;
+  source: 'local' | 'hangar';
+}
+
+export interface SyncMarkerStatus {
+  loggedIn: boolean;
+  /** Secunde Unix; 0 dacă nu e cunoscut. */
+  expires: number;
+  /** Imnuri salvate aici și încă neplecate în hangar. */
+  pending: number[];
+  sent: number[];
+  /** Trimiteri refuzate definitiv de hangar, cu motivul. */
+  refused: { n: number; error: string }[];
+}
+
+export interface SyncWorkItem {
+  n: number;
+  variant: string;
+  priority: 'calibrare' | 'nesigur' | string;
+  submissions: number;
+  installs: number;
+  mine: number;
+}
+
 export interface AppSettings {
   projectionDisplayId?: number;
   bgType?: BgType;
@@ -358,8 +396,13 @@ export interface IElectronAPI {
   accompaniment: {
     stats: () => Promise<AccompanimentStats>;
     refresh: () => Promise<AccompanimentStats>;
-    /** Ce există pe server, ce e pe disc și ce are marcaje de sincronizare (numere de imn). */
-    states: () => Promise<{ available: number[]; present: number[]; synced: number[] }>;
+    /**
+     * Ce există pe server, ce e pe disc și ce are marcaje de sincronizare (numere de imn),
+     * plus imnurile la care înregistrarea nu se potrivește cu textul.
+     */
+    states: () => Promise<{
+      available: number[]; present: number[]; synced: number[]; warn: Record<number, SyncWarning>;
+    }>;
     onChanged: (cb: () => void) => void;
     offChanged: () => void;
     info: (numar: number) => Promise<AccompanimentInfo | null>;
@@ -373,9 +416,15 @@ export interface IElectronAPI {
     bytes: (numar: number) => Promise<Uint8Array | null>;
     /** `[index_slide, sfarsit_ms, reintrare_ms]`; null daca imnul nu e aprobat. */
     marks: (numar: number) => Promise<[number, number, number][] | null>;
+    /** Marcajele folosite la redare, cu forma pentru care s-au făcut și problema înregistrării. */
+    sync: (numar: number) => Promise<HymnSync | null>;
     refreshMarks: () => Promise<number>;
-    /** Marcaje făcute cu mâna în panoul de administrare. `null` le șterge. */
-    setMarks: (numar: number, marks: [number, number, number][] | null) => Promise<number>;
+    /**
+     * Marcaje făcute cu mâna în panoul de administrare. `null` le șterge. `form` și
+     * `raw` (apăsările dinainte de lipire) pleacă în hangar cu trimiterea.
+     */
+    setMarks: (numar: number, marks: [number, number, number][] | null,
+      extra?: { form?: string | null; raw?: number[] }) => Promise<number>;
     exportMarks: (catre: string) => Promise<number>;
     onProgress: (cb: (numar: number, procent: number) => void) => void;
     offProgress: () => void;
@@ -383,6 +432,16 @@ export interface IElectronAPI {
     offBulk: () => void;
     onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean; discPlin?: boolean }) => void) => void;
     offBulkDone: () => void;
+  };
+  syncMarker: {
+    login: (password: string) => Promise<
+      { ok: true; expires: number } | { ok: false; reason: 'parola' | 'limita' | 'offline' | 'refuz' }>;
+    logout: () => Promise<void>;
+    status: () => Promise<SyncMarkerStatus>;
+    flush: () => Promise<{ sent: number; pending: number; needLogin: boolean }>;
+    /** null = n-am putut aduce lista (fără internet sau fără cheie). */
+    work: () => Promise<SyncWorkItem[] | null>;
+    takeover: (numar: number, ms: number) => Promise<void>;
   };
   registry: {
     submit: () => Promise<boolean>;
@@ -431,6 +490,9 @@ export interface IElectronAPI {
     offSlide: () => void;
     onControllerSync: (cb: (data: { currentIndex: number }) => void) => void;
     offControllerSync: () => void;
+    /** Operatorul a navigat din fereastra de proiecție (tastele apăsate acolo). */
+    onOperatorNav: (cb: (data: { currentIndex: number }) => void) => void;
+    offOperatorNav: () => void;
     onClosed: (cb: () => void) => void;
     offClosed: () => void;
     onScreen: (cb: (data: { conectat: boolean }) => void) => () => void;

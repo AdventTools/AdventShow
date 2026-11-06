@@ -104,9 +104,11 @@ contextBridge.exposeInMainWorld('electron', {
     folder: () => ipcRenderer.invoke('accompaniment:folder'),
     bytes: (numar: number) => ipcRenderer.invoke('accompaniment:bytes', numar),
     marks: (numar: number) => ipcRenderer.invoke('accompaniment:marks', numar),
+    sync: (numar: number) => ipcRenderer.invoke('accompaniment:sync', numar),
     refreshMarks: () => ipcRenderer.invoke('accompaniment:refresh-marks'),
-    setMarks: (numar: number, marks: [number, number, number][] | null) =>
-      ipcRenderer.invoke('accompaniment:set-marks', numar, marks),
+    setMarks: (numar: number, marks: [number, number, number][] | null,
+      extra?: { form?: string | null; raw?: number[] }) =>
+      ipcRenderer.invoke('accompaniment:set-marks', numar, marks, extra),
     exportMarks: (catre: string) => ipcRenderer.invoke('accompaniment:export-marks', catre),
     onProgress: (cb: (numar: number, procent: number) => void) =>
       ipcRenderer.on('accompaniment:progress', (_e, n, p) => cb(n, p)),
@@ -117,6 +119,16 @@ contextBridge.exposeInMainWorld('electron', {
     onBulkDone: (cb: (r: { ok: number; esuate: number; oprit: boolean; discPlin?: boolean }) => void) =>
       ipcRenderer.on('accompaniment:bulk-done', (_e, r) => cb(r)),
     offBulkDone: () => ipcRenderer.removeAllListeners('accompaniment:bulk-done'),
+  },
+
+  // Marcatorii de sincronizare: parola comună, trimiterea în hangar, lista de lucru.
+  syncMarker: {
+    login: (password: string) => ipcRenderer.invoke('sync:login', password),
+    logout: () => ipcRenderer.invoke('sync:logout'),
+    status: () => ipcRenderer.invoke('sync:status'),
+    flush: () => ipcRenderer.invoke('sync:flush'),
+    work: () => ipcRenderer.invoke('sync:work'),
+    takeover: (numar: number, ms: number) => ipcRenderer.invoke('sync:takeover', numar, ms),
   },
 
   contrib: {
@@ -196,6 +208,9 @@ contextBridge.exposeInMainWorld('electron', {
     onControllerSync: (cb: (data: { currentIndex: number }) => void) =>
       ipcRenderer.on('projection:controller-sync', (_e, data) => cb(data)),
     offControllerSync: () => ipcRenderer.removeAllListeners('projection:controller-sync'),
+    onOperatorNav: (cb: (data: { currentIndex: number }) => void) =>
+      ipcRenderer.on('projection:operator-nav', (_e, data) => cb(data)),
+    offOperatorNav: () => ipcRenderer.removeAllListeners('projection:operator-nav'),
     onClosed: (cb: () => void) =>
       ipcRenderer.on('projection:closed', () => cb()),
     offClosed: () => ipcRenderer.removeAllListeners('projection:closed'),

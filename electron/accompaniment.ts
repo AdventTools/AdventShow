@@ -36,13 +36,55 @@ const SYNC_CACHE = 'acompaniament-sync.json'
 const SYNC_LOCAL = 'acompaniament-sync-local.json'
 const TIMEOUT_MS = 15000
 
-/** `[index_slide, sfârșit_ms, reintrare_ms]` — vezi §8 din planul de sincronizare. */
+const SYNC_META = 'acompaniament-sync-meta.json'
+
+/**
+ * `[index_slide, sfârșit_ms, reintrare_ms]` — vezi §8 din planul de sincronizare.
+ * `index_slide = -1` e preludiul: sfârșitul lui e clipa în care începe cântarea.
+ */
 export type SyncMark = [number, number, number]
+
+/** Înregistrarea nu se potrivește cu textul: pianul cântă mai puțin (`short`) sau mai mult (`long`). */
+export interface SyncWarning {
+  kind: 'short' | 'long'
+  /** Câte tururi cântă înregistrarea. */
+  audio: number
+  /** Câte strofe are textul. */
+  text: number
+}
 
 export interface SyncFile {
   v: number
   /** Cheia e numărul imnului, ca text. */
   h: Record<string, SyncMark[]>
+  /** Forma imnului pentru care s-au făcut marcajele: o literă pe slide, `S` sau `R`. */
+  f?: Record<string, string>
+  w?: Record<string, SyncWarning>
+  /** Sfârșitul preludiului, când hangarul îl ține lângă `h`, nu în el. */
+  p?: Record<string, number>
+}
+
+/** Ce s-a întâmplat cu marcajele unui imn făcute pe calculatorul ăsta. */
+export interface LocalSyncInfo {
+  /** Secunde Unix; e și cheia de idempotență a trimiterii în hangar. */
+  at: number
+  /** Apăsările omului, înainte de lipirea de liniște. */
+  raw?: number[]
+  sent?: boolean
+  /** Hangarul a refuzat trimiterea (`422 form` etc.); nu se mai retrimite. */
+  error?: string
+}
+
+export interface LocalSyncFile extends SyncFile {
+  m?: Record<string, LocalSyncInfo>
+}
+
+/** Marcajele pe care le folosește redarea pentru un imn, cu tot ce trebuie știut despre ele. */
+export interface HymnSync {
+  marks: SyncMark[]
+  form: string | null
+  warn: SyncWarning | null
+  source: 'local' | 'hangar'
 }
 
 export interface AccompanimentItem {
@@ -197,7 +239,14 @@ export async function refreshSync(deps: AccompanimentDeps): Promise<SyncFile | n
     const s = (await res.json()) as SyncFile
     if (!s || typeof s.h !== 'object') throw new Error('fișier de marcaje nevalid')
     try {
-      fs.writeFileSync(path.join(deps.userDataDir, SYNC_CACHE), JSON.stringify(s), 'utf-8')
+      const nou = JSON.stringify(s)
+      let vechi = ''
+      try { vechi = fs.readFileSync(path.join(deps.userDataDir, SYNC_CACHE), 'utf-8') } catch { /* primul */ }
+      if (nou !== vechi) {
+        fs.writeFileSync(path.join(deps.userDataDir, SYNC_CACHE), nou, 'utf-8')
+        fs.writeFileSync(path.join(deps.userDataDir, SYNC_META),
+          JSON.stringify({ changedAt: Math.floor(Date.now() / 1000) }), 'utf-8')
+      }
     } catch {
       /* fără cache — mergem cu ce am adus */
     }
@@ -209,23 +258,63 @@ export async function refreshSync(deps: AccompanimentDeps): Promise<SyncFile | n
   }
 }
 
-export function marksFor(sync: SyncFile | null, numar: number): SyncMark[] | null {
-  if (!sync) return null
-  const m = sync.h[String(numar)]
-  return Array.isArray(m) && m.length ? m : null
+/** Când s-a schimbat ultima oară fișierul publicat, în secunde Unix; 0 dacă niciodată. */
+export function syncChangedAt(deps: AccompanimentDeps): number {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(deps.userDataDir, SYNC_META), 'utf-8'))
+    return Number(m?.changedAt) || 0
+  } catch {
+    return 0
+  }
+}
+
+/** Marcajele publicate ale unui imn, cu preludiul pus la locul lui dacă vine separat. */
+function publishedMarks(sync: SyncFile, k: string): SyncMark[] | null {
+  const m = sync.h[k]
+  if (!Array.isArray(m) || !m.length) return null
+  const p = sync.p?.[k]
+  if (typeof p === 'number' && m[0][0] !== -1) return [[-1, p, p], ...m]
+  return m
+}
+
+/**
+ * Ce marcaje folosește redarea: cele făcute aici sau cele publicate.
+ *
+ * Localul câștigă cât timp e munca nouă a omului de la calculatorul ăsta: încă
+ * netrimisă, sau trimisă după ultima publicare. Odată ce hangarul publică după
+ * trimitere, varianta aprobată acolo e cea bună — altfel o corectură publicată
+ * n-ar mai ajunge niciodată la cine a marcat cândva imnul.
+ */
+export function syncFor(
+  local: LocalSyncFile, pub: SyncFile | null, pubChangedAt: number, numar: number,
+): HymnSync | null {
+  const k = String(numar)
+  const lm = local.h[k]
+  const info = local.m?.[k]
+  const pm = pub ? publishedMarks(pub, k) : null
+  const warn = pub?.w?.[k] ?? null
+  if (Array.isArray(lm) && lm.length && (!pm || !info?.sent || info.at > pubChangedAt)) {
+    return { marks: lm, form: local.f?.[k] ?? null, warn, source: 'local' }
+  }
+  if (pm) return { marks: pm, form: pub?.f?.[k] ?? null, warn, source: 'hangar' }
+  return null
 }
 
 // ─────────────────────────────────────────────── marcaje făcute cu mâna ──
 
-export function localMarks(deps: AccompanimentDeps): SyncFile {
+export function localMarks(deps: AccompanimentDeps): LocalSyncFile {
   try {
     const s = JSON.parse(
-      fs.readFileSync(path.join(deps.userDataDir, SYNC_LOCAL), 'utf-8')) as SyncFile
+      fs.readFileSync(path.join(deps.userDataDir, SYNC_LOCAL), 'utf-8')) as LocalSyncFile
     if (s && typeof s.h === 'object') return s
   } catch {
     /* încă niciunul */
   }
   return { v: 1, h: {} }
+}
+
+function writeLocal(deps: AccompanimentDeps, f: LocalSyncFile): void {
+  fs.writeFileSync(path.join(deps.userDataDir, SYNC_LOCAL), JSON.stringify(f), 'utf-8')
 }
 
 /**
@@ -234,19 +323,62 @@ export function localMarks(deps: AccompanimentDeps): SyncFile {
  *
  * Se scriu întregi, nu incremental: fișierul e mic, iar o scriere parțială
  * întreruptă ar lăsa un imn cu jumătate de marcaje — mai rău decât fără.
+ * Preludiul (`-1`) poate fi doar primul în timp; restul se numără de la 0.
+ * Orice salvare e o trimitere nouă, încă neplecată în hangar.
  */
 export function setLocalMarks(
   deps: AccompanimentDeps, numar: number, marks: SyncMark[] | null,
+  extra: { form?: string | null; raw?: number[] } = {},
 ): number {
   const f = localMarks(deps)
+  const k = String(numar)
   if (marks && marks.length) {
-    f.h[String(numar)] = [...marks].sort((a, b) => a[1] - b[1])
-      .map(([, sfarsit, reintrare], i) => [i, Math.round(sfarsit), Math.round(reintrare)])
+    const sortate = [...marks].sort((a, b) => a[1] - b[1])
+    const cuPreludiu = sortate[0][0] === -1
+    f.h[k] = sortate.map(([, sfarsit, reintrare], i) =>
+      [cuPreludiu ? i - 1 : i, Math.round(sfarsit), Math.round(Math.max(sfarsit, reintrare))])
+    if (extra.form) (f.f ??= {})[k] = extra.form
+    else if (f.f) delete f.f[k]
+    let at = Math.floor(Date.now() / 1000)
+    // Două salvări în aceeași secundă ar avea aceeași cheie în hangar și a doua s-ar pierde.
+    if (f.m?.[k] && f.m[k].at >= at) at = f.m[k].at + 1
+    ;(f.m ??= {})[k] = {
+      at,
+      ...(extra.raw?.length ? { raw: extra.raw.map(Math.round) } : {}),
+      sent: false,
+    }
   } else {
-    delete f.h[String(numar)]
+    delete f.h[k]
+    if (f.f) delete f.f[k]
+    if (f.m) delete f.m[k]
   }
-  fs.writeFileSync(path.join(deps.userDataDir, SYNC_LOCAL), JSON.stringify(f), 'utf-8')
+  writeLocal(deps, f)
   return Object.keys(f.h).length
+}
+
+/** Rezultatul unei trimiteri. Se scrie doar dacă între timp nu s-a salvat altceva peste. */
+export function markLocalSent(
+  deps: AccompanimentDeps, numar: number, at: number, rezultat: { ok: true } | { ok: false; error: string },
+): void {
+  const f = localMarks(deps)
+  const info = f.m?.[String(numar)]
+  if (!info || info.at !== at) return
+  if (rezultat.ok) { info.sent = true; delete info.error }
+  else info.error = rezultat.error
+  writeLocal(deps, f)
+}
+
+/** Ce așteaptă să plece în hangar: salvat, netrimis, nerefuzat. */
+export function pendingLocal(deps: AccompanimentDeps): {
+  n: number; form: string | null; marks: SyncMark[]; raw: number[]; at: number
+}[] {
+  const f = localMarks(deps)
+  return Object.entries(f.m ?? {})
+    .filter(([k, info]) => !info.sent && !info.error && Array.isArray(f.h[k]) && f.h[k].length)
+    .map(([k, info]) => ({
+      n: Number(k), form: f.f?.[k] ?? null, marks: f.h[k], raw: info.raw ?? [], at: info.at,
+    }))
+    .filter(x => Number.isFinite(x.n))
 }
 
 export function findItem(

@@ -127,8 +127,6 @@ export const EN_APP_2: Record<string, string> = {
     // AccompanimentButton
     'Se descarcă acompaniamentul… · nu porni': "Downloading accompaniment… · won't start",
     'Se descarcă acompaniamentul…': 'Downloading accompaniment…',
-    'Proiecția avansează singură': 'The projection advances on its own',
-    'auto': 'auto',
     'Descarcă acompaniamentul și cântă': 'Download accompaniment and play',
     'Descarcă acompaniamentul': 'Download accompaniment',
     'Cântă singur': 'Plays on its own',
@@ -140,7 +138,62 @@ export const EN_APP_2: Record<string, string> = {
     'Scrie un număr de imn.': 'Enter a hymn number.',
     'Acompaniamentul nu e pe calculator. Deschide imnul și apasă o dată „Descarcă acompaniamentul".': 'The accompaniment is not on this computer. Open the hymn and press "Download accompaniment" once.',
     'Nu s-a putut citi: {err}': "Couldn't read it: {err}",
-    'Salvat. Imnul {n} merge de acum singur la proiecție.': 'Saved. Hymn {n} will now advance on its own during projection.',
+    'Salvat pe acest calculator, dar hangarul a refuzat marcajele: {err}':
+        'Saved on this computer, but the server refused the marks: {err}',
+    'Salvat pe acest calculator; imnul {n} merge de acum singur aici. Ca să ajungă în hangar, intră ca marcator.':
+        'Saved on this computer; hymn {n} now runs on its own here. To send it to the server, sign in as a marker.',
+    'Salvat; imnul {n} merge de acum singur aici. Pleacă în hangar când e internet.':
+        'Saved; hymn {n} now runs on its own here. It goes to the server once there is internet.',
+    'Salvat și trimis în hangar. Imnul {n} merge de acum singur pe acest calculator.':
+        'Saved and sent to the server. Hymn {n} now runs on its own on this computer.',
+    'Sunt {a} linii pentru strofe și refrene, dar imnul are doar {b} bucăți. Șterge ce e în plus.':
+        'There are {a} lines for verses and choruses, but the hymn only has {b} parts. Delete the extra ones.',
+    'Preludiul se termină înaintea primei linii. Du ascultarea mai devreme și apasă din nou.':
+        'The prelude ends before the first line. Move the playback earlier and press again.',
+    'Se verifică…': 'Checking…',
+    'Parola nu e bună.': 'Wrong password.',
+    'Prea multe încercări. Mai încearcă peste o oră.': 'Too many attempts. Try again in an hour.',
+    'Nu e internet. Intrarea cere legătura cu hangarul.': 'No internet. Signing in needs the connection to the server.',
+    'Hangarul n-a primit intrarea. Mai încearcă mai târziu.': 'The server did not accept the sign-in. Try again later.',
+    'Marcator': 'Marker',
+    'Cu parola de marcator, marcajele pe care le salvezi pleacă în hangar. Acolo le aprobă cineva, iar apoi merg la toate bisericile. Fără ea, rămân doar pe acest calculator.':
+        'With the marker password, the marks you save go to the server. Someone approves them there, and then they reach every church. Without it, they stay on this computer only.',
+    'Ești marcator pe acest calculator până la {d}.': 'You are a marker on this computer until {d}.',
+    'Ești marcator pe acest calculator.': 'You are a marker on this computer.',
+    'Ieși': 'Sign out',
+    'Trimise în hangar: {a} · așteaptă internet: {b}': 'Sent to the server: {a} · waiting for internet: {b}',
+    'refuzate: {lista}': 'refused: {lista}',
+    'parola de marcator': 'marker password',
+    'Intră': 'Sign in',
+    'Cerute de noi — urgente': 'Requested by us — urgent',
+    'Începe cu imnurile de aici, în ordinea din listă. De ele depinde sincronizarea tuturor celorlalte.':
+        'Start with the hymns here, in list order. The sync of all the others depends on them.',
+    'URGENT': 'URGENT',
+    'DE VERIFICAT': 'TO CHECK',
+    'trimis de tine': 'sent by you',
+    'marcat de alți {n}': 'marked by {n} others',
+    'de făcut': 'to do',
+    'Întâi preludiul:': 'First the prelude:',
+    'apeși Enter în clipa în care începe cântarea. Dacă imnul începe direct cu cântarea, apeși „Fără preludiu".':
+        'press Enter the moment the singing starts. If the hymn starts straight with the singing, press "No prelude".',
+    'Apoi fiecare bucată, până la ultima inclusiv:': 'Then every part, up to and including the last one:',
+    'apeși Enter când s-a terminat de cântat. Sus scrie mereu ce urmează.': 'press Enter when it has finished being sung. The top always says what comes next.',
+    'Dacă pianul se oprește înainte de sfârșitul textului,': 'If the piano stops before the end of the text,',
+    'marchezi doar cât cântă pianul.': 'mark only what the piano plays.',
+    'Salvezi.': 'Save.',
+    'Imnul merge apoi singur pe acest calculator: îl încerci cu proiecția pornită și imnul pe ecran, apăsând „Cântă singur".':
+        'The hymn then runs on its own on this computer: try it with the projection on and the hymn on screen, by pressing "Plays on its own".',
+    'Acum marchezi:': "You're now marking:",
+    'sfârșitul preludiului': 'the end of the prelude',
+    'clipa în care începe cântarea': 'the moment the singing starts',
+    'Aici începe cântarea': 'Singing starts here',
+    'Fără preludiu': 'No prelude',
+    'Marcajele astea sunt vechi și n-au preludiul: prima linie e luată drept sfârșitul strofei 1. Du ascultarea în clipa în care începe cântarea și apasă:':
+        'These marks are old and have no prelude: the first line is taken as the end of verse 1. Move the playback to the moment the singing starts and press:',
+    'preludiu + {ok} din {total}': 'prelude + {ok} of {total}',
+    'preludiul': 'the prelude',
+    'strofa {n}, partea a doua': 'verse {n}, second part',
+    'refrenul {n}, partea a doua': 'chorus {n}, second part',
     'Marcajele imnului {n} au fost șterse.': "Hymn {n}'s marks have been cleared.",
     'Nu s-a putut salva: {err}': "Couldn't save: {err}",
     'Scris în fișier: {n} imnuri marcate aici.': 'Written to file: {n} hymns marked here.',

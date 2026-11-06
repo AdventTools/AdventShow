@@ -809,6 +809,8 @@
     color: rgb(var(--fg-rgb) / 0.6);
 }
 .hymn-acc svg { width: 18px; height: 18px; stroke-width: 2.5; }
+/* Singura excepție de la griul comun: o problemă trebuie să sară în ochi. */
+.hymn-acc.atentie { color: #f59e0b; }
 
 .hymn-info {
     display: flex;
@@ -2116,16 +2118,31 @@
     border-color: rgba(16, 185, 129, 0.35);
 }
 
-/* Marca „auto": imnul are marcaje aprobate, proiecția merge singură. */
-.acc-auto {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: rgba(16, 185, 129, 0.25);
+/* Imnul merge singur la apăsare: butonul se deosebește de cel de acompaniament
+   simplu înainte de apăsare, nu abia după. */
+.btn-acc.sync {
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.14);
+    border-color: rgba(99, 102, 241, 0.38);
 }
+
+.btn-acc.sync:hover:not(:disabled) {
+    color: #c7d2fe;
+    background: rgba(99, 102, 241, 0.22);
+}
+
+/* Starea cât cântă, scrisă pe buton: merge singur / ai preluat / doar muzica. */
+.acc-stare {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+.acc-stare.auto { color: #6ee7b7; background: rgba(16, 185, 129, 0.25); }
+.acc-stare.preluat { color: #fcd34d; background: rgba(245, 158, 11, 0.25); }
+.acc-stare.doar { color: #7dd3fc; background: rgba(14, 165, 233, 0.22); }
 
 /* „Doar muzica" — a doua alegere la imnurile care merg singure. Mic și fără
    text: cel mare spune ce se întâmplă de obicei, ăsta e ieșirea din obișnuit. */
@@ -2158,6 +2175,18 @@
     color: #fca5a5;
     background: rgba(239, 68, 68, 0.1);
     border-top: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Înregistrarea nu se potrivește cu textul: se spune înainte de apăsare. */
+.preview-acc-warn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #fcd34d;
+    background: rgba(245, 158, 11, 0.1);
+    border-top: 1px solid rgba(245, 158, 11, 0.22);
 }
 
 .btn-project:hover {
@@ -4231,6 +4260,85 @@ select optgroup {
 
 .admin-cere.gata {
     color: #6ee7b7;
+}
+
+/* Marcaje vechi, fără preludiu: rândul de sub butoane, pe toată lățimea. */
+.admin-cere.atentie {
+    text-align: left;
+    max-width: none;
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    color: #fcd34d;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: var(--radius-sm);
+}
+
+.admin-pasi {
+    margin: 8px 0 0;
+    padding-left: 20px;
+    list-style: decimal;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+
+/* Lista de lucru: imnurile cerute marcatorilor, urgentele întâi. */
+.admin-lucru {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.admin-lucru-imn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    text-align: left;
+    color: rgb(var(--fg-rgb) / 0.85);
+    background: rgb(var(--fg-rgb) / 0.04);
+    border: 1px solid rgb(var(--fg-rgb) / 0.1);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.admin-lucru-imn:hover { background: rgb(var(--fg-rgb) / 0.08); }
+.admin-lucru-imn.acum { border-color: rgba(99, 102, 241, 0.6); }
+.admin-lucru-imn.facut { opacity: 0.6; }
+
+.admin-lucru-prio {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.admin-lucru-prio.nesigur {
+    color: #fcd34d;
+    background: rgba(245, 158, 11, 0.2);
+}
+
+.admin-lucru-titlu {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgb(var(--fg-rgb) / 0.6);
+}
+
+.admin-lucru-stare {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: rgb(var(--fg-rgb) / 0.5);
 }
 
 /* Bulinele: câte bucăți are imnul, câte sunt marcate, care urmează. */

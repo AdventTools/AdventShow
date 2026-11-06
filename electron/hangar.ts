@@ -46,6 +46,10 @@ export interface HangarSettings {
   churchName?: string;
   churchCity?: string;
   updateChannel?: UpdateChannel;
+  /** Cheia de marcator primită pe parola comună; legată de instalare, expiră singură. */
+  syncKey?: string;
+  /** Secunde Unix. */
+  syncKeyExpires?: number;
 }
 
 /**
@@ -152,15 +156,16 @@ function hubStatus(res: Response): number {
   return Number.isFinite(raw) && raw > 0 ? raw : res.status;
 }
 
-async function postJson(url: string, body: unknown, timeoutMs = TIMEOUT_MS):
+async function postJson(url: string, body: unknown, timeoutMs = TIMEOUT_MS,
+  headers: Record<string, string> = {}, method: 'POST' | 'GET' = 'POST'):
   Promise<{ res: Response; json: Record<string, unknown> } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      method,
+      headers: method === 'POST' ? { 'Content-Type': 'application/json', ...headers } : headers,
+      body: method === 'POST' ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
     let json: Record<string, unknown> = {};
@@ -556,4 +561,135 @@ export async function sendLocalInventory(
     return false;
   }
   return true;
+}
+
+// ── Marcatorii de sincronizare ───────────────────────────────────────────────
+//
+// Câțiva oameni de încredere marchează acompaniamentul din aplicație, cu o parolă
+// comună dată de owner. Parola se schimbă o singură dată pe o cheie legată de
+// instalare (30 de zile) și nu se păstrează nicăieri; repo-ul e public, deci nici
+// amprenta ei nu stă în aplicație. Contractul: `docs/ops/raspuns-hangar-moderare.md`.
+
+const SYNC_HUB_URL = `${HANGAR_BASE}/hub/sync.php`;
+
+export type SyncLoginResult =
+  | { ok: true; expires: number }
+  | { ok: false; reason: 'parola' | 'limita' | 'offline' | 'refuz' };
+
+export async function syncLogin(deps: HangarDeps, password: string): Promise<SyncLoginResult> {
+  const out = await postJson(`${SYNC_HUB_URL}?do=login`, {
+    project: HANGAR_KEY, install: installId(deps), password,
+  }, 10000);
+  if (!out) return { ok: false, reason: 'offline' };
+  const status = hubStatus(out.res);
+  const key = typeof out.json.key === 'string' ? out.json.key : '';
+  const expires = Number(out.json.expires) || 0;
+  if (status === 200 && out.json.ok && key) {
+    deps.patchSettings({ syncKey: key, syncKeyExpires: expires });
+    return { ok: true, expires };
+  }
+  deps.log(`[Hangar] marcator: intrare refuzată (${status}):`, String(out.json.error ?? ''));
+  if (status === 403) return { ok: false, reason: 'parola' };
+  if (status === 429) return { ok: false, reason: 'limita' };
+  return { ok: false, reason: 'refuz' };
+}
+
+/** Cheia, dacă există și n-a expirat. */
+export function syncKeyValid(deps: HangarDeps): { key: string; expires: number } | null {
+  const s = deps.getSettings();
+  if (!s.syncKey) return null;
+  const expires = Number(s.syncKeyExpires) || 0;
+  if (expires && expires * 1000 <= Date.now()) return null;
+  return { key: s.syncKey, expires };
+}
+
+export function syncLogout(deps: HangarDeps): void {
+  deps.patchSettings({ syncKey: undefined, syncKeyExpires: undefined });
+}
+
+export interface SyncSubmission {
+  n: number;
+  variant: string;
+  form: string | null;
+  marks: [number, number, number][];
+  raw: number[];
+  at: number;
+}
+
+/**
+ * Rezultatul unei trimiteri. `retry` = să încerce din nou mai târziu (fără
+ * internet, limită, eroare de server); `login` = cheia a căzut, se cere parola.
+ * Restul refuzurilor sunt definitive: aceeași trimitere ar fi refuzată la fel.
+ */
+export type SyncSubmitResult =
+  | { ok: true; submissions: number; installs: number }
+  | { ok: false; retry: boolean; login: boolean; error: string };
+
+export async function syncSubmit(deps: HangarDeps, s: SyncSubmission): Promise<SyncSubmitResult> {
+  const cheie = syncKeyValid(deps);
+  if (!cheie) return { ok: false, retry: true, login: true, error: 'cheie' };
+  const out = await postJson(`${SYNC_HUB_URL}?do=submit`, {
+    install: installId(deps),
+    n: s.n, variant: s.variant, form: s.form ?? '', marks: s.marks, raw: s.raw, at: s.at,
+  }, 15000, { Authorization: `Bearer ${cheie.key}` });
+  if (!out) return { ok: false, retry: true, login: false, error: 'offline' };
+  const status = hubStatus(out.res);
+  if (status === 200 && out.json.ok) {
+    return {
+      ok: true,
+      submissions: Number(out.json.submissions) || 0,
+      installs: Number(out.json.installs) || 0,
+    };
+  }
+  const error = `${status} ${String(out.json.error ?? '')}`.trim();
+  deps.log(`[Hangar] marcaje pentru ${s.n} refuzate:`, error);
+  if (status === 401) {
+    syncLogout(deps);
+    return { ok: false, retry: true, login: true, error };
+  }
+  return { ok: false, retry: status === 429 || status >= 500, login: false, error };
+}
+
+export interface SyncWorkItem {
+  n: number;
+  variant: string;
+  priority: 'calibrare' | 'nesigur' | string;
+  submissions: number;
+  installs: number;
+  mine: number;
+}
+
+/** Lista de imnuri cerute marcatorilor, în ordinea de lucru. null = n-am putut-o aduce. */
+export async function syncWork(deps: HangarDeps): Promise<SyncWorkItem[] | null> {
+  const cheie = syncKeyValid(deps);
+  if (!cheie) return null;
+  const out = await postJson(`${SYNC_HUB_URL}?do=work`, null, 10000,
+    { Authorization: `Bearer ${cheie.key}` }, 'GET');
+  if (!out) return null;
+  const status = hubStatus(out.res);
+  if (status === 401) { syncLogout(deps); return null; }
+  if (status !== 200 || !Array.isArray(out.json.items)) return null;
+  return (out.json.items as Record<string, unknown>[]).map(i => ({
+    n: Number(i.n),
+    variant: String(i.variant ?? ''),
+    priority: String(i.priority ?? ''),
+    submissions: Number(i.submissions) || 0,
+    installs: Number(i.installs) || 0,
+    mine: Number(i.mine) || 0,
+  })).filter(i => Number.isFinite(i.n));
+}
+
+/**
+ * Operatorul a luat comanda în timpul redării sincronizate. Nu e o greșeală:
+ * hangarul numără doar, ca să vadă imnurile preluate mult mai des decât altele.
+ * Fără coadă: un semnal pierdut offline nu schimbă nimic.
+ */
+export async function trackTakeover(deps: HangarDeps, n: number, ms: number): Promise<void> {
+  await postJson(TRACK_URL, {
+    project: HANGAR_KEY,
+    install: installId(deps),
+    event: 'takeover',
+    version: deps.appVersion,
+    sync: { n, variant: '', ms: Math.max(0, Math.round(ms)) },
+  }, 6000);
 }

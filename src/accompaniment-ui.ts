@@ -1,5 +1,36 @@
 import type { AccompanimentControl } from './ProjectorController';
+import type { SyncWarning } from './vite-env';
 import { t } from './i18n';
+
+/**
+ * Ce problemă are înregistrarea, spusă operatorului ÎNAINTE să apese: la un imn
+ * unde pianul se oprește mai devreme, trebuie să știe că de la o strofă încolo
+ * le schimbă el, iar adunarea cântă fără pian.
+ */
+export function accWarnText(w: SyncWarning): string {
+  if (w.kind === 'short') {
+    return t('Pianul cântă {a} strofe din {b}. După strofa {a}, strofele le schimbi tu.',
+      { a: w.audio, b: w.text });
+  }
+  const inPlus = w.audio - w.text;
+  return inPlus > 1
+    ? t('Pianul mai cântă de {n} ori la final. Ultima strofă rămâne pe ecran.', { n: inPlus })
+    : t('Pianul mai cântă o dată la final. Ultima strofă rămâne pe ecran.');
+}
+
+/** Eticheta scurtă a stării, cât cântă: aceeași în previzualizare și în bara de proiecție. */
+export function accStateLabel(s: 'auto' | 'preluat' | 'doar'): string {
+  return s === 'auto' ? t('MERGE SINGUR') : s === 'preluat' ? t('AI PRELUAT') : t('DOAR MUZICA');
+}
+
+/** Fraza de lângă etichetă: ce înseamnă starea pentru cine stă la calculator. */
+export function accStateText(s: 'auto' | 'preluat' | 'doar'): string {
+  if (s === 'auto') return t('Strofele se schimbă singure, pe muzică. Poți prelua oricând, cu săgețile.');
+  if (s === 'preluat') {
+    return t('Sincronizarea s-a oprit, pentru că ai schimbat tu strofa. De aici le schimbi tu; muzica merge înainte.');
+  }
+  return t('Imnul nu merge singur: strofele le schimbi tu.');
+}
 
 /**
  * Ce scrie în tooltipul butonului de acompaniament.
