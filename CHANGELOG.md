@@ -1,5 +1,22 @@
 # Changelog — AdventShow
 
+## v1.6.16 (07 Noiembrie 2026)
+
+### Modificări
+- La imnurile care merg singure, butonul „Cântă singur” arată altfel decât cel de acompaniament simplu, iar butonul mic de lângă el se cheamă acum „Doar muzica”. Cât cântă, butonul și bara de proiecție spun cu litere mari ce se întâmplă: MERGE SINGUR, AI PRELUAT sau DOAR MUZICA.
+- Dacă schimbi strofa în timpul unui imn care merge singur, comanda trece la tine și programul nu te mai împinge înapoi, nici când apeși tastele pe fereastra de proiecție.
+- La imnurile la care pianul cântă mai puțin sau mai mult decât textul, aplicația spune dinainte ce urmează: un semn în lista de imnuri și o frază sub butoane, de exemplu „Pianul cântă 3 strofe din 4. După strofa 3, strofele le schimbi tu.”
+- Un imn al cărui text s-a schimbat față de cel după care s-a făcut sincronizarea (o strofă adăugată sau împărțită pe două ecrane) nu mai merge singur, ca să nu schimbe strofele la momentul greșit.
+- Pentru cei care sincronizează imnurile: se marchează și sfârșitul preludiului, ca prima strofă să apară exact înainte să înceapă cântarea; instrucțiunile sunt pas cu pas; cu parola de marcator, munca pleacă în hangar, iar imnurile cerute de noi apar primele, ca urgente. Marcajele salvate se folosesc imediat, fără să alegi alt imn.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.6.15 (25 Octombrie 2026)
 
 ### Modificări
@@ -19,16 +36,6 @@
 - Numărul de lângă „Imnurile mele" se actualizează imediat când un imn al tău e acceptat în colecția oficială.
 - Pe Windows, aplicația scoate un certificat vechi rămas de la versiunile din primăvară, care nu mai era sigur; unde Windows cere drepturi de administrator, aplicația întreabă întâi.
 - Reparații de securitate la motorul aplicației.
-
----
-
-## Nepublicat
-
-- La imnurile care merg singure, butonul „Cântă singur” arată altfel decât cel de acompaniament simplu, iar butonul mic de lângă el se cheamă acum „Doar muzica”. Cât cântă, butonul și bara de proiecție spun cu litere mari ce se întâmplă: MERGE SINGUR, AI PRELUAT sau DOAR MUZICA.
-- Dacă schimbi strofa în timpul unui imn care merge singur, comanda trece la tine și programul nu te mai împinge înapoi, nici când apeși tastele pe fereastra de proiecție.
-- La imnurile la care pianul cântă mai puțin sau mai mult decât textul, aplicația spune dinainte ce urmează: un semn în lista de imnuri și o frază sub butoane, de exemplu „Pianul cântă 3 strofe din 4. După strofa 3, strofele le schimbi tu.”
-- Un imn al cărui text s-a schimbat față de cel după care s-a făcut sincronizarea (o strofă adăugată sau împărțită pe două ecrane) nu mai merge singur, ca să nu schimbe strofele la momentul greșit.
-- Pentru cei care sincronizează imnurile: se marchează și sfârșitul preludiului, ca prima strofă să apară exact înainte să înceapă cântarea; instrucțiunile sunt pas cu pas; cu parola de marcator, munca pleacă în hangar, iar imnurile cerute de noi apar primele, ca urgente. Marcajele salvate se folosesc imediat, fără să alegi alt imn.
 
 ---
 
