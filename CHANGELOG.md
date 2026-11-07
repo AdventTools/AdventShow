@@ -1,14 +1,8 @@
 # Changelog — AdventShow
 
-## v1.6.18 (07 Noiembrie 2026)
+## v1.7.0 (07 Noiembrie 2026)
 
 ### Modificări
-- Pentru cei care sincronizează imnurile: marcajele salvate pleacă în hangar imediat, nu abia după repornirea aplicației, iar imnul trece din „de făcut” în „trimis de tine”.
-
----
-
-## Nepublicat
-
 - La imnurile cu interludiu de pian între strofe, strofa următoare apare cu câteva secunde înainte să înceapă cântarea ei, nu înainte să se termine strofa de acum: textul rămâne pe ecran până s-a cântat tot.
 - Pentru cei care sincronizează imnurile: se marchează clipa în care începe fiecare strofă (iar la final, când s-a terminat cântarea). Cât asculți, vezi versurile: strofa care se cântă, cu tot textul, plus cea dinainte și cea de după. Unde lipsește preludiul, îl cere primul, sus, cu butonul mare.
 - O trecere greșită se repară dintr-un clic: fiecare trecere are butonul ei (verde = trecută, galben = cea mai apropiată de ce asculți, gri = urmează). Asculți și apeși pe butonul ei exact când auzi trecerea, sau Enter pentru cea galbenă; ▶ de lângă ea o ascultă de la 3 secunde înainte, iar „Anulează ultima mutare” (sau ⌘Z) repară un clic greșit.
@@ -17,6 +11,19 @@
 - Mărirea undei merge ca în programele de sunet: tragi peste o bucată din bara de jos ca s-o mărești, dublu clic arată iar tot imnul, iar cât e mărită apare butonul „Arată tot imnul”. Și ciupitul pe trackpad mărește și micșorează.
 - Textele mici de ajutor (în editorul de imnuri, în Setări, în meniul de sincronizare) au din nou mărimea potrivită.
 - Actualizată o unealtă folosită la construirea aplicației, care avea o problemă de securitate (nu ajungea în aplicația instalată).
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
+## v1.6.18 (07 Noiembrie 2026)
+
+### Modificări
+- Pentru cei care sincronizează imnurile: marcajele salvate pleacă în hangar imediat, nu abia după repornirea aplicației, iar imnul trece din „de făcut” în „trimis de tine”.
 
 ---
 
