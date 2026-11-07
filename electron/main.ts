@@ -1861,30 +1861,34 @@ app.whenReady().then(() => {
    */
   let syncFlushing: Promise<{ sent: number; pending: number; needLogin: boolean }> | null = null
   const accFlush = () => {
-    syncFlushing ??= (async () => {
+    if (syncFlushing) return syncFlushing
+    const run = (async () => {
       let sent = 0
       let needLogin = false
-      try {
-        for (const p of pendingLocal(accDeps)) {
-          const r = await syncSubmit(hangarDeps(), {
-            n: p.n, variant: '', form: p.form, marks: p.marks, raw: p.raw, at: p.at,
-          })
-          if (r.ok) {
-            markLocalSent(accDeps, p.n, p.at, { ok: true })
-            sent++
-            continue
-          }
-          if (r.retry) { needLogin = r.login; break }
-          markLocalSent(accDeps, p.n, p.at, { ok: false, error: r.error })
+      for (const p of pendingLocal(accDeps)) {
+        const r = await syncSubmit(hangarDeps(), {
+          n: p.n, variant: '', form: p.form, marks: p.marks, raw: p.raw, at: p.at,
+        })
+        if (r.ok) {
+          markLocalSent(accDeps, p.n, p.at, { ok: true })
+          sent++
+          continue
         }
-      } finally {
-        syncFlushing = null
+        if (r.retry) { needLogin = r.login; break }
+        markLocalSent(accDeps, p.n, p.at, { ok: false, error: r.error })
       }
       if (sent) debugLog('[Acompaniament] marcaje trimise în hangar:', sent)
       accAnuntaSchimbarea()
       return { sent, pending: pendingLocal(accDeps).length, needLogin }
     })()
-    return syncFlushing
+    // Eliberarea stă în afara corpului. Fără nimic de trimis, corpul se termină
+    // fără să aștepte nimic, deci ÎNAINTE de atribuire: un `finally` dinăuntru
+    // golea variabila prea devreme, apoi atribuirea punea la loc o trimitere deja
+    // încheiată, și nicio salvare de după nu mai pleca până la repornire.
+    syncFlushing = run
+    const elibereaza = () => { if (syncFlushing === run) syncFlushing = null }
+    run.then(elibereaza, elibereaza)
+    return run
   }
   syncFlush = accFlush
 

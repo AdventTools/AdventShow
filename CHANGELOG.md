@@ -9,7 +9,7 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+- Pentru cei care sincronizează imnurile: marcajele salvate pleacă în hangar imediat, nu abia după repornirea aplicației, iar imnul trece din „de făcut” în „trimis de tine”.
 
 ---
 
