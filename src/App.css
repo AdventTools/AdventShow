@@ -4118,11 +4118,81 @@ select optgroup {
     border-radius: var(--radius-sm);
 }
 
-.admin-marks {
+/* Butoanele de trecere: verde = trecută, galben = cea mai apropiată de ascultare
+   (o mută Enter), gri = urmează. Clic = trecerea sare unde e ascultarea acum. */
+.admin-treceri {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
-    margin: 6px 0;
+    margin: 0 0 8px;
+}
+
+.admin-trecere {
+    display: flex;
+    align-items: stretch;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgb(var(--fg-rgb) / 0.14);
+    background: rgb(var(--fg-rgb) / 0.05);
+    overflow: hidden;
+}
+
+.admin-trecere button {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.admin-trecere-muta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.admin-trecere-muta:hover { background: rgb(var(--fg-rgb) / 0.08); }
+
+.admin-trecere-timp {
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.75;
+}
+
+.admin-trecere-asculta {
+    padding: 0 9px;
+    font-size: 11px;
+    border-left: 1px solid rgb(var(--fg-rgb) / 0.14) !important;
+    opacity: 0.8;
+}
+
+.admin-trecere-asculta:hover { opacity: 1; background: rgb(var(--fg-rgb) / 0.08); }
+
+.admin-trecere.viitor { color: var(--text-secondary); }
+
+.admin-trecere.trecut {
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.45);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.admin-trecere.tinta {
+    color: #1c1400;
+    border-color: #fbbf24;
+    background: #fbbf24;
+}
+
+.admin-trecere.tinta .admin-trecere-asculta { border-left-color: rgba(0, 0, 0, 0.2) !important; }
+
+.admin-trecere.ales { box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.8); }
+
+.admin-trecere-mesaj {
+    flex-basis: 100%;
+    margin: 0;
+    color: #fcd34d;
 }
 
 /* ── Masa de lucru la marcaje (panoul ascuns de administrare) ─────────────── */

@@ -124,6 +124,11 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
       // When in a text field, skip arrow handling (global handler manages Escape)
       if (inTextField) return;
 
+      // Meniul de sincronizare are tastele lui: Space și săgețile de acolo nu mută
+      // strofa de pe ecran. Doar el — cu Setările deschise, telecomanda trebuie să
+      // schimbe strofele în continuare.
+      if (document.querySelector('.admin-sync')) return;
+
       // Cât timp rulează un video, nu naviga imnul — altfel Space/săgeata trimite un slide peste video.
       if (videoActiveRef.current) return;
 

@@ -201,6 +201,13 @@ export const EN_APP_2: Record<string, string> = {
     'preludiul': 'the prelude',
     'doar pianul — cântarea începe cu:': 'piano only — the singing starts with:',
     'Arată tot imnul': 'Show the whole hymn',
+    'Mută trecerea acolo unde e ascultarea acum': 'Move the transition to where playback is now',
+    'Ascultă trecerea, de la 3 secunde înainte': 'Listen to the transition, from 3 seconds before',
+    'Anulează ultima mutare': 'Undo the last move',
+    '„{nume}" nu poate trece peste trecerile vecine. Apasă când o auzi, între ele.':
+        '"{nume}" cannot pass the neighbouring transitions. Press when you hear it, between them.',
+    'O trecere e greșită? Ascultă și apasă pe butonul ei de mai jos (sau Enter, pentru cea galbenă) exact când o auzi.':
+        'A transition is wrong? Listen and press its button below (or Enter, for the yellow one) exactly when you hear it.',
     'strofa {n}, partea a doua': 'verse {n}, second part',
     'refrenul {n}, partea a doua': 'chorus {n}, second part',
     'Marcajele imnului {n} au fost șterse.': "Hymn {n}'s marks have been cleared.",

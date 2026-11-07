@@ -1908,8 +1908,10 @@ function App() {
         const handler = (e: KeyboardEvent) => {
             const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
                 || (e.target instanceof HTMLElement && e.target.isContentEditable);
+            // Meniul de sincronizare are tastele lui (Space, Enter, săgețile): aici ar
+            // proiecta imnul pregătit la fiecare Enter de marcare.
             if (modalOpen || feedbackKind || whatsNew || hymnEditor || passwordModal || needsPasswordSetup
-                || needsChurchInfo || forgotPwOpen || setPwOpen) return;
+                || needsChurchInfo || forgotPwOpen || setPwOpen || adminOpen) return;
 
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -4367,6 +4369,11 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const [cuPreludiu, setCuPreludiu] = useState(true);
     /** Apăsările omului, înainte de lipirea de liniște — pleacă în hangar pentru comparație. */
     const apasariRef = useRef<number[]>([]);
+    /** Marcajele de dinaintea fiecărei mutări cu butoanele, pentru „Anulează". */
+    const istoricRef = useRef<Marcaj[][]>([]);
+    const [areIstoric, setAreIstoric] = useState(false);
+    /** Refuzul unei mutări, spus lângă butoane, unde se uită omul. */
+    const [mesajTrecere, setMesajTrecere] = useState('');
     const [marker, setMarker] = useState<SyncMarkerStatus | null>(null);
     const [parolaMarcator, setParolaMarcator] = useState('');
     const [mesajMarcator, setMesajMarcator] = useState('');
@@ -4414,6 +4421,9 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         setOcupat(true); setStare(''); setMarks(null); setPeaks(null);
         setSelectat(null); setModificat(false); setImnCurent(null); setSectiuni([]);
         apasariRef.current = [];
+        istoricRef.current = []; setAreIstoric(false); setMesajTrecere('');
+        // Din căsuța cu numărul: Space ar scrie acolo un spațiu în loc să pornească ascultarea.
+        if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur();
         try {
             const m = await window.electron.accompaniment.marks(n);
             setMarks(m ? m.map(x => [...x] as Marcaj) : []);
@@ -4742,6 +4752,41 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         return t('sfârșitul cântării');
     }, [sectiuni, numeSectiune, t]);
 
+    /**
+     * Butoanele de trecere: linia sare exact unde e ascultarea acum, fără lipirea
+     * de liniște — la trecerile fără pauză (strofă lipită de refren) lipirea ar
+     * muta-o de lângă clic. O trecere nu sare peste vecinele ei.
+     */
+    const mutaTrecereAici = useCallback((idx: number) => {
+        const a = audioRef.current;
+        if (!a || !marks || idx < 0 || idx >= marks.length) return;
+        const ms = Math.round(a.currentTime * 1000);
+        const inainte = idx > 0 ? marks[idx - 1][1] : -1;
+        const dupa = idx + 1 < marks.length ? marks[idx + 1][1] : Infinity;
+        if (ms <= inainte || ms >= dupa) {
+            setMesajTrecere(t('„{nume}" nu poate trece peste trecerile vecine. Apasă când o auzi, între ele.',
+                { nume: numeLinie(marks[idx][0]) }));
+            return;
+        }
+        istoricRef.current = [...istoricRef.current, marks.map(m => [...m] as Marcaj)];
+        setAreIstoric(true);
+        apasariRef.current = [...apasariRef.current, ms];
+        setMarks(marks.map((m, i) => (i === idx ? [m[0], ms, ms] as Marcaj : m)));
+        setModificat(true);
+        setSelectat(idx);
+        setMesajTrecere('');
+    }, [marks, numeLinie, t]);
+
+    const anuleazaMutarea = useCallback(() => {
+        const ist = istoricRef.current;
+        if (!ist.length) return;
+        istoricRef.current = ist.slice(0, -1);
+        setAreIstoric(istoricRef.current.length > 0);
+        setMarks(ist[ist.length - 1]);
+        setModificat(true);
+        setSelectat(null);
+    }, []);
+
     /** Slide-ul al cărui sfârșit se marchează acum; -1 = preludiul. */
     const urmatorulIndex = (marks ? marks.length : 0) - (cuPreludiu ? 1 : 0);
     // Marcajele de dinainte de preludiu (lotul calculat în august): strofele pot fi
@@ -4757,6 +4802,19 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
      * (-1); la marcajele vechi, fără el, numărătoarea pornește de la strofa 1.
      * Peste ultima linie rămâne bucata de după ea — e cea care se marchează acum.
      */
+    /**
+     * Toate bucățile au linie: Enter nu mai adaugă, ci mută trecerea cea mai
+     * apropiată de ascultare — galbenă pe butoane. Cea mai apropiată, nu
+     * următoarea: o linie pusă prea devreme e deja în urmă când auzi trecerea.
+     */
+    const marcareGata = !cerePreludiu && !maiSunt && sectiuni.length > 0 && (marks?.length ?? 0) > 0;
+    const trecereTinta = (() => {
+        if (!marks?.length) return -1;
+        const ms = pozitie * 1000;
+        let best = 0;
+        marks.forEach((m, i) => { if (Math.abs(m[1] - ms) < Math.abs(marks[best][1] - ms)) best = i; });
+        return best;
+    })();
     const seCantaAcum = (() => {
         if (!sectiuni.length) return null;
         const ms = pozitie * 1000;
@@ -4779,11 +4837,22 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         const onKey = (e: KeyboardEvent) => {
             const el = e.target as HTMLElement;
             if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
-            if (e.code === 'Space') { e.preventDefault(); redaPauza(); return; }
+            if (e.code === 'Space') {
+                e.preventDefault();
+                // Un buton rămas apăsat de clic s-ar apăsa din nou la ridicarea tastei.
+                if (document.activeElement instanceof HTMLButtonElement) document.activeElement.blur();
+                redaPauza();
+                return;
+            }
             if (e.code === 'Enter' || e.code === 'NumpadEnter') {
                 e.preventDefault();
-                if (lipsestePreludiul) punePreludiulAici(); else marcheazaAici();
+                if (lipsestePreludiul) punePreludiulAici();
+                else if (marcareGata) mutaTrecereAici(trecereTinta);
+                else marcheazaAici();
                 return;
+            }
+            if (e.code === 'KeyZ' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+                e.preventDefault(); anuleazaMutarea(); return;
             }
             if (selectat !== null && (e.key === 'Delete' || e.key === 'Backspace')) {
                 e.preventDefault(); sterge(selectat); return;
@@ -4805,7 +4874,8 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         };
         window.addEventListener('keydown', onKey, true);
         return () => window.removeEventListener('keydown', onKey, true);
-    }, [selectat, redaPauza, marcheazaAici, punePreludiulAici, lipsestePreludiul, sterge, mutaCu, vedere, durata]);
+    }, [selectat, redaPauza, marcheazaAici, punePreludiulAici, lipsestePreludiul, marcareGata, trecereTinta,
+        mutaTrecereAici, anuleazaMutarea, sterge, mutaCu, vedere, durata]);
 
     // ── desenul: unda mare ───────────────────────────────────────────────────
 
@@ -5277,6 +5347,11 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                                 {sectiuni.length === 0
                                                     ? t('Imnul nu e în carte, deci nu știu câte bucăți are. Marchează cu Enter, în ordine.')
                                                     : t('Toate cele {n} bucăți sunt marcate. Ascultă-le pe rând și salvează.', { n: sectiuni.length })}
+                                                {sectiuni.length > 0 && (
+                                                    <div className="admin-text">
+                                                        {t('O trecere e greșită? Ascultă și apasă pe butonul ei de mai jos (sau Enter, pentru cea galbenă) exact când o auzi.')}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -5302,6 +5377,44 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                                 ? t('preludiu + {ok} din {total}', { ok: slideuriMarcate, total: sectiuni.length })
                                                 : t('{ok} din {total}, fără preludiu', { ok: slideuriMarcate, total: sectiuni.length })}
                                         </span>
+                                    </div>
+                                )}
+
+                                {marks && marks.length > 0 && (
+                                    <div className="admin-treceri">
+                                        {marks.map(([slide, sfarsit], i) => {
+                                            const stareTrecere = i === trecereTinta ? 'tinta'
+                                                : sfarsit < pozitie * 1000 ? 'trecut' : 'viitor';
+                                            return (
+                                                <div key={i}
+                                                    className={`admin-trecere ${stareTrecere} ${i === selectat ? 'ales' : ''}`}>
+                                                    {/* mousedown fără focus: Space de după clic
+                                                        trebuie să rămână al ascultării. */}
+                                                    <button className="admin-trecere-muta"
+                                                        onMouseDown={e => e.preventDefault()}
+                                                        onClick={() => mutaTrecereAici(i)}
+                                                        title={t('Mută trecerea acolo unde e ascultarea acum')}>
+                                                        <span className="admin-trecere-nume">{numeLinie(slide)}</span>
+                                                        <span className="admin-trecere-timp tabular">
+                                                            {mmssSec(sfarsit / 1000)}.{Math.floor((sfarsit % 1000) / 100)}
+                                                        </span>
+                                                    </button>
+                                                    <button className="admin-trecere-asculta"
+                                                        onMouseDown={e => e.preventDefault()}
+                                                        onClick={() => { setSelectat(i); asculta(sfarsit); }}
+                                                        title={t('Ascultă trecerea, de la 3 secunde înainte')}>
+                                                        ▶
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                        {areIstoric && (
+                                            <button className="btn-sm" onMouseDown={e => e.preventDefault()}
+                                                onClick={anuleazaMutarea} title="⌘Z">
+                                                ↶ {t('Anulează ultima mutare')}
+                                            </button>
+                                        )}
+                                        {mesajTrecere && <p className="field-hint admin-trecere-mesaj">{mesajTrecere}</p>}
                                     </div>
                                 )}
 
@@ -5393,21 +5506,6 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                     {' '}<strong>{t('dublu clic')}</strong> {t('ca să vezi iar tot imnul.')}
                                 </p>
                             </>
-                        )}
-
-                        {marks && marks.length > 0 && (
-                            <div className="admin-marks">
-                                {marks.map(([slide, sfarsit], i) => (
-                                    <button
-                                        key={i}
-                                        className={`btn-sm ${i === selectat ? 'on' : ''}`}
-                                        onClick={() => { setSelectat(i); asculta(sfarsit); }}
-                                    >
-                                        {numeLinie(slide)}
-                                        {' · '}{(sfarsit / 1000).toFixed(1)} s
-                                    </button>
-                                ))}
-                            </div>
                         )}
 
                         {marks && selectat !== null && marks[selectat] && (

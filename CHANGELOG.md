@@ -11,6 +11,8 @@
 
 - La imnurile cu interludiu de pian între strofe, strofa următoare apare cu câteva secunde înainte să înceapă cântarea ei, nu înainte să se termine strofa de acum: textul rămâne pe ecran până s-a cântat tot.
 - Pentru cei care sincronizează imnurile: se marchează clipa în care începe fiecare strofă (iar la final, când s-a terminat cântarea). Cât asculți, vezi versurile: strofa care se cântă, cu tot textul, plus cea dinainte și cea de după. Unde lipsește preludiul, îl cere primul, sus, cu butonul mare.
+- O trecere greșită se repară dintr-un clic: fiecare trecere are butonul ei (verde = trecută, galben = cea mai apropiată de ce asculți, gri = urmează). Asculți și apeși pe butonul ei exact când auzi trecerea, sau Enter pentru cea galbenă; ▶ de lângă ea o ascultă de la 3 secunde înainte, iar „Anulează ultima mutare” (sau ⌘Z) repară un clic greșit.
+- Cât e deschis meniul de sincronizare, tastele lui nu mai ajung la ecranul principal: Enter nu mai proiectează imnul pregătit, iar Space și săgețile nu mai schimbă strofele proiecției.
 - În lista imnurilor cerute de noi alegi ce vezi: nefăcute de tine (așa pornește), nefăcute de nimeni sau toate; cele făcute deja de altcineva au semn.
 - Mărirea undei merge ca în programele de sunet: tragi peste o bucată din bara de jos ca s-o mărești, dublu clic arată iar tot imnul, iar cât e mărită apare butonul „Arată tot imnul”. Și ciupitul pe trackpad mărește și micșorează.
 - Textele mici de ajutor (în editorul de imnuri, în Setări, în meniul de sincronizare) au din nou mărimea potrivită.
