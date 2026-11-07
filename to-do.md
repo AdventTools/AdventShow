@@ -31,6 +31,9 @@
 - **Proba de 20 a ownerului:** aceeasi lista (94, 204, 325, 400, 431, 468, 525, 590, 856, 910; 95, 108, 214, 240, 277, 326, 354, 478, 575, 678) — niciuna nu e `A_plus`, deci raman valabile.
 - 807, 699, 865 refacute de owner (2026-11-07, 17:16-17:19); scoase de pe lista de lucru la urmatorul `sync:worklist`.
 - Imnul 910: titlul corectat de owner (dublul spatiu scos).
+- Corecturile de text ale ownerului (782, 792, 860, 865, facute 2026-11-07) pleaca singure in hangar dupa 48 de ore de la ultima atingere (carantina din `contrib.ts`, intentionata), deci de luni 2026-11-09, la urmatoarea verificare zilnica cu aplicatia deschisa; apoi ownerul le accepta in hangar.
+- Ultima linie pusa automat la capatul inregistrarii cand se marcheaza inceputul ultimei strofe: **decis de owner, intra in 1.7.2.**
+- Importul refacut in hangar 2026-11-07 (17:45): 920 de imnuri, 640 cu marcaje sigure, toate „propus”; lista de lucru 175 (nesigure nemarcate inca de om; cele 56 marcate de om scoase). Ownerul asculta proba de 20.
   - Pe Mac-ul ownerului, imnul 003 are marcaje vechi, fara preludiu; meniul le arata ca vechi si cere preludiul.
   - Punctul 4 (versurile in meniu) facut pentru 1.7.0. Punctul 6 (reluarea sincronizarii dupa preluare): ownerul a decis sa NU se faca (2026-11-07).
   - **In 1.7.1 (in hangar, staging, 6 fisiere, 2026-11-07; o promoveaza ownerul):** „Salvează”/„Exportă tot” sus langa „Ascultă”; filtrul porneste pe „Nefăcute de nimeni”; meniul nu se mai inchide cand o linie trasa e eliberata pe fundal (clicul inchide doar daca a inceput pe fundal), iar tragerea continua peste marginea undei; ascultarea nu se mai opreste singura dupa 4,2 s; clic langa o linie fara tragere = doar muta ascultarea.
