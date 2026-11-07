@@ -12,6 +12,9 @@
 
 ## Nepublicat
 
+- Lista de imnuri desenează doar rândurile care se văd: aplicația folosește mai puțină memorie și se mișcă mai repede pe calculatoarele mai slabe.
+- Pentru cei care sincronizează imnurile: după ce marchezi începutul ultimei strofe, linia de final se pune singură la capătul înregistrării.
+- Pe Windows, curățenia certificatului vechi nu se mai oprește când sistemul refuză ștergerea fără drepturi de administrator: cere acordul o singură dată și, dacă nu reușește, reîncearcă abia peste o lună.
 - Versetele biblice au acum aceeași mărime peste tot, oricât de scurt sau de lung e versetul și din orice carte e: textul nu mai sare între pasaje. Tastele + și − schimbă mărimea pentru toată Biblia; doar versetele foarte lungi se micșorează cât să încapă pe ecran.
 
 ---

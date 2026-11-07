@@ -179,7 +179,8 @@ export const EN_APP_2: Record<string, string> = {
     'Apoi fiecare strofă și refren:': 'Then every verse and chorus:',
     'apeși Enter în clipa în care începe. Sus scrie mereu ce urmează.': 'press Enter the moment it starts. The top always says what comes next.',
     'La sfârșit:': 'At the end:',
-    'apeși Enter când s-a terminat de cântat ultimul vers.': 'press Enter when the last line has been sung.',
+    'linia de final se pune singură la capătul înregistrării, după ce marchezi începutul ultimei strofe.':
+        'the final line is placed on its own at the end of the recording once you mark the start of the last verse.',
     'Acum marchezi începutul:': "You're now marking the start of:",
     'Aici începe': 'It starts here',
     'sfârșitul cântării': 'the end of the singing',

@@ -133,6 +133,8 @@ interface AppSettings {
   bibleFont?: string
   // certificatul vechi de semnare a fost scos sau nu a existat (vezi oldCert.ts)
   oldCertDone?: boolean
+  // după o încercare care nu l-a scos, următoarea abia de la data asta (ISO)
+  oldCertNextTry?: string
   adminPasswordHash?: string
   projectionFontSize?: number
   // Mărime separată per tab — dacă lipsește pentru un tab, se folosește
@@ -374,7 +376,15 @@ function notifyDecisions(deps: ContribDeps) {
  */
 async function cleanupOldCert() {
   if (readSettings().oldCertDone) return
+  const urmatoarea = readSettings().oldCertNextTry
+  if (urmatoarea && Date.parse(urmatoarea) > Date.now()) return
   if (projectionWin && !projectionWin.isDestroyed()) return
+  // Ce n-a mers acum se reîncearcă peste o lună, nu la fiecare pornire: omul nu
+  // trebuie întrebat zilnic, iar hangarul nu trebuie să strângă același raport.
+  const amana = () => writeSettings({
+    ...readSettings(),
+    oldCertNextTry: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+  })
   const raporteaza = (rezultat: 'scos' | 'refuzat' | 'esuat', detaliu: string) => {
     sendReport(hangarDeps(), {
       kind: 'crash',
@@ -392,7 +402,12 @@ async function cleanupOldCert() {
       return
     }
     debugLog('[certificat-vechi] găsit în:', gasit.join(', '))
+    // Pus de un installer cu drepturi de administrator, certificatul stă la nivelul
+    // calculatorului, dar Windows îl arată și în lista utilizatorului; de acolo
+    // ștergerea e refuzată („Access is denied"). Refuzul nu oprește curățenia — se
+    // trece la drumul cu acordul administratorului de mai jos (13 rapoarte „eșuat”).
     await removeFromUser(gasit.filter(s => s === 'CurrentUser\\TrustedPublisher'))
+      .catch(err => debugLog('[certificat-vechi] fără drepturi de administrator:', String(err)))
     gasit = await findOldCert()
     if (gasit.length > 0) {
       const opts = {
@@ -410,6 +425,7 @@ async function cleanupOldCert() {
         ? await dialog.showMessageBox(win, opts)
         : await dialog.showMessageBox(opts)
       if (response !== 0) {
+        amana()
         raporteaza('refuzat', `Rămas în: ${gasit.join(', ')}`)
         return
       }
@@ -421,10 +437,12 @@ async function cleanupOldCert() {
       writeSettings({ ...readSettings(), oldCertDone: true })
       raporteaza('scos', 'Certificatul vechi a fost scos de pe calculator.')
     } else {
+      amana()
       raporteaza('refuzat', `Rămas în: ${gasit.join(', ')}`)
     }
   } catch (err) {
     debugLog('[certificat-vechi] eroare:', String(err))
+    amana()
     raporteaza('esuat', String(err).slice(0, 500))
   }
 }

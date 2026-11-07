@@ -1753,14 +1753,6 @@ function App() {
         return true;
     }, [refSearch, books]);
 
-    // ── Scroll selected hymn into view ──
-    useEffect(() => {
-        if (selectedHymnId && hymnListRef.current) {
-            const el = hymnListRef.current.querySelector(`[data-hymn-id="${selectedHymnId}"]`);
-            if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        }
-    }, [selectedHymnId]);
-
     // ── Password helper ──
     const requirePassword = useCallback((action: () => void, title: string) => {
         if (!adminPasswordHash) {
@@ -3191,8 +3183,54 @@ function HymnList({
         ? categories.find(c => c.id === activeCategoryId)?.name ?? t('Toate')
         : t('Toate');
 
+    // ── Doar rândurile vizibile (decizia ownerului, 2026-11-07) ──
+    // Lista întreagă însemna ~14.000 de elemente pe pagină, ținute degeaba în
+    // memorie. Rândurile au aceeași înălțime (un rând de text), deci se desenează
+    // doar cele din fereastră, plus o rezervă, iar restul e spațiu gol de aceeași
+    // înălțime: bara de derulare arată și se poartă ca înainte.
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [vedere, setVedere] = useState({ sus: 0, inaltime: 800 });
+    const [rand, setRand] = useState(38);          // înălțimea unui rând + spațiul dintre rânduri
+    const [deasupra, setDeasupra] = useState(0);   // cât ocupă, în container, ce stă deasupra listei
+    const REZERVA = 12;
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const masoara = () => {
+            setVedere({ sus: el.scrollTop, inaltime: el.clientHeight });
+            const lista = listRef.current;
+            if (lista) setDeasupra(lista.offsetTop - el.offsetTop);
+            const r = lista?.querySelectorAll<HTMLElement>('.hymn-item');
+            if (r && r.length >= 2) {
+                const d = r[1].offsetTop - r[0].offsetTop;
+                if (d > 0) setRand(d);
+            }
+        };
+        masoara();
+        const ro = new ResizeObserver(masoara);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [listRef, hymns.length, catName]);
+
+    const primul = Math.max(0, Math.floor((vedere.sus - deasupra) / rand) - REZERVA);
+    const ultimul = Math.min(hymns.length, Math.ceil((vedere.sus - deasupra + vedere.inaltime) / rand) + REZERVA);
+
+    // Imnul ales (din tastatură sau din căutare) trebuie să se vadă, chiar dacă
+    // rândul lui nu e desenat încă: derulăm după poziția calculată, nu după element.
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el || selectedHymnId == null) return;
+        const idx = hymns.findIndex(h => h.id === selectedHymnId);
+        if (idx < 0) return;
+        const sus = deasupra + idx * rand;
+        if (sus < el.scrollTop) el.scrollTop = sus;
+        else if (sus + rand > el.scrollTop + el.clientHeight) el.scrollTop = sus + rand - el.clientHeight;
+    }, [selectedHymnId, hymns, rand, deasupra]);
+
     return (
-        <div className="content-inner">
+        <div className="content-inner" ref={scrollRef}
+            onScroll={e => setVedere({ sus: e.currentTarget.scrollTop, inaltime: e.currentTarget.clientHeight })}>
             <div className="content-status">
                 {t(hymns.length === 1 ? '{n} imn în' : '{n} imnuri în', { n: hymns.length })} <strong>{catName}</strong>
             </div>
@@ -3207,8 +3245,9 @@ function HymnList({
                     <p>{t('Niciun imn găsit')}</p>
                 </div>
             ) : (
-                <div className="hymn-list" ref={listRef}>
-                    {hymns.map(hymn => {
+                <div className="hymn-list" ref={listRef}
+                    style={{ paddingTop: primul * rand, paddingBottom: Math.max(0, hymns.length - ultimul) * rand }}>
+                    {hymns.slice(primul, ultimul).map(hymn => {
                         const snippetLine = getSnippetFirstLine(hymn.snippet);
                         // În „Toate" arătăm din ce colecție face parte fiecare imn —
                         // același titlu poate exista în mai multe colecții.
@@ -4539,10 +4578,19 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
     const adauga = useCallback((ms: number, asculta_dupa: boolean) => {
         const tms = lipesteDeTacere(Math.max(0, Math.min(durata * 1000, ms)));
-        const noi = scrieMarcaje([...(marks ?? []), [0, tms, tms]]);
+        const lista: Marcaj[] = [...(marks ?? []), [0, tms, tms]];
+        // Tocmai s-a marcat începutul ultimei bucăți: ultima linie (sfârșitul cântării)
+        // se pune singură la capătul înregistrării — acolo o trăgea omul de fiecare dată
+        // (decizia ownerului, 2026-11-07). Dacă pianul se oprește mai devreme, o mută el.
+        const capat = Math.round(durata * 1000);
+        const urmeaza = lista.length - (cuPreludiu ? 1 : 0);
+        if (sectiuni.length > 0 && urmeaza === sectiuni.length - 1 && capat > tms + 1000) {
+            lista.push([0, capat, capat]);
+        }
+        const noi = scrieMarcaje(lista);
         setSelectat(noi.findIndex(m => m[1] === tms));
         if (asculta_dupa) asculta(tms);
-    }, [marks, durata, lipesteDeTacere, scrieMarcaje, asculta]);
+    }, [marks, durata, cuPreludiu, sectiuni.length, lipesteDeTacere, scrieMarcaje, asculta]);
 
     /** Imnul începe direct cu cântarea: preludiul are lungime zero, strofa 1 apare de la început. */
     const faraPreludiu = useCallback(() => {
@@ -5302,7 +5350,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                             <ol className="admin-pasi">
                                 <li><strong>{t('Întâi preludiul:')}</strong> {t('apeși Enter în clipa în care începe cântarea. Dacă imnul începe direct cu cântarea, apeși „Fără preludiu".')}</li>
                                 <li><strong>{t('Apoi fiecare strofă și refren:')}</strong> {t('apeși Enter în clipa în care începe. Sus scrie mereu ce urmează.')}</li>
-                                <li><strong>{t('La sfârșit:')}</strong> {t('apeși Enter când s-a terminat de cântat ultimul vers.')}</li>
+                                <li><strong>{t('La sfârșit:')}</strong> {t('linia de final se pune singură la capătul înregistrării, după ce marchezi începutul ultimei strofe.')}</li>
                                 <li><strong>{t('Dacă pianul se oprește înainte de sfârșitul textului,')}</strong> {t('marchezi doar cât cântă pianul.')}</li>
                                 <li><strong>{t('Salvezi.')}</strong> {t('Imnul merge apoi singur pe acest calculator: îl încerci apăsând „Proiectează cu acompaniament sincronizat".')}</li>
                             </ol>
