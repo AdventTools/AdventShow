@@ -202,6 +202,8 @@ export const EN_APP_2: Record<string, string> = {
     'preludiul': 'the prelude',
     'doar pianul — cântarea începe cu:': 'piano only — the singing starts with:',
     'Arată tot imnul': 'Show the whole hymn',
+    'Identitatea acestui calculator': 'This computer\'s identity',
+    'Copiază': 'Copy',
     'Cererea a fost trimisă. Când autorii o aprobă, aplicația se deblochează singură, în cel mult un minut — păstrează fereastra deschisă sau revino aici. Codul cererii:':
         'The request has been sent. When the authors approve it, the app unlocks on its own within a minute — keep this window open or come back here. Request code:',
     'Dacă ai primit un cod la telefon, îl poți scrie mai jos.': 'If you received a code by phone, you can type it below.',

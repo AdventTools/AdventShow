@@ -62,7 +62,7 @@ import {
 import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, SystemInfo, compareVersions, flushReportQueue,
   hangarPlatform, listMessages, markRepliesRead, pendingReportCount, refreshMessages, sendReport,
-  listAnnouncements, addAnnouncementShown, markAnnouncementRead, takeUnlockGrant, trackUnlockDone,
+  listAnnouncements, addAnnouncementShown, markAnnouncementRead, takeUnlockGrant, trackUnlockDone, installId,
   startHeartbeat, track, unreadReplyCount, updateChannel,
   syncLogin, syncLogout, syncKeyValid, syncSubmit, syncWork, trackTakeover,
 } from './hangar'
@@ -2629,6 +2629,8 @@ app.whenReady().then(() => {
   })
   // Ce a rămas de trimis din lipsă de internet (afișat în Setări).
   ipcMain.handle('feedback:pending', () => pendingReportCount(hangarDeps()))
+  // Identitatea instalării, arătată în Setări → Despre: după ea se caută calculatorul în hangar.
+  ipcMain.handle('app:install-id', () => installId(hangarDeps()))
   // Ce a trimis instalarea și ce i-au răspuns autorii.
   ipcMain.handle('feedback:messages', () => listMessages(hangarDeps()))
   ipcMain.handle('feedback:unread-replies', () => unreadReplyCount(hangarDeps()))

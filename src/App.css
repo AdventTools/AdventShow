@@ -641,6 +641,30 @@
    in a narrow sidebar. Double-class selectors so these ALWAYS beat the shared
    horizontal .update-banner rule (defined later in this file) regardless of
    cascade order — on Windows the banner was rendering inline/cramped. */
+/* Identitatea instalării, în Setări → Despre: se copiază cu un clic. */
+.identitate-instalare {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin-top: -8px;
+}
+
+.identitate-cod {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: rgb(var(--fg-rgb) / 0.05);
+    border: 1px solid rgb(var(--fg-rgb) / 0.1);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.identitate-cod:hover { color: var(--text-primary); }
+
 /* ── Caseta de mesaje, sub colecții (2026-11-07) ──
    Familia casetei de actualizări (chenar, colțuri, spațiere), dar albastră: răspunsurile
    și anunțurile nu se confundă cu „versiune nouă”. Un singur mesaj deschis; când mai

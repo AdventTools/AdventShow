@@ -48,6 +48,7 @@ import {
     AlignVerticalJustifyCenter,
     AlignVerticalJustifyEnd,
     Copy,
+    Check,
     RotateCcw,
     Image as ImageIcon,
     MoreHorizontal,
@@ -6725,6 +6726,33 @@ function CasetaMesaje({ projecting, rev, onChanged }: { projecting: boolean; rev
     );
 }
 
+/**
+ * Identitatea instalării (Setări → Despre), cu buton de copiere: după ea se găsește
+ * calculatorul în hangar — rapoarte, deblocări, marcaje (cerut de owner, 2026-11-07).
+ */
+function IdentitateInstalare() {
+    const t = useT();
+    const [id, setId] = useState('');
+    const [copiat, setCopiat] = useState(false);
+    useEffect(() => { window.electron.feedback.installId().then(setId).catch(() => setId('')); }, []);
+    if (!id) return null;
+    return (
+        <div className="identitate-instalare">
+            <span className="text-fg/40 text-xs">{t('Identitatea acestui calculator')}</span>
+            <button className="identitate-cod" title={t('Copiază')}
+                onClick={() => {
+                    void navigator.clipboard.writeText(id).then(() => {
+                        setCopiat(true);
+                        window.setTimeout(() => setCopiat(false), 1500);
+                    });
+                }}>
+                <code>{id}</code>
+                {copiat ? <Check className="icon-xs" /> : <Copy className="icon-xs" />}
+            </button>
+        </div>
+    );
+}
+
 function MessagesModal({ onClose }: { onClose: () => void }) {
     const t = useT();
     const [list, setList] = useState<SentMessage[] | null>(null);
@@ -7627,6 +7655,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                 {/* Logo + versiune */}
                                 <h2 className="text-3xl font-black text-primary tracking-wide">AdventShow</h2>
                                 <p className="text-fg/40 text-xs -mt-3">{t('versiunea {v}', { v: import.meta.env.VITE_APP_VERSION ?? '1.0.0' })}</p>
+                                <IdentitateInstalare />
                                 <button className="btn-clear" onClick={onShowHistory}>
                                     {t('Ce s-a schimbat în fiecare versiune')}
                                 </button>

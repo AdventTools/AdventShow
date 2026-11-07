@@ -568,6 +568,8 @@ export interface IElectronAPI {
     unreadReplies: () => Promise<number>;
     markRead: (ids: number[]) => Promise<void>;
     /** Anunțurile generale necitite și încă valabile, cu cât au stat deja pe ecran. */
+    /** Identitatea instalării, aceeași ca în hangar. */
+    installId: () => Promise<string>;
     announcements: () => Promise<Announcement[]>;
     announcementShown: (id: number, seconds: number) => Promise<void>;
     announcementRead: (id: number) => Promise<void>;

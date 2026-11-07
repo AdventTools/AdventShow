@@ -297,6 +297,7 @@ contextBridge.exposeInMainWorld('electron', {
     }) => ipcRenderer.invoke('feedback:send', payload) as
       Promise<{ ok: true } | { ok: false; reason: 'rate-limit' | 'refused' | 'offline'; message: string }>,
     pending: () => ipcRenderer.invoke('feedback:pending') as Promise<number>,
+    installId: () => ipcRenderer.invoke('app:install-id') as Promise<string>,
     retryPending: () => ipcRenderer.invoke('feedback:retry-pending') as Promise<number>,
     logPreview: () => ipcRenderer.invoke('feedback:log-preview') as Promise<string>,
     messages: () => ipcRenderer.invoke('feedback:messages'),
