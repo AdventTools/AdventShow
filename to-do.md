@@ -17,6 +17,7 @@
   - Importul in hangar (agentul, prin SSH, cand exista cheia): marcajele calculate cu preludiu si `w` pentru cele 26 de imnuri din `rezultate.json`.
   - Pe Mac-ul ownerului, imnul 003 are marcaje vechi, fara preludiu; meniul le arata ca vechi si cere preludiul.
   - Punctul 4 (versurile in meniu) facut pentru 1.7.0. Punctul 6 (reluarea sincronizarii dupa preluare): ownerul a decis sa NU se faca (2026-11-07).
+  - **Pentru release-ul urmator (cerut de owner, 2026-11-07):** in meniul de marcare, „Salvează” si „Exportă tot” se muta din bara „Vedere:” (sub versuri, langa zoom) sus, in randul de lucru cu „Ascultă” si butonul mare, deasupra versurilor. Acolo se cauta; acum nu se gasesc.
   - 1.7.0 in hangar, in staging, cu toate cele 6 fisiere (2026-11-07; promovata o data prea devreme, fara ZIP-ul de Mac, readusa in staging si completata). O promoveaza ownerul. Cuprinde: butoanele de trecere (clic = linia sare la ascultare, Enter = cea galbena, ⌘Z), tastele meniului izolate de fereastra principala, versurile si filtrul in meniu, preludiul cerut sus, zoom ca in Audition, marcajul = inceputul bucatii urmatoare iar redarea schimba slide-ul dupa `reintrare`, `minimatch` reparat (alerta GitHub 170).
   - Preludiul la instalarile vechi (1.6.15 si mai vechi): ele ar citi `-1` ca strofa la redare, nu la marcare. Ownerul spera sa nu mai foloseasca nimeni versiuni vechi; propunerea cu cheia `p` ramane la hangar, fara raspuns.
 - Sincronizarea, lista de neajunsuri (2026-11-06) — referinta pentru ce s-a facut mai sus:
