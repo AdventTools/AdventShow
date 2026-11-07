@@ -493,9 +493,12 @@ function writeMessages(deps: HangarDeps, m: MessagesFile): void {
  * fără internet. Offline = rămâne ce era.
  */
 export async function refreshMessages(deps: HangarDeps): Promise<void> {
+  // `version` și `platform`: hangarul alege după ele ce anunțuri primește instalarea.
   const out = await postJson(`${REPORT_URL}?do=replies`, {
     project: HANGAR_KEY,
     install: installId(deps),
+    version: deps.appVersion,
+    platform: hangarPlatform(),
   }, 10000);
   if (!out || hubStatus(out.res) !== 200 || !out.json.ok || !Array.isArray(out.json.items)) return;
   const m = readMessages(deps);
