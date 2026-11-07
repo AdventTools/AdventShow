@@ -7,6 +7,8 @@ import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, Pro
 const MARIME_IMPLICITA = 1.2;
 const MARIME_MIN = 0.6;
 const MARIME_MAX = 3.0;
+/** Baza versetelor, în % din înălțime, înainte de mărimea din Setări (+ / −). */
+const MARIME_VERSET_VH = 6;
 
 function marimeaTextului(s: AppSettings, tab: 'imnuri' | 'biblia'): number {
   return s.projectionFontSizeByTab?.[tab] ?? s.projectionFontSize ?? MARIME_IMPLICITA;
@@ -553,29 +555,16 @@ export function ProjectionPage() {
   }, [data?.sections, isBible, textFont, fontSizeMultiplier, resizeTick]);
   const hymnFontCss = hymnFontSize ? `calc(${hymnFontSize.toFixed(1)}px * ${shrinkFactor})` : null;
 
-  // ── Font uniform pentru toată pasajul biblic încărcat ──
-  // Aceeași idee ca la imnuri: analizăm TOATE versetele încărcate acum (nu doar
-  // cel curent) și alegem cea mai strânsă potrivire, ca fontul să nu mai sară
-  // vizibil când navighezi de la un verset scurt la unul lung în același pasaj.
-  const bibleFontSize = (() => {
-    if (!data || data.sections.length === 0) return null;
-    if (!isBible) return null;
-
-    // Dimensionare pe ARIE, nu pe „cea mai lungă linie". Versetele biblice sunt
-    // proză continuă care se ÎNCADREAZĂ prin wrapping — o formulă pe linie
-    // presupune o singură linie ne-întreruptă și dă font minuscul la versete
-    // lungi. Aici: font ∝ 1/√(nr. caractere), care umple coerent aria;
-    // plafonat SUS ca textele scurte să NU acopere tot ecranul și JOS ca
-    // textele lungi să rămână lizibile. Bucla de shrink de mai sus corectează
-    // apoi orice depășire reală măsurată.
-    let worstVh = 11;
-    for (const sec of data.sections) {
-      const charCount = Math.max(1, sec.text.trim().length);
-      const sizeVh = Math.max(4.5, Math.min(11, 105 / Math.sqrt(charCount)));
-      worstVh = Math.min(worstVh, sizeVh);
-    }
-    return `calc(clamp(2.5rem, ${worstVh.toFixed(2)}vh, 11rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;
-  })();
+  // ── O singură mărime pentru toată Biblia (decizia ownerului, 2026-11-07) ──
+  // Înainte, mărimea venea din cel mai lung verset al capitolului: între capitole
+  // textul sărea de la 5 la 11% din înălțime, iar o biserică a raportat că „ba e
+  // cu litere mici, ba cu litere mari". Acum e aceeași peste tot, ca într-o
+  // prezentare îngrijită; + și − o schimbă pentru toată Biblia. Măsurat pe cele
+  // 31.102 versete: la 6% din înălțime încap toate, mai puțin ~0,5% dintre cele
+  // mai lungi, pe care bucla de micșorare de mai sus le strânge doar pe ele.
+  const bibleFontSize = data && data.sections.length > 0 && isBible
+    ? `calc(clamp(2.5rem, ${MARIME_VERSET_VH}vh, 11rem) * ${fontSizeMultiplier} * ${shrinkFactor})`
+    : null;
 
   // Dynamic font size: hymn uniform, bible uniform, sau fallback per-secțiune
   let dynamicFontSize = `calc(clamp(2.5rem, 5.5vw, 7rem) * ${fontSizeMultiplier} * ${shrinkFactor})`;

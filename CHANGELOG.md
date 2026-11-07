@@ -12,7 +12,7 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+- Versetele biblice au acum aceeași mărime peste tot, oricât de scurt sau de lung e versetul și din orice carte e: textul nu mai sare între pasaje. Tastele + și − schimbă mărimea pentru toată Biblia; doar versetele foarte lungi se micșorează cât să încapă pe ecran.
 
 ---
 
