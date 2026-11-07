@@ -1,5 +1,21 @@
 # Changelog — AdventShow
 
+## v1.7.1 (07 Noiembrie 2026)
+
+### Modificări
+- Pentru cei care sincronizează imnurile: meniul nu se mai închide singur când tragi ultima linie până la capăt și dai drumul mouse-ului în afara undei; linia se poate trage și peste margine.
+- Ascultarea nu se mai oprește singură după câteva secunde. Un clic lângă o linie mută doar ascultarea, fără să miște linia.
+- „Salvează” și „Exportă tot” stau acum sus, lângă „Ascultă”, iar „Salvează” se colorează cât ai ceva nesalvat.
+- Lista imnurilor cerute pornește pe „Nefăcute de nimeni”.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.7.0 (07 Noiembrie 2026)
 
 ### Modificări
@@ -11,15 +27,6 @@
 - Mărirea undei merge ca în programele de sunet: tragi peste o bucată din bara de jos ca s-o mărești, dublu clic arată iar tot imnul, iar cât e mărită apare butonul „Arată tot imnul”. Și ciupitul pe trackpad mărește și micșorează.
 - Textele mici de ajutor (în editorul de imnuri, în Setări, în meniul de sincronizare) au din nou mărimea potrivită.
 - Actualizată o unealtă folosită la construirea aplicației, care avea o problemă de securitate (nu ajungea în aplicația instalată).
-
----
-
-## Nepublicat
-
-- Pentru cei care sincronizează imnurile: meniul nu se mai închide singur când tragi ultima linie până la capăt și dai drumul mouse-ului în afara undei; linia se poate trage și peste margine.
-- Ascultarea nu se mai oprește singură după câteva secunde. Un clic lângă o linie mută doar ascultarea, fără să miște linia.
-- „Salvează” și „Exportă tot” stau acum sus, lângă „Ascultă”, iar „Salvează” se colorează cât ai ceva nesalvat.
-- Lista imnurilor cerute pornește pe „Nefăcute de nimeni”.
 
 ---
 
