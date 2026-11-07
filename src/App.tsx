@@ -1107,9 +1107,12 @@ function App() {
      * Se urmărește `audio.currentTime`, nu un ceas de perete: dacă redarea se
      * bâlbâie, marcajele rămân lipite de muzică, nu de secundele scurse.
      *
-     * Slide-ul următor apare cu 3 secunde ÎNAINTE de sfârșitul celui de acum —
-     * oamenii au citit deja și știu finalul. La secțiuni scurte avansul scade la
-     * un sfert din durata lor, ca textul să nu dispară cu o treime nescântată.
+     * Slide-ul următor apare cu 3 secunde ÎNAINTE să înceapă cântarea lui
+     * (reintrarea, al treilea câmp al marcajului) — oamenii au citit deja și știu
+     * finalul. Fără interludiu de pian, reintrarea e chiar sfârșitul bucății de
+     * acum; cu interludiu, textul vechi rămâne până s-a terminat de cântat
+     * (decizia ownerului, 2026-11-07). La secțiuni scurte avansul scade la un
+     * sfert din durata lor, ca textul să nu dispară cu o treime nescântată.
      * Ultima secțiune nu se schimbă niciodată înainte: curge până la capăt.
      *
      * Preludiul (marcajul `-1`) intră în aceeași buclă: e „secțiunea" titlului,
@@ -1126,12 +1129,13 @@ function App() {
             let tinta = -1;
             for (let i = 0; i < marks.length - 1; i++) {
                 const sfarsit = marks[i][1];
+                const urmatoareaIncepe = Math.max(sfarsit, marks[i][2]);
                 const inceput = i === 0 ? 0 : marks[i - 1][2];
                 // Protecția de 25% NU e configurabilă: e plasă de siguranță, nu
                 // preferință. La o secțiune de 10s, 3s ar șterge textul cu o treime
                 // nescântată, oricât ar fi cerut cineva în setări.
                 const avans = Math.min(accLead.current, (sfarsit - inceput) * 0.25);
-                if (acum < sfarsit - avans) break;
+                if (acum < urmatoareaIncepe - avans) break;
                 tinta = marks[i + 1][0];
             }
             // Numai înainte. Dacă operatorul a pornit muzica stând pe o strofă mai
@@ -4367,6 +4371,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const [parolaMarcator, setParolaMarcator] = useState('');
     const [mesajMarcator, setMesajMarcator] = useState('');
     const [lucru, setLucru] = useState<SyncWorkItem[] | null>(null);
+    /**
+     * Ce arată lista urgentelor. Implicit doar ce n-ai trimis tu: cele făcute de
+     * tine n-au ce căuta în fața ochilor. Cele făcute doar de alții rămân, cu
+     * semn: același imn marcat de doi oameni e exact ce cere comparația.
+     */
+    const [filtruLucru, setFiltruLucru] = useState<'nefacuteDeMine' | 'nefacute' | 'toate'>('nefacuteDeMine');
     const [titluri, setTitluri] = useState<Record<number, string>>({});
     const [selectat, setSelectat] = useState<number | null>(null);
     const [modificat, setModificat] = useState(false);
@@ -4378,7 +4388,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hartaRef = useRef<HTMLCanvasElement>(null);
     const trageRef = useRef<number | null>(null);
-    const trageHartaRef = useRef(false);
+    /**
+     * Bara de jos, ca în Audition: tras peste o bucată = mărești bucata aia; tras
+     * de dreptunghi (când e mărit) = te muți; dublu clic = tot imnul.
+     */
+    const trageHartaRef = useRef<{ fel: 'muta' | 'alege'; deLa: number; xDeLa: number } | null>(null);
+    const [alegereHarta, setAlegereHarta] = useState<[number, number] | null>(null);
     const opresteLaRef = useRef<number | null>(null);
 
     useEffect(() => {
@@ -4528,16 +4543,17 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     /** La marcajele vechi, fără preludiu: îl pune acolo unde se ascultă acum. */
     const punePreludiulAici = useCallback(() => {
         const a = audioRef.current;
-        if (!a || !marks) return;
+        if (!a) return;
+        const vechi = marks ?? [];
         const ms = a.currentTime * 1000;
-        if (marks.length && ms >= marks[0][1]) {
+        if (vechi.length && ms >= vechi[0][1]) {
             setStare(t('Preludiul se termină înaintea primei linii. Du ascultarea mai devreme și apasă din nou.'));
             return;
         }
         apasariRef.current = [...apasariRef.current, Math.round(ms)];
         setCuPreludiu(true);
         const tms = lipesteDeTacere(ms);
-        scrieMarcaje([[0, tms, tms], ...marks], true);
+        scrieMarcaje([[0, tms, tms], ...vechi], true);
         setSelectat(0);
         setStare('');
     }, [marks, lipesteDeTacere, scrieMarcaje, t]);
@@ -4715,11 +4731,38 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         return s.continuare ? t('strofa {n}, partea a doua', { n: cateDinTip }) : t('strofa {n}', { n: cateDinTip });
     }, [sectiuni, t]);
 
+    /**
+     * Ce arată o linie: momentul în care ÎNCEPE bucata de după ea (decizia
+     * ownerului, 2026-11-07), iar după ultima, sfârșitul cântării. Fără imnul în
+     * carte nu știm ce urmează, deci rămâne numărul bucății.
+     */
+    const numeLinie = useCallback((slide: number): string => {
+        if (!sectiuni.length) return t('bucata {n}', { n: slide + 1 });
+        if (slide + 1 < sectiuni.length) return t('începe {nume}', { nume: numeSectiune(slide + 1) });
+        return t('sfârșitul cântării');
+    }, [sectiuni, numeSectiune, t]);
+
     /** Slide-ul al cărui sfârșit se marchează acum; -1 = preludiul. */
     const urmatorulIndex = (marks ? marks.length : 0) - (cuPreludiu ? 1 : 0);
-    const cerePreludiu = cuPreludiu && urmatorulIndex === -1;
+    // Marcajele de dinainte de preludiu (lotul calculat în august): strofele pot fi
+    // toate gata, dar preludiul tot lipsește — și se cere primul, ca la un imn nou,
+    // nu într-o casetă pe lângă un „gata" care trimite omul la salvare.
+    const lipsestePreludiul = !cuPreludiu;
+    const cerePreludiu = lipsestePreludiul || urmatorulIndex === -1;
     const maiSunt = cerePreludiu || (sectiuni.length > 0 && urmatorulIndex < sectiuni.length);
     const slideuriMarcate = (marks ?? []).filter(m => m[0] >= 0).length;
+    /**
+     * Ce se cântă în clipa ascultată: câte linii au rămas în urmă spune bucata.
+     * Cu preludiu (sau cât încă se așteaptă marcajul lui), prima bucată e preludiul
+     * (-1); la marcajele vechi, fără el, numărătoarea pornește de la strofa 1.
+     * Peste ultima linie rămâne bucata de după ea — e cea care se marchează acum.
+     */
+    const seCantaAcum = (() => {
+        if (!sectiuni.length) return null;
+        const ms = pozitie * 1000;
+        const inUrma = (marks ?? []).filter(m => m[1] < ms).length;
+        return Math.min(inUrma - (cuPreludiu ? 1 : 0), sectiuni.length - 1);
+    })();
     const primulRand = (i: number) => (sectiuni[i]?.text.split('\n')[0] ?? '').slice(0, 60);
 
     /** Butonul mare: pune linia acolo unde se ascultă acum. */
@@ -4738,7 +4781,9 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
             if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
             if (e.code === 'Space') { e.preventDefault(); redaPauza(); return; }
             if (e.code === 'Enter' || e.code === 'NumpadEnter') {
-                e.preventDefault(); marcheazaAici(); return;
+                e.preventDefault();
+                if (lipsestePreludiul) punePreludiulAici(); else marcheazaAici();
+                return;
             }
             if (selectat !== null && (e.key === 'Delete' || e.key === 'Backspace')) {
                 e.preventDefault(); sterge(selectat); return;
@@ -4760,7 +4805,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         };
         window.addEventListener('keydown', onKey, true);
         return () => window.removeEventListener('keydown', onKey, true);
-    }, [selectat, redaPauza, marcheazaAici, sterge, mutaCu, vedere, durata]);
+    }, [selectat, redaPauza, marcheazaAici, punePreludiulAici, lipsestePreludiul, sterge, mutaCu, vedere, durata]);
 
     // ── desenul: unda mare ───────────────────────────────────────────────────
 
@@ -4806,7 +4851,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
             g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h - 12); g.stroke();
             g.fillStyle = ales ? 'rgba(250,204,21,0.95)' : 'rgba(16,185,129,0.95)';
             g.font = 'bold 10px sans-serif';
-            g.fillText(slide === -1 || sectiuni[slide] ? numeSectiune(slide) : `${slide + 1}`, x + 4, 12);
+            g.fillText(numeLinie(slide), x + 4, 12);
         });
 
         if (pozitie >= v0 && pozitie <= v1) {
@@ -4814,7 +4859,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
             g.lineWidth = 2;
             g.beginPath(); g.moveTo(xLa(pozitie), 0); g.lineTo(xLa(pozitie), h); g.stroke();
         }
-    }, [peaks, marks, durata, vedere, selectat, pozitie, sectiuni, numeSectiune]);
+    }, [peaks, marks, durata, vedere, selectat, pozitie, numeLinie]);
 
     // ── desenul: harta întregului imn ────────────────────────────────────────
 
@@ -4849,7 +4894,16 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         g.strokeRect(x0 + 1, 1, Math.max(3, x1 - x0 - 2), h - 2);
         g.fillStyle = 'rgba(255,255,255,0.9)';
         g.fillRect((pozitie / durata) * w, 0, 1, h);
-    }, [peaks, marks, durata, vedere, pozitie]);
+        if (alegereHarta) {
+            const a = (Math.min(...alegereHarta) / durata) * w;
+            const b = (Math.max(...alegereHarta) / durata) * w;
+            g.fillStyle = 'rgba(251,191,36,0.25)';
+            g.fillRect(a, 0, b - a, h);
+            g.strokeStyle = 'rgba(251,191,36,0.95)';
+            g.lineWidth = 2;
+            g.strokeRect(a + 1, 1, Math.max(2, b - a - 2), h - 2);
+        }
+    }, [peaks, marks, durata, vedere, pozitie, alegereHarta]);
 
     // ── mouse ────────────────────────────────────────────────────────────────
 
@@ -4906,6 +4960,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
      */
     const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
         if (!peaks || durata <= 0) return;
+        // Ciupitul pe trackpad (și Ctrl + rotița) vine tot ca rotiță, cu Ctrl apăsat:
+        // apropie sau depărtează, ca oriunde altundeva pe Mac.
+        if (e.ctrlKey) {
+            zoom(e.deltaY < 0 ? 0.8 : 1.25);
+            return;
+        }
         const [v0, v1] = vedere;
         const span = v1 - v0;
         if (span >= durata) return;
@@ -4934,10 +4994,44 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     };
 
     const pePozitiaHartii = (clientX: number) => {
-        const tms = timpLaX(clientX, hartaRef.current, [0, durata]);
+        const sec = timpLaX(clientX, hartaRef.current, [0, durata]);
         const span = vedere[1] - vedere[0];
-        const s = Math.max(0, Math.min(Math.max(0, durata - span), tms - span / 2));
+        const s = Math.max(0, Math.min(Math.max(0, durata - span), sec - span / 2));
         setVedere([s, s + span]);
+    };
+
+    const hartaJos = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (durata <= 0) return;
+        const sec = timpLaX(e.clientX, hartaRef.current, [0, durata]);
+        // În dreptunghi, cât timp e mărit: îl muți. Altfel începi o alegere.
+        const inDreptunghi = !totVizibil && sec >= vedere[0] && sec <= vedere[1];
+        trageHartaRef.current = { fel: inDreptunghi ? 'muta' : 'alege', deLa: sec, xDeLa: e.clientX };
+    };
+
+    const hartaMiscare = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const tr = trageHartaRef.current;
+        if (!tr) return;
+        if (tr.fel === 'muta') { pePozitiaHartii(e.clientX); return; }
+        if (Math.abs(e.clientX - tr.xDeLa) < 4) return;
+        setAlegereHarta([tr.deLa, timpLaX(e.clientX, hartaRef.current, [0, durata])]);
+    };
+
+    const hartaSus = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const tr = trageHartaRef.current;
+        trageHartaRef.current = null;
+        if (!tr) return;
+        if (tr.fel === 'alege') {
+            const pana = timpLaX(e.clientX, hartaRef.current, [0, durata]);
+            setAlegereHarta(null);
+            if (Math.abs(e.clientX - tr.xDeLa) >= 4) {
+                // Cel puțin 2 secunde: mai aproape de-atât unda nu mai spune nimic.
+                let a = Math.min(tr.deLa, pana), b = Math.max(tr.deLa, pana);
+                if (b - a < 2) { const m = (a + b) / 2; a = Math.max(0, m - 1); b = Math.min(durata, a + 2); }
+                setVedere([a, b]);
+            } else if (!totVizibil) {
+                pePozitiaHartii(e.clientX);   // un clic simplu duce dreptunghiul acolo
+            }
+        }
     };
 
     const mmssms = (ms: number) =>
@@ -5048,25 +5142,46 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                 <h4>{t('Cerute de noi — urgente')}</h4>
                                 <p>{t('Începe cu imnurile de aici, în ordinea din listă. De ele depinde sincronizarea tuturor celorlalte.')}</p>
                             </div>
-                            <div className="admin-lucru">
-                                {lucru.map(i => (
-                                    <button key={`${i.n}${i.variant}`}
-                                        className={`admin-lucru-imn ${i.mine > 0 ? 'facut' : ''} ${imnCurent === i.n ? 'acum' : ''}`}
-                                        onClick={() => void incarca(i.n)}>
-                                        <span className={`admin-lucru-prio ${i.priority}`}>
-                                            {i.priority === 'calibrare' ? t('URGENT') : t('DE VERIFICAT')}
-                                        </span>
-                                        <strong>{i.n}{i.variant}</strong>
-                                        <span className="admin-lucru-titlu">{titluri[i.n] ?? ''}</span>
-                                        <span className="admin-lucru-stare">
-                                            {i.mine > 0
-                                                ? t('trimis de tine')
-                                                : i.installs > 0
-                                                    ? t('marcat de alți {n}', { n: i.installs })
-                                                    : t('de făcut')}
-                                        </span>
+                            <div className="admin-filtru">
+                                {([
+                                    ['nefacuteDeMine', t('Nefăcute de mine'), lucru.filter(i => i.mine === 0).length],
+                                    ['nefacute', t('Nefăcute de nimeni'), lucru.filter(i => i.installs === 0).length],
+                                    ['toate', t('Toate'), lucru.length],
+                                ] as const).map(([cheie, eticheta, cate]) => (
+                                    <button key={cheie}
+                                        className={`btn-sm ${filtruLucru === cheie ? 'on' : ''}`}
+                                        onClick={() => setFiltruLucru(cheie)}>
+                                        {eticheta} <span className="admin-filtru-numar">{cate}</span>
                                     </button>
                                 ))}
+                            </div>
+                            <div className="admin-lucru">
+                                {lucru.filter(i => filtruLucru === 'toate'
+                                    || (filtruLucru === 'nefacute' ? i.installs === 0 : i.mine === 0)).map(i => {
+                                    // `installs` numără și calculatorul ăsta, dacă a trimis.
+                                    const altii = i.installs - (i.mine > 0 ? 1 : 0);
+                                    return (
+                                        <button key={`${i.n}${i.variant}`}
+                                            className={`admin-lucru-imn ${i.mine > 0 ? 'facut' : ''} ${
+                                                i.mine === 0 && altii > 0 ? 'altii' : ''} ${imnCurent === i.n ? 'acum' : ''}`}
+                                            onClick={() => void incarca(i.n)}>
+                                            <span className={`admin-lucru-prio ${i.priority}`}>
+                                                {i.priority === 'calibrare' ? t('URGENT') : t('DE VERIFICAT')}
+                                            </span>
+                                            <strong>{i.n}{i.variant}</strong>
+                                            <span className="admin-lucru-titlu">{titluri[i.n] ?? ''}</span>
+                                            <span className="admin-lucru-stare">
+                                                {i.mine > 0
+                                                    ? (altii > 0
+                                                        ? t('trimis de tine și de încă {n}', { n: altii })
+                                                        : t('trimis de tine'))
+                                                    : altii > 0
+                                                        ? (altii === 1 ? t('făcut de altcineva') : t('făcut de alți {n}', { n: altii }))
+                                                        : t('de făcut')}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </section>
                     )}
@@ -5075,11 +5190,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                         <div className="sgroup-head">
                             <h4>{t('Marcajele unui imn')}</h4>
                             <p>
-                                {t('Tot ce ai de făcut:')} <strong>{t('asculți imnul și spui unde se termină fiecare bucată')}</strong> — {t('nu unde vrei să se schimbe slide-ul. Care e strofă și care refren scrie programul singur, din carte. Textul apare pe ecran mai devreme cu atât cât ai reglat mai sus.')}
+                                {t('Tot ce ai de făcut:')} <strong>{t('asculți imnul și spui unde începe fiecare bucată')}</strong> — {t('nu unde vrei să se schimbe slide-ul. Care e strofă și care refren scrie programul singur, din carte. Textul apare pe ecran mai devreme cu atât cât ai reglat mai sus.')}
                             </p>
                             <ol className="admin-pasi">
                                 <li><strong>{t('Întâi preludiul:')}</strong> {t('apeși Enter în clipa în care începe cântarea. Dacă imnul începe direct cu cântarea, apeși „Fără preludiu".')}</li>
-                                <li><strong>{t('Apoi fiecare bucată, până la ultima inclusiv:')}</strong> {t('apeși Enter când s-a terminat de cântat. Sus scrie mereu ce urmează.')}</li>
+                                <li><strong>{t('Apoi fiecare strofă și refren:')}</strong> {t('apeși Enter în clipa în care începe. Sus scrie mereu ce urmează.')}</li>
+                                <li><strong>{t('La sfârșit:')}</strong> {t('apeși Enter când s-a terminat de cântat ultimul vers.')}</li>
                                 <li><strong>{t('Dacă pianul se oprește înainte de sfârșitul textului,')}</strong> {t('marchezi doar cât cântă pianul.')}</li>
                                 <li><strong>{t('Salvezi.')}</strong> {t('Imnul merge apoi singur pe acest calculator: îl încerci apăsând „Proiectează cu acompaniament sincronizat".')}</li>
                             </ol>
@@ -5118,21 +5234,43 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                                 <div className="admin-cere">
                                                     {t('Acum marchezi:')} <strong>{t('sfârșitul preludiului')}</strong>
                                                     <span className="admin-text"> — {t('clipa în care începe cântarea')}</span>
+                                                    {lipsestePreludiul && (marks?.length ?? 0) > 0 && (
+                                                        <div className="admin-text">
+                                                            {t('Strofele au marcaje de dinainte, fără preludiu; rămân cum sunt, le verifici după.')}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <button className="btn-mare accent" onClick={marcheazaAici}>
+                                                <button className="btn-mare accent"
+                                                    onClick={lipsestePreludiul ? punePreludiulAici : marcheazaAici}>
                                                     {t('Aici începe cântarea')} <span className="kbd">Enter</span>
                                                 </button>
                                                 <button className="btn-sm" onClick={faraPreludiu}>{t('Fără preludiu')}</button>
                                             </>
                                         ) : maiSunt ? (
                                             <>
-                                                <div className="admin-cere">
-                                                    {t('Acum marchezi sfârșitul:')} <strong>{numeSectiune(urmatorulIndex)}</strong>
-                                                    <span className="admin-text"> „{primulRand(urmatorulIndex)}…"</span>
-                                                </div>
-                                                <button className="btn-mare accent" onClick={marcheazaAici}>
-                                                    {t('Aici s-a terminat')} <span className="kbd">Enter</span>
-                                                </button>
+                                                {urmatorulIndex + 1 < sectiuni.length ? (
+                                                    <>
+                                                        <div className="admin-cere">
+                                                            {t('Acum marchezi începutul:')} <strong>{numeSectiune(urmatorulIndex + 1)}</strong>
+                                                            <span className="admin-text"> „{primulRand(urmatorulIndex + 1)}…"</span>
+                                                        </div>
+                                                        <button className="btn-mare accent" onClick={marcheazaAici}>
+                                                            {t('Aici începe')} <span className="kbd">Enter</span>
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <div className="admin-cere">
+                                                            {t('Acum marchezi:')} <strong>{t('sfârșitul cântării')}</strong>
+                                                            <span className="admin-text"> — {t('după ultimul vers, „{rand}…"', {
+                                                                rand: (sectiuni[urmatorulIndex]?.text.split('\n').filter(Boolean).pop() ?? '').slice(0, 60),
+                                                            })}</span>
+                                                        </div>
+                                                        <button className="btn-mare accent" onClick={marcheazaAici}>
+                                                            {t('Aici s-a terminat')} <span className="kbd">Enter</span>
+                                                        </button>
+                                                    </>
+                                                )}
                                             </>
                                         ) : (
                                             <div className="admin-cere gata">
@@ -5144,26 +5282,17 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                     </div>
                                 </div>
 
-                                {!cuPreludiu && (marks?.length ?? 0) > 0 && (
-                                    <div className="admin-cere atentie">
-                                        {t('Marcajele astea sunt vechi și n-au preludiul: prima linie e luată drept sfârșitul strofei 1. Du ascultarea în clipa în care începe cântarea și apasă:')}
-                                        {' '}<button className="btn-sm" onClick={punePreludiulAici}>{t('Aici începe cântarea')}</button>
-                                        {' '}<button className="btn-sm" onClick={faraPreludiu}>{t('Fără preludiu')}</button>
-                                    </div>
-                                )}
-
                                 {sectiuni.length > 0 && (
                                     <div className="admin-progres">
-                                        {cuPreludiu && (
-                                            <span
-                                                className={`admin-bul ${(marks?.length ?? 0) > 0 ? 'gata' : ''} ${cerePreludiu ? 'acum' : ''}`}
-                                                title={t('preludiul')}>
-                                                P
-                                            </span>
-                                        )}
+                                        <span
+                                            className={`admin-bul ${cuPreludiu && (marks?.length ?? 0) > 0 ? 'gata' : ''} ${cerePreludiu ? 'acum' : ''}`}
+                                            title={t('preludiul')}>
+                                            P
+                                        </span>
                                         {sectiuni.map((s, i) => (
                                             <span key={i}
-                                                className={`admin-bul ${i < slideuriMarcate ? 'gata' : ''} ${i === urmatorulIndex ? 'acum' : ''}`}
+                                                className={`admin-bul ${i < slideuriMarcate ? 'gata' : ''} ${
+                                                    !cerePreludiu && i === urmatorulIndex ? 'acum' : ''}`}
                                                 title={`${numeSectiune(i)} — ${primulRand(i)}`}>
                                                 {s.type === 'refren' ? 'R' : 'S'}
                                             </span>
@@ -5171,8 +5300,41 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         <span className="admin-progres-text">
                                             {cuPreludiu
                                                 ? t('preludiu + {ok} din {total}', { ok: slideuriMarcate, total: sectiuni.length })
-                                                : t('{ok} din {total}', { ok: slideuriMarcate, total: sectiuni.length })}
+                                                : t('{ok} din {total}, fără preludiu', { ok: slideuriMarcate, total: sectiuni.length })}
                                         </span>
+                                    </div>
+                                )}
+
+                                {seCantaAcum !== null && (
+                                    <div className="admin-versuri">
+                                        <div className="admin-versuri-alt">
+                                            {seCantaAcum >= 0 && (
+                                                <>
+                                                    <span className="admin-versuri-eticheta">
+                                                        {seCantaAcum === 0 ? t('preludiul') : numeSectiune(seCantaAcum - 1)}
+                                                    </span>
+                                                    {seCantaAcum > 0 && <span>{primulRand(seCantaAcum - 1)}…</span>}
+                                                </>
+                                            )}
+                                        </div>
+                                        <div className="admin-versuri-acum">
+                                            <span className="admin-versuri-eticheta">
+                                                {seCantaAcum === -1 ? t('preludiul') : numeSectiune(seCantaAcum)}
+                                            </span>
+                                            <div className="admin-versuri-text">
+                                                {seCantaAcum === -1
+                                                    ? t('doar pianul — cântarea începe cu:') + ` „${primulRand(0)}…"`
+                                                    : sectiuni[seCantaAcum].text}
+                                            </div>
+                                        </div>
+                                        <div className="admin-versuri-alt">
+                                            {seCantaAcum + 1 < sectiuni.length && (
+                                                <>
+                                                    <span className="admin-versuri-eticheta">{numeSectiune(seCantaAcum + 1)}</span>
+                                                    <span>{primulRand(seCantaAcum + 1)}…</span>
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
 
@@ -5201,21 +5363,35 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                     <button className="btn-sm" onClick={() => void exporta()}>{t('Exportă tot')}</button>
                                 </div>
 
-                                <canvas ref={canvasRef} width={1400} height={200}
-                                    className="admin-wave"
-                                    onMouseDown={onMouseDown}
-                                    onMouseMove={onMouseMove}
-                                    onMouseUp={onMouseUp}
-                                    onMouseLeave={() => { trageRef.current = null; }}
-                                    onWheel={onWheel} />
+                                <div className="admin-wave-loc">
+                                    <canvas ref={canvasRef} width={1400} height={200}
+                                        className="admin-wave"
+                                        onMouseDown={onMouseDown}
+                                        onMouseMove={onMouseMove}
+                                        onMouseUp={onMouseUp}
+                                        onMouseLeave={() => { trageRef.current = null; }}
+                                        onWheel={onWheel} />
+                                    {/* Cine a mărit unda și n-o mai găsește întreagă: ieșirea stă
+                                        pe ea, nu printre butoanele mici de deasupra. */}
+                                    {!totVizibil && (
+                                        <button className="admin-wave-tot" onClick={() => setVedere([0, durata])}>
+                                            ↔ {t('Arată tot imnul')}
+                                        </button>
+                                    )}
+                                </div>
 
                                 <canvas ref={hartaRef} width={1400} height={38}
                                     className="admin-harta"
-                                    title={t('Tot imnul. Trage dreptunghiul ca să te muți.')}
-                                    onMouseDown={e => { trageHartaRef.current = true; pePozitiaHartii(e.clientX); }}
-                                    onMouseMove={e => { if (trageHartaRef.current) pePozitiaHartii(e.clientX); }}
-                                    onMouseUp={() => { trageHartaRef.current = false; }}
-                                    onMouseLeave={() => { trageHartaRef.current = false; }} />
+                                    title={t('Tot imnul. Trage peste o bucată ca s-o mărești; dublu clic: tot imnul.')}
+                                    onMouseDown={hartaJos}
+                                    onMouseMove={hartaMiscare}
+                                    onMouseUp={hartaSus}
+                                    onMouseLeave={() => { trageHartaRef.current = null; setAlegereHarta(null); }}
+                                    onDoubleClick={() => setVedere([0, durata])} />
+                                <p className="field-hint admin-harta-ajutor">
+                                    {t('Bara de jos e tot imnul:')} <strong>{t('trage peste o bucată')}</strong> {t('ca s-o mărești,')}
+                                    {' '}<strong>{t('dublu clic')}</strong> {t('ca să vezi iar tot imnul.')}
+                                </p>
                             </>
                         )}
 
@@ -5227,7 +5403,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         className={`btn-sm ${i === selectat ? 'on' : ''}`}
                                         onClick={() => { setSelectat(i); asculta(sfarsit); }}
                                     >
-                                        {slide === -1 || sectiuni[slide] ? numeSectiune(slide) : t('bucata {n}', { n: slide + 1 })}
+                                        {numeLinie(slide)}
                                         {' · '}{(sfarsit / 1000).toFixed(1)} s
                                     </button>
                                 ))}
@@ -5236,11 +5412,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
 
                         {marks && selectat !== null && marks[selectat] && (
                             <div className="admin-sel">
-                                <strong>
-                                    {marks[selectat][0] === -1 || sectiuni[marks[selectat][0]]
-                                        ? numeSectiune(marks[selectat][0])
-                                        : t('bucata {n}', { n: marks[selectat][0] + 1 })}
-                                </strong>
+                                <strong>{numeLinie(marks[selectat][0])}</strong>
                                 <span className="tabular">{mmssms(marks[selectat][1])}</span>
                                 <button className="btn-sm" onClick={() => mutaCu(selectat, -PAS_MARE)}>{t('← mai devreme')}</button>
                                 <button className="btn-sm" onClick={() => mutaCu(selectat, PAS_MARE)}>{t('mai târziu →')}</button>
@@ -5255,7 +5427,8 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                         {peaks && (
                             <p className="field-hint">
                                 {t('Pe undă:')} <strong>{t('clic')}</strong> {t('mută ascultarea acolo,')}
-                                <strong> {t('tragi de o linie')}</strong> {t('ca s-o muți,')} <strong>{t('rotița')}</strong> {t('plimbă înainte și înapoi. Linia mutată se așază singură în cea mai liniștită clipă din apropiere, deci nu trebuie să nimerești la milisecundă.')}
+                                <strong> {t('tragi de o linie')}</strong> {t('ca s-o muți,')} <strong>{t('rotița')}</strong> {t('plimbă înainte și înapoi,')}
+                                <strong> {t('ciupitul pe trackpad')}</strong> {t('apropie și depărtează. Linia mutată se așază singură în cea mai liniștită clipă din apropiere, deci nu trebuie să nimerești la milisecundă.')}
                             </p>
                         )}
                         <audio ref={audioRef} style={{ display: 'none' }}

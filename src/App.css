@@ -3873,6 +3873,15 @@ select optgroup {
   color: rgb(var(--fg-rgb) / 0.85);
   margin: 0 0 4px;
 }
+/* Textele mici de lângă câmpuri: explicații, stări, mesaje. Fără regula asta
+   ieșeau la mărimea textului obișnuit, mai mari decât câmpurile pe care le explică. */
+.field-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgb(var(--fg-rgb) / 0.55);
+  margin: 4px 0 0;
+}
+
 .sgroup-head p {
   font-size: 12px;
   line-height: 1.5;
@@ -4164,6 +4173,30 @@ select optgroup {
     cursor: crosshair;
 }
 
+.admin-wave-loc {
+    position: relative;
+}
+
+/* Ieșirea din zoom, pe undă: vizibilă cât timp nu se vede tot imnul. */
+.admin-wave-tot {
+    position: absolute;
+    top: 18px;
+    right: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #052e1b;
+    background: #fbbf24;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.admin-wave-tot:hover {
+    background: #fcd34d;
+}
+
 .admin-sel {
     display: flex;
     align-items: center;
@@ -4320,6 +4353,22 @@ select optgroup {
 .admin-lucru-imn.acum { border-color: rgba(99, 102, 241, 0.6); }
 .admin-lucru-imn.facut { opacity: 0.6; }
 
+/* Făcut de altcineva, nu de tine: rămâne de lucru, dar se vede că nu e primul. */
+.admin-lucru-imn.altii .admin-lucru-stare { color: #7dd3fc; }
+
+.admin-filtru {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 0 0 8px;
+}
+
+.admin-filtru-numar {
+    margin-left: 4px;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.6;
+}
+
 .admin-lucru-prio {
     flex-shrink: 0;
     font-size: 9px;
@@ -4385,6 +4434,54 @@ select optgroup {
     box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.3);
 }
 
+/* Versurile cât asculți, ca banda de jos din bara de proiecție: înainte, acum
+   (tot textul, mare), după. Cine nu știe imnul vede ce se cântă. */
+.admin-versuri {
+    display: grid;
+    grid-template-columns: 1fr 2.2fr 1fr;
+    gap: 10px;
+    margin: 0 0 8px;
+    padding: 10px 12px;
+    background: rgb(var(--fg-rgb) / 0.04);
+    border: 1px solid rgb(var(--fg-rgb) / 0.1);
+    border-radius: var(--radius-sm);
+}
+
+.admin-versuri-alt {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    color: rgb(var(--fg-rgb) / 0.4);
+    align-self: center;
+}
+
+.admin-versuri-acum {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 120px;
+}
+
+.admin-versuri-eticheta {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim, #9aa4bf);
+}
+
+.admin-versuri-acum .admin-versuri-eticheta {
+    color: #fbbf24;
+}
+
+.admin-versuri-text {
+    font-size: 15px;
+    line-height: 1.4;
+    white-space: pre-line;
+    color: var(--text-primary);
+}
+
 .admin-progres-text {
     margin-left: 6px;
     font-size: 11px;
@@ -4401,11 +4498,15 @@ select optgroup {
     width: 100%;
     height: 38px;
     display: block;
-    margin: 4px 0 8px;
+    margin: 4px 0 2px;
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgb(var(--fg-rgb) / 0.1);
     border-radius: var(--radius-sm);
-    cursor: grab;
+    cursor: text;
+}
+
+.admin-harta-ajutor {
+    margin: 0 0 8px;
 }
 
 .admin-harta:active {

@@ -58,7 +58,8 @@
     "vite-plugin-electron-renderer": "^1.0.0"
   },
   "overrides": {
-    "postcss-selector-parser": "^7.1.6"
+    "postcss-selector-parser": "^7.1.6",
+    "minimatch@>=7.0.0 <11.0.1": "^11.0.5"
   },
   "main": "dist-electron/main.js"
 }
