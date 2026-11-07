@@ -156,6 +156,8 @@ contextBridge.exposeInMainWorld('electron', {
     submit: () => ipcRenderer.invoke('registry:submit'),
     unlockRequest: (phone: string) => ipcRenderer.invoke('registry:unlock-request', phone),
     unlockVerify: (code: string) => ipcRenderer.invoke('registry:unlock-verify', code),
+    unlockPending: () => ipcRenderer.invoke('registry:unlock-pending'),
+    unlockCheck: () => ipcRenderer.invoke('registry:unlock-check'),
   },
 
   presentation: {

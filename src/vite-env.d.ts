@@ -461,6 +461,10 @@ export interface IElectronAPI {
     submit: () => Promise<boolean>;
     unlockRequest: (phone: string) => Promise<{ ok: boolean; requestCode?: string; error?: string }>;
     unlockVerify: (code: string) => Promise<boolean>;
+    /** Cererea de deblocare încă valabilă (fereastra o regăsește la redeschidere). */
+    unlockPending: () => Promise<{ requestCode: string } | null>;
+    /** Au aprobat autorii deblocarea în hangar? true = parola veche e ștearsă. */
+    unlockCheck: () => Promise<boolean>;
   };
   contrib: {
     status: () => Promise<{ pending: number; sent: number }>;

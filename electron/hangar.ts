@@ -457,6 +457,8 @@ interface MessagesFile {
   annRead?: Record<string, true>;
   /** Cât a stat fiecare anunț pe ecran, în secunde — numărătoarea continuă după repornire. */
   annShown?: Record<string, number>;
+  /** Codul de deblocare aprobat de autori în hangar („Deblochează”), încă nefolosit. */
+  unlockGrant?: string;
 }
 
 function messagesPath(deps: HangarDeps): string {
@@ -472,6 +474,7 @@ function readMessages(deps: HangarDeps): MessagesFile {
       announcements: Array.isArray(raw.announcements) ? raw.announcements : [],
       annRead: raw.annRead ?? {},
       annShown: raw.annShown ?? {},
+      unlockGrant: typeof raw.unlockGrant === 'string' ? raw.unlockGrant : undefined,
     };
   } catch {
     return { items: [], seen: {} };
@@ -518,7 +521,30 @@ export async function refreshMessages(deps: HangarDeps): Promise<void> {
         created_at: String(a.created_at ?? ''),
       }));
   }
+  // Deblocare aprobată de autori în hangar: codul vine aici, iar aplicația îl
+  // verifică singură, fără să-l mai dicteze cineva la telefon.
+  if (typeof out.json.unlock === 'string' && out.json.unlock) m.unlockGrant = out.json.unlock;
   writeMessages(deps, m);
+}
+
+/** Codul de deblocare primit din hangar, o singură dată: după citire se șterge. */
+export function takeUnlockGrant(deps: HangarDeps): string | null {
+  const m = readMessages(deps);
+  if (!m.unlockGrant) return null;
+  const cod = m.unlockGrant;
+  m.unlockGrant = undefined;
+  writeMessages(deps, m);
+  return cod;
+}
+
+/** Deblocarea aprobată a fost folosită: hangarul poate închide singur cererea. */
+export async function trackUnlockDone(deps: HangarDeps): Promise<void> {
+  await postJson(TRACK_URL, {
+    project: HANGAR_KEY,
+    install: installId(deps),
+    event: 'unlock_done',
+    version: deps.appVersion,
+  }, 6000);
 }
 
 /** Anunțurile de arătat: necitite și încă valabile, cu cât au stat deja pe ecran. */

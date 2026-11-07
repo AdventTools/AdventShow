@@ -33,6 +33,7 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 interface RegistrySettings extends HangarSettings {
   unlockCodeHash?: string;       // sha256 al codului de deblocare activ
   unlockCodeExpiry?: string;     // ISO — după această dată codul moare
+  unlockRequestCode?: string;    // codul de cerere arătat omului, ca fereastra să-l regăsească
 }
 
 /** Aceleași dependențe ca restul comunicării cu hangar, cu setările de aici. */
@@ -105,9 +106,23 @@ export async function sendUnlockRequest(
   }
 
   const expiry = new Date(Date.now() + UNLOCK_VALID_DAYS * 24 * 3600 * 1000).toISOString();
-  deps.patchSettings({ unlockCodeHash: sha256(normalizeCode(unlockCode)), unlockCodeExpiry: expiry });
+  deps.patchSettings({
+    unlockCodeHash: sha256(normalizeCode(unlockCode)), unlockCodeExpiry: expiry, unlockRequestCode: requestCode,
+  });
   deps.log('[Registry] cerere deblocare trimisă, cod cerere:', requestCode);
   return { ok: true, requestCode };
+}
+
+/**
+ * Cererea încă valabilă, dacă există. Fereastra „parolă uitată” o regăsește la
+ * redeschidere în loc să trimită alta: o cerere nouă schimbă codul, iar cel pe care
+ * autorii îl aprobă sau îl dictează nu mai merge (așa se „pierdeau” deblocările).
+ */
+export function pendingUnlock(deps: RegistryDeps): { requestCode: string } | null {
+  const s = deps.getSettings();
+  if (!s.unlockCodeHash || !s.unlockCodeExpiry || !s.unlockRequestCode) return null;
+  if (new Date(s.unlockCodeExpiry).getTime() < Date.now()) return null;
+  return { requestCode: s.unlockRequestCode };
 }
 
 // ── Verificarea codului dictat ───────────────────────────────────────────────
@@ -118,7 +133,7 @@ export function verifyUnlockCode(deps: RegistryDeps, input: string): boolean {
   if (!s.unlockCodeHash || !s.unlockCodeExpiry) return false;
   if (new Date(s.unlockCodeExpiry).getTime() < Date.now()) return false;
   if (sha256(normalizeCode(input)) !== s.unlockCodeHash) return false;
-  deps.patchSettings({ unlockCodeHash: undefined, unlockCodeExpiry: undefined });
+  deps.patchSettings({ unlockCodeHash: undefined, unlockCodeExpiry: undefined, unlockRequestCode: undefined });
   deps.log('[Registry] cod de deblocare acceptat — parola poate fi resetată');
   return true;
 }

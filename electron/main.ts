@@ -51,7 +51,7 @@ import {
   listHymnStates, listPendingDecisions, refreshProposalDecisions, resolveDecision, ContribDeps,
   maybeSendInventory, takeDecisionNotices,
 } from './contrib'
-import { maybeSendRegistration, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
+import { maybeSendRegistration, pendingUnlock, sendUnlockRequest, verifyUnlockCode, RegistryDeps } from './registry'
 import {
   AccompanimentDeps, AccompanimentManifest, accompanimentDir, cachedManifest,
   downloadMissing, downloadOne, findItem, localPath, presentNumbers, refreshManifest,
@@ -62,7 +62,7 @@ import {
 import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, SystemInfo, compareVersions, flushReportQueue,
   hangarPlatform, listMessages, markRepliesRead, pendingReportCount, refreshMessages, sendReport,
-  listAnnouncements, addAnnouncementShown, markAnnouncementRead,
+  listAnnouncements, addAnnouncementShown, markAnnouncementRead, takeUnlockGrant, trackUnlockDone,
   startHeartbeat, track, unreadReplyCount, updateChannel,
   syncLogin, syncLogout, syncKeyValid, syncSubmit, syncWork, trackTakeover,
 } from './hangar'
@@ -179,6 +179,7 @@ interface AppSettings {
   churchCity?: string
   registrySentKey?: string      // nefolosit din v1.4.0 (profilul se suprascrie pe server)
   unlockCodeHash?: string
+  unlockRequestCode?: string
   unlockCodeExpiry?: string
   // ── Canal de actualizare ──
   updateChannel?: 'stable' | 'beta'
@@ -2150,14 +2151,25 @@ app.whenReady().then(() => {
     sendUnlockRequest(registryDeps(), phone))
   // verifică codul dictat; la succes parola veche se șterge — renderer-ul
   // deschide imediat dialogul de setare a parolei noi
-  ipcMain.handle('registry:unlock-verify', (_e, code: string) => {
+  const deblocheaza = (code: string, cum: string) => {
     const ok = verifyUnlockCode(registryDeps(), code)
     if (ok) {
       const s = readSettings()
       delete s.adminPasswordHash
       writeSettings(s)
-      debugLog('[Registry] parola de administrare a fost resetată prin cod de deblocare')
+      debugLog(`[Registry] parola de administrare a fost resetată (${cum})`)
     }
+    return ok
+  }
+  ipcMain.handle('registry:unlock-verify', (_e, code: string) => deblocheaza(code, 'cod dictat'))
+  // Cererea încă valabilă, ca fereastra s-o regăsească la redeschidere.
+  ipcMain.handle('registry:unlock-pending', () => pendingUnlock(registryDeps()))
+  // Fereastra întreabă des cât e deschisă: au aprobat autorii deblocarea în hangar?
+  ipcMain.handle('registry:unlock-check', async () => {
+    await refreshMessages(hangarDeps()).catch(() => { /* offline: rămâne codul dictat */ })
+    const cod = takeUnlockGrant(hangarDeps())
+    const ok = cod ? deblocheaza(cod, 'aprobată din hangar') : false
+    if (ok) trackUnlockDone(hangarDeps()).catch(() => { /* hangarul o închide și de mână */ })
     return ok
   })
 

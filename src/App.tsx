@@ -6910,6 +6910,27 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
 
     useEffect(() => { inputRef.current?.focus(); }, [requestCode]);
 
+    // O cerere trimisă înainte și încă valabilă se regăsește, nu se înlocuiește: altfel
+    // codul aprobat sau dictat de autori ar fi al cererii vechi și n-ar mai merge.
+    useEffect(() => {
+        window.electron.registry.unlockPending()
+            .then(p => { if (p) setRequestCode(p.requestCode); })
+            .catch(() => { /* fără cerere în așteptare */ });
+    }, []);
+
+    // Cât fereastra stă deschisă, aplicația întreabă hangarul dacă autorii au aprobat
+    // deblocarea („Deblochează” la raportul ei). Aprobată = gata, fără cod dictat.
+    useEffect(() => {
+        if (!requestCode) return;
+        let oprit = false;
+        const verifica = () => window.electron.registry.unlockCheck()
+            .then(ok => { if (ok && !oprit) onUnlocked(); })
+            .catch(() => { /* offline: rămâne codul dictat */ });
+        void verifica();
+        const tm = window.setInterval(verifica, 15000);
+        return () => { oprit = true; window.clearInterval(tm); };
+    }, [requestCode, onUnlocked]);
+
     const sendRequest = async () => {
         const digits = phone.replace(/\D/g, '');
         if (digits.length < 7) {
@@ -6942,7 +6963,9 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
     };
 
     return (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onCancel(); }}>
+        // Fără închidere la clic pe fundal: o fereastră pierdută din greșeală ducea la o
+        // cerere nouă, care anula codul deja aprobat. Se închide doar din X sau Anulează.
+        <div className="modal-overlay">
             <div className="modal-dialog modal-sm">
                 <div className="modal-header">
                     <h3><Lock className="icon-sm" style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />{t('Recuperare parolă')}</h3>
@@ -6977,9 +7000,12 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
                     ) : (
                         <>
                             <p className="setup-hint">
-                                {t('Cererea a fost trimisă. Dacă nu ești contactat curând, sună tu autorii și comunică-le')} <b>{t('codul cererii')}</b>:
+                                {t('Cererea a fost trimisă. Când autorii o aprobă, aplicația se deblochează singură, în cel mult un minut — păstrează fereastra deschisă sau revino aici. Codul cererii:')}
                             </p>
                             <div className="unlock-request-code">{requestCode}</div>
+                            <p className="text-fg/40 text-xs mt-1">
+                                {t('Dacă ai primit un cod la telefon, îl poți scrie mai jos.')}
+                            </p>
                             <div className="field" style={{ marginTop: 10 }}>
                                 <label>{t('Codul de deblocare primit')}</label>
                                 <input
@@ -7002,6 +7028,10 @@ function ForgotPasswordModal({ onUnlocked, onCancel }: {
                                     {busy ? t('Se verifică...') : t('Deblochează')}
                                 </button>
                                 <button className="btn-clear" onClick={onCancel}>{t('Anulează')}</button>
+                                <button className="btn-clear" onClick={() => { setRequestCode(null); setCode(''); setError(''); }}
+                                    title={t('O cerere nouă înlocuiește codul cererii de mai sus.')}>
+                                    {t('Trimite din nou cererea')}
+                                </button>
                             </div>
                         </>
                     )}
