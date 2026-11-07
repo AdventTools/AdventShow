@@ -1,6 +1,9 @@
-import { ChevronLeft, ChevronRight, CloudDownload, ListMusic, Loader, Monitor, MonitorOff, Music, SkipBack, SkipForward, Square, TriangleAlert } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudDownload, ListMusic, Loader, Monitor, MonitorOff, Music, Play, SkipBack, SkipForward, Square, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { accStateLabel, accStateText, accTitle, accWarnText } from './accompaniment-ui';
+import {
+  accDownloadLabel, accPlayOnlyTitle, accPlayOnlyVisible, accReadyLabel, accStateLabel, accStateText,
+  accTitle, accWarnText,
+} from './accompaniment-ui';
 import type { SyncWarning } from './vite-env';
 import { useT } from './i18n';
 import { keyAction } from './projectionKeys';
@@ -17,6 +20,9 @@ interface PreviewSection {
 // Projector Controller
 // Shows in the MAIN window when a projection is active.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Iconițele de acompaniament au mărimea celor din lista de imnuri, ca să se recunoască. */
+const ICON_ACC = 'w-[18px] h-[18px] flex-shrink-0';
 
 /** Starea acompaniamentului, condusă din App (elementul <audio> stă acolo). */
 export interface AccompanimentControl {
@@ -40,6 +46,11 @@ export interface AccompanimentControl {
    */
   willPlay?: boolean;
   /**
+   * Imnul pregătit e chiar cel de pe ecran. Altfel apăsarea îl pune întâi pe
+   * ecran și abia apoi pornește acompaniamentul.
+   */
+  onScreen?: boolean;
+  /**
    * Cât cântă: 'auto' = merge singur; 'preluat' = operatorul a navigat, avansul s-a
    * oprit; 'doar' = doar muzica, strofele au fost de la început ale operatorului.
    */
@@ -47,7 +58,7 @@ export interface AccompanimentControl {
   /** Înregistrarea nu se potrivește cu textul; se arată înainte de apăsare. */
   warn?: SyncWarning | null;
   onToggle: () => void;
-  /** Pornește sunetul fără avans automat. Doar la imnurile cu marcaje. */
+  /** Pornește sunetul fără avans automat și fără să deschidă proiecția. */
   onPlayOnly?: () => void;
 }
 
@@ -198,34 +209,37 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
               >
                 {accompaniment.loading ? (
                   <>
-                    <Loader className="w-3 h-3 animate-spin" />
+                    <Loader className={`${ICON_ACC} animate-spin`} strokeWidth={2.5} />
                     {accompaniment.willPlay ? t('Se descarcă acompaniamentul… · nu porni') : t('Se descarcă acompaniamentul…')}
                   </>
                 ) : accompaniment.playing ? (
                   <>
-                    <Square className="w-3 h-3" />
+                    <Square className={ICON_ACC} strokeWidth={2.5} />
                     <span className="tabular-nums">{mmss(accompaniment.remaining)}</span>
                   </>
                 ) : accompaniment.needsDownload ? (
                   <>
-                    <CloudDownload className="w-3 h-3" />
-                    {accompaniment.willPlay ? t('Descarcă acompaniamentul și cântă') : t('Descarcă acompaniamentul')}
+                    <CloudDownload className={ICON_ACC} strokeWidth={2.5} />
+                    {accDownloadLabel(accompaniment)}
                     {' '}{accompaniment.sizeMb.toFixed(1)} MB
                   </>
-                ) : accompaniment.hasMarks ? (
-                  <><ListMusic className="w-3 h-3" /> {t('Cântă singur')}</>
                 ) : (
-                  <><Music className="w-3 h-3" /> {t('Cântă')}</>
+                  <>
+                    {!accompaniment.onScreen && <Play className={ICON_ACC} strokeWidth={2.5} />}
+                    {accompaniment.hasMarks
+                      ? <ListMusic className={ICON_ACC} strokeWidth={2.5} />
+                      : <Music className={ICON_ACC} strokeWidth={2.5} />}
+                    {accReadyLabel(accompaniment)}
+                  </>
                 )}
               </button>
-              {accompaniment.hasMarks && !accompaniment.playing && !accompaniment.loading
-                && accompaniment.onPlayOnly && (
+              {accPlayOnlyVisible(accompaniment) && (
                 <button
                   onClick={accompaniment.onPlayOnly}
                   className="mr-1 flex items-center gap-1.5 px-2 py-1 rounded-lg border border-fg/10 bg-fg/5 hover:bg-fg/10 text-xs text-fg/60 hover:text-fg transition-all"
-                  title={t('Doar acompaniamentul — strofele le schimbi tu')}
+                  title={accPlayOnlyTitle(accompaniment)}
                 >
-                  <Music className="w-3 h-3" /> {t('Doar muzica')}
+                  <Music className={ICON_ACC} strokeWidth={2.5} /> {t('Doar acompaniamentul')}
                 </button>
               )}
             </>

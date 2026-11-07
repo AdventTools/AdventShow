@@ -20,7 +20,7 @@ export function accWarnText(w: SyncWarning): string {
 
 /** Eticheta scurtă a stării, cât cântă: aceeași în previzualizare și în bara de proiecție. */
 export function accStateLabel(s: 'auto' | 'preluat' | 'doar'): string {
-  return s === 'auto' ? t('MERGE SINGUR') : s === 'preluat' ? t('AI PRELUAT') : t('DOAR MUZICA');
+  return s === 'auto' ? t('MERGE SINGUR') : s === 'preluat' ? t('AI PRELUAT') : t('DOAR ACOMPANIAMENT');
 }
 
 /** Fraza de lângă etichetă: ce înseamnă starea pentru cine stă la calculator. */
@@ -51,7 +51,46 @@ export function accTitle(acc: AccompanimentControl): string {
       ? t('Descarcă și pornește acompaniamentul (A)')
       : t('Descarcă acompaniamentul acum, ca să fie gata la proiecție (A)');
   }
+  if (!acc.onScreen) {
+    return acc.hasMarks
+      ? t('Pune imnul pe ecran și pornește acompaniamentul; strofele se schimbă singure (A)')
+      : t('Pune imnul pe ecran și pornește acompaniamentul; strofele le schimbi tu (A)');
+  }
   return acc.hasMarks
-    ? t('Cântă, iar strofele se schimbă singure (A)')
+    ? t('Pornește acompaniamentul; strofele se schimbă singure (A)')
     : t('Pornește acompaniamentul (A)');
+}
+
+/**
+ * Ce scrie pe butonul mare când fișierul e pe disc. Spune ACOMPANIAMENT, nu
+ * „cântă": altfel unii se așteaptă la o înregistrare cu voci.
+ */
+export function accReadyLabel(acc: AccompanimentControl): string {
+  if (!acc.onScreen) {
+    return acc.hasMarks
+      ? t('Proiectează cu acompaniament sincronizat')
+      : t('Proiectează cu acompaniament');
+  }
+  return acc.hasMarks ? t('Acompaniament sincronizat') : t('Pornește acompaniamentul');
+}
+
+/** Butonul mare cât fișierul nu e încă pe disc. */
+export function accDownloadLabel(acc: AccompanimentControl): string {
+  return acc.willPlay ? t('Descarcă și pornește acompaniamentul') : t('Descarcă acompaniamentul');
+}
+
+/**
+ * A doua alegere, „Doar acompaniamentul". Pe ecran contează doar la imnurile
+ * sincronizate (la celelalte butonul mare face exact asta); înainte de proiecție
+ * e singurul fel de a porni sunetul fără să proiectezi.
+ */
+export function accPlayOnlyVisible(acc: AccompanimentControl): boolean {
+  if (acc.playing || acc.loading || !acc.onPlayOnly) return false;
+  return acc.onScreen ? !!acc.hasMarks : !acc.needsDownload;
+}
+
+export function accPlayOnlyTitle(acc: AccompanimentControl): string {
+  return acc.onScreen
+    ? t('Doar acompaniamentul — strofele le schimbi tu')
+    : t('Doar acompaniamentul, fără proiecție');
 }

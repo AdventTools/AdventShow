@@ -127,11 +127,7 @@ export const EN_APP_2: Record<string, string> = {
     // AccompanimentButton
     'Se descarcă acompaniamentul… · nu porni': "Downloading accompaniment… · won't start",
     'Se descarcă acompaniamentul…': 'Downloading accompaniment…',
-    'Descarcă acompaniamentul și cântă': 'Download accompaniment and play',
     'Descarcă acompaniamentul': 'Download accompaniment',
-    'Cântă singur': 'Plays on its own',
-    'Cântă': 'Play',
-    'Doar acompaniamentul — strofele le schimbi tu': 'Accompaniment only — you change the verses',
 
     // AdminSyncPanel (unealtă ascunsă, doar pentru autori)
     'Administrare — sincronizare': 'Administration — sync',
@@ -181,8 +177,8 @@ export const EN_APP_2: Record<string, string> = {
     'Dacă pianul se oprește înainte de sfârșitul textului,': 'If the piano stops before the end of the text,',
     'marchezi doar cât cântă pianul.': 'mark only what the piano plays.',
     'Salvezi.': 'Save.',
-    'Imnul merge apoi singur pe acest calculator: îl încerci cu proiecția pornită și imnul pe ecran, apăsând „Cântă singur".':
-        'The hymn then runs on its own on this computer: try it with the projection on and the hymn on screen, by pressing "Plays on its own".',
+    'Imnul merge apoi singur pe acest calculator: îl încerci apăsând „Proiectează cu acompaniament sincronizat".':
+        'The hymn then runs on its own on this computer: try it by pressing "Project with synced accompaniment".',
     'Acum marchezi:': "You're now marking:",
     'sfârșitul preludiului': 'the end of the prelude',
     'clipa în care începe cântarea': 'the moment the singing starts',

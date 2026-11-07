@@ -14,18 +14,26 @@ export const EN_CONTROLLER: Record<string, string> = {
     'Se descarcă': 'Downloading',
     'Descarcă și pornește acompaniamentul (A)': 'Download and start the accompaniment (A)',
     'Descarcă acompaniamentul acum, ca să fie gata la proiecție (A)': "Download the accompaniment now, so it's ready when you project (A)",
-    'Cântă, iar strofele se schimbă singure (A)': 'Plays, and the verses change on their own (A)',
+    'Pune imnul pe ecran și pornește acompaniamentul; strofele se schimbă singure (A)':
+        'Puts the hymn on screen and starts the accompaniment; the verses change on their own (A)',
+    'Pune imnul pe ecran și pornește acompaniamentul; strofele le schimbi tu (A)':
+        'Puts the hymn on screen and starts the accompaniment; you change the verses (A)',
+    'Pornește acompaniamentul; strofele se schimbă singure (A)':
+        'Start the accompaniment; the verses change on their own (A)',
     'Pornește acompaniamentul (A)': 'Start the accompaniment (A)',
+    'Proiectează cu acompaniament sincronizat': 'Project with synced accompaniment',
+    'Proiectează cu acompaniament': 'Project with accompaniment',
+    'Acompaniament sincronizat': 'Synced accompaniment',
+    'Pornește acompaniamentul': 'Start the accompaniment',
+    'Descarcă și pornește acompaniamentul': 'Download and start the accompaniment',
+    'Doar acompaniamentul, fără proiecție': 'Accompaniment only, without projecting',
 
     // ProjectorController.tsx
     'Refren': 'Chorus',
     'Titlu': 'Title',
     'Se descarcă acompaniamentul… · nu porni': "Downloading accompaniment… · won't start",
     'Se descarcă acompaniamentul…': 'Downloading accompaniment…',
-    'Descarcă acompaniamentul și cântă': 'Download accompaniment and play',
     'Descarcă acompaniamentul': 'Download accompaniment',
-    'Cântă singur': 'Plays on its own',
-    'Cântă': 'Play',
     'Doar acompaniamentul — strofele le schimbi tu': 'Accompaniment only — you change the verses',
     'Zoom text proiecție': 'Projection text zoom',
     'Micșorează textul (↓)': 'Shrink the text (↓)',
@@ -38,13 +46,13 @@ export const EN_CONTROLLER: Record<string, string> = {
     'Oprește': 'Stop',
     'MERGE SINGUR': 'RUNS ON ITS OWN',
     'AI PRELUAT': 'YOU TOOK OVER',
-    'DOAR MUZICA': 'MUSIC ONLY',
+    'DOAR ACOMPANIAMENT': 'ACCOMPANIMENT ONLY',
     'Strofele se schimbă singure, pe muzică. Poți prelua oricând, cu săgețile.':
         'The verses change on their own, with the music. You can take over at any time with the arrow keys.',
     'Sincronizarea s-a oprit, pentru că ai schimbat tu strofa. De aici le schimbi tu; muzica merge înainte.':
         'Sync stopped because you changed the verse yourself. From here you change them; the music keeps playing.',
     'Imnul nu merge singur: strofele le schimbi tu.': 'The hymn does not run on its own: you change the verses.',
-    'Doar muzica': 'Music only',
+    'Doar acompaniamentul': 'Accompaniment only',
     'Pianul cântă {a} strofe din {b}. După strofa {a}, strofele le schimbi tu.':
         'The piano plays {a} of {b} verses. After verse {a}, you change the verses.',
     'Pianul mai cântă de {n} ori la final. Ultima strofă rămâne pe ecran.':

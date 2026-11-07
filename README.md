@@ -98,7 +98,7 @@ La prima pornire îți setezi o **parolă de administrare** și completezi **bis
 
 - Fiecare imn din **Imnuri Creștine** are o înregistrare instrumentală: deschizi imnul, apeși **Cântă** (sau tasta `A`) și se aude — chiar dacă nu e nimeni la pian
 - Înregistrarea se descarcă o singură dată și rămâne pe calculator; butonul îți spune dinainte ce face (**Descarcă** sau **Descarcă și cântă**). Dacă în sală nu ai internet, le iei pe toate din vreme, din **Setări → Descarcă tot dinainte**
-- La imnurile pregătite de noi, **proiecția merge singură** (**Cântă singur**): strofa următoare apare cu câteva secunde înainte, ca oamenii să apuce să citească. Prima săgeată apăsată îți dă comanda înapoi, iar muzica merge mai departe; dacă preferi să schimbi tu strofele de la început, ai alături butonul pentru doar acompaniament
+- La imnurile pregătite de noi, **proiecția merge singură** (**Proiectează cu acompaniament sincronizat**, sau **Acompaniament sincronizat** când imnul e deja pe ecran): strofa următoare apare cu câteva secunde înainte, ca oamenii să apuce să citească. Prima săgeată apăsată îți dă comanda înapoi, iar muzica merge mai departe; dacă preferi să schimbi tu strofele de la început, ai alături butonul pentru doar acompaniament
 - Sunetul iese din laptop, spre boxele bisericii, pe dispozitivul ales în Setări, cu volum separat
 
 ### 📖 Biblia Cornilescu

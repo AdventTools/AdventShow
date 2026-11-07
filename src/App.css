@@ -2066,6 +2066,7 @@
 /* Preview actions */
 .preview-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
@@ -2112,6 +2113,15 @@
     background: rgb(var(--fg-rgb) / 0.1);
 }
 
+/* Aceleași iconițe și aceeași mărime ca în lista de imnuri: nota = acompaniament,
+   nota cu liniuțe = sincronizat. Cine le-a văzut în listă le recunoaște aici. */
+.btn-acc .icon-acc {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2.5;
+    flex-shrink: 0;
+}
+
 .btn-acc.playing {
     color: #6ee7b7;
     background: rgba(16, 185, 129, 0.16);
@@ -2131,7 +2141,7 @@
     background: rgba(99, 102, 241, 0.22);
 }
 
-/* Starea cât cântă, scrisă pe buton: merge singur / ai preluat / doar muzica. */
+/* Starea cât cântă, scrisă pe buton: merge singur / ai preluat / doar acompaniament. */
 .acc-stare {
     font-size: 9px;
     font-weight: 800;
@@ -2144,8 +2154,8 @@
 .acc-stare.preluat { color: #fcd34d; background: rgba(245, 158, 11, 0.25); }
 .acc-stare.doar { color: #7dd3fc; background: rgba(14, 165, 233, 0.22); }
 
-/* „Doar muzica" — a doua alegere la imnurile care merg singure. Mic și fără
-   text: cel mare spune ce se întâmplă de obicei, ăsta e ieșirea din obișnuit. */
+/* „Doar acompaniamentul" — a doua alegere: sunet fără proiecție, sau pe ecran
+   fără avans automat. Mai stins: cel mare spune ce se întâmplă de obicei. */
 .btn-acc-only {
     padding: 6px 8px;
     opacity: 0.75;

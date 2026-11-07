@@ -75,7 +75,10 @@ import { WhatsNewModal } from './WhatsNew';
 import { ProjectorController } from './ProjectorController';
 import { keyAction } from './projectionKeys';
 import type { AccompanimentControl } from './ProjectorController';
-import { accStateLabel, accStateText, accTitle, accWarnText } from './accompaniment-ui';
+import {
+    accDownloadLabel, accPlayOnlyTitle, accPlayOnlyVisible, accReadyLabel, accStateLabel, accStateText,
+    accTitle, accWarnText,
+} from './accompaniment-ui';
 import { zeroMessageSize } from './timerText';
 import type {
     AccompanimentInfo,
@@ -1093,6 +1096,10 @@ function App() {
         accAutoNav.current = true;
         void navigateSlide(idx);
     }, [navigateSlide]);
+    // Ceasul titlului pornește uneori în aceeași apăsare care deschide proiecția:
+    // varianta din closure ar vedea încă proiecția oprită și n-ar muta nimic.
+    const accNavRef = useRef(accNavigheaza);
+    useEffect(() => { accNavRef.current = accNavigheaza; }, [accNavigheaza]);
 
     /**
      * Avansul automat pe marcaje.
@@ -1159,8 +1166,10 @@ function App() {
      *
      * `cuSync` false înseamnă „doar acompaniamentul": muzica merge, dar strofele
      * rămân în mâna operatorului. Marcajele există, doar că nu le urmăm.
+     * `peTitlu` spune că imnul tocmai a fost pus pe ecran, pe titlu, de aceeași
+     * apăsare — starea proiecției nu s-a reîmprospătat încă aici.
      */
-    const accPlay = useCallback(async (cuSync: boolean) => {
+    const accPlay = useCallback(async (cuSync: boolean, peTitlu = false) => {
         if (!previewAreAcompaniament) return;
         const numar = parseInt(String(previewNumber).replace(/\D/g, ''), 10);
         if (!Number.isFinite(numar)) return;
@@ -1225,10 +1234,11 @@ function App() {
             // înainte să înceapă cântarea, oricât ar dura preludiul.
             if (accTitluRef.current !== null) window.clearTimeout(accTitluRef.current);
             const arePreludiu = cuSync && accMarks.current?.[0]?.[0] === -1;
-            if (projecting && previewLive && projSlideIndexRef.current === -1 && !arePreludiu) {
+            const titluPeEcran = peTitlu || (projecting && previewLive && projSlideIndexRef.current === -1);
+            if (titluPeEcran && !arePreludiu) {
                 accTitluRef.current = window.setTimeout(() => {
                     accTitluRef.current = null;
-                    if (projSlideIndexRef.current === -1) accNavigheaza(0);
+                    if (projSlideIndexRef.current === -1) accNavRef.current(0);
                 }, accTitleDelay.current);
             }
 
@@ -1245,7 +1255,7 @@ function App() {
             setAccError(t('Nu pornește sunetul. Verifică ieșirea audio din Setări.'));
             setAccPlaying(false);
         }
-    }, [previewAreAcompaniament, previewNumber, projecting, previewLive, accNavigheaza, t]);
+    }, [previewAreAcompaniament, previewNumber, projecting, previewLive, t]);
 
     /** Imnul e chiar acum pe ecran — de asta atârnă ce face o apăsare. */
     const accLive = projecting && previewLive;
@@ -1259,6 +1269,11 @@ function App() {
      * imnul, nu mai are cine apăsa a doua oară. Cu imnul doar PREGĂTIT, descărcarea
      * se oprește acolo: sunetul pornit peste cel care încă vorbește e greșeala pe
      * care operatorul o repară în panică.
+     *
+     * Cu fișierul pe disc și imnul încă neproiectat, aceeași apăsare îl pune pe
+     * ecran, pe titlu, și abia apoi pornește acompaniamentul. Fără ecran, avansul
+     * pe marcaje n-ar avea ce muta, iar butonul n-ar face nimic în plus față de
+     * „Doar acompaniamentul".
      */
     const accToggle = useCallback(async () => {
         if (accPlaying) { accStop(); return; }
@@ -1278,11 +1293,23 @@ function App() {
             if (accAutoplayAnulat.current) return;     // s-a apăsat frâna
             if (gen !== accGeneratie.current) return;  // între timp s-a ales alt imn
         }
+        if (!accLive) {
+            if (!previewSections.length) return;
+            if (projecting) await goLivePreview();
+            else await startProjection();
+            await accPlay(true, true);
+            return;
+        }
         await accPlay(true);
     }, [accPlaying, accLoading, accStop, accDownload, accPlay, accInfo, accLive,
-        previewAreAcompaniament, previewNumber]);
+        previewAreAcompaniament, previewNumber, previewSections.length, projecting,
+        goLivePreview, startProjection]);
 
-    /** „Doar muzica": același sunet, dar strofele rămân ale operatorului. */
+    /**
+     * „Doar acompaniamentul": același sunet, dar strofele rămân ale operatorului.
+     * Înainte de proiecție nu deschide nimic — e pentru ascultat melodia sau pentru
+     * un preludiu fără text pe ecran.
+     */
     const accPlayOnly = useCallback(async () => {
         if (accPlaying) { accStop(); return; }
         if (accLoading) { accAutoplayAnulat.current = true; return; }
@@ -1318,6 +1345,7 @@ function App() {
                 hasMarks: accHasMarks,
                 // Ce va face apăsarea, ca să scrie asta pe buton ÎNAINTE de apăsare.
                 willPlay: !!accInfo.local || accLive,
+                onScreen: accLive,
                 // Trei stări cât cântă, fiecare spusă pe față: merge singur, a preluat
                 // operatorul, sau e doar muzica și strofele au fost mereu ale lui.
                 autoState: accPlaying
@@ -4246,12 +4274,12 @@ function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
             >
                 {acc.loading ? (
                     <>
-                        <Loader className="icon-xs spin" />
+                        <Loader className="icon-acc spin" />
                         {acc.willPlay ? t('Se descarcă acompaniamentul… · nu porni') : t('Se descarcă acompaniamentul…')}
                     </>
                 ) : acc.playing ? (
                     <>
-                        <Square className="icon-xs" /> {mmss(acc.remaining)}
+                        <Square className="icon-acc" /> {mmss(acc.remaining)}
                         {acc.autoState && (
                             <span className={`acc-stare ${acc.autoState}`} title={accStateText(acc.autoState)}>
                                 {accStateLabel(acc.autoState)}
@@ -4260,22 +4288,24 @@ function AccompanimentButton({ acc }: { acc: AccompanimentControl }) {
                     </>
                 ) : acc.needsDownload ? (
                     <>
-                        <CloudDownload className="icon-xs" />
-                        {acc.willPlay ? t('Descarcă acompaniamentul și cântă') : t('Descarcă acompaniamentul')} {acc.sizeMb.toFixed(1)} MB
+                        <CloudDownload className="icon-acc" />
+                        {accDownloadLabel(acc)} {acc.sizeMb.toFixed(1)} MB
                     </>
-                ) : acc.hasMarks ? (
-                    <><ListMusic className="icon-xs" /> {t('Cântă singur')}</>
                 ) : (
-                    <><Music className="icon-xs" /> {t('Cântă')}</>
+                    <>
+                        {!acc.onScreen && <Play className="icon-acc" />}
+                        {acc.hasMarks ? <ListMusic className="icon-acc" /> : <Music className="icon-acc" />}
+                        {accReadyLabel(acc)}
+                    </>
                 )}
             </button>
-            {acc.hasMarks && !acc.playing && !acc.loading && acc.onPlayOnly && (
+            {accPlayOnlyVisible(acc) && (
                 <button
                     className="btn-acc btn-acc-only"
                     onClick={acc.onPlayOnly}
-                    title={t('Doar acompaniamentul — strofele le schimbi tu')}
+                    title={accPlayOnlyTitle(acc)}
                 >
-                    <Music className="icon-xs" /> {t('Doar muzica')}
+                    <Music className="icon-acc" /> {t('Doar acompaniamentul')}
                 </button>
             )}
         </>
@@ -5051,7 +5081,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                 <li><strong>{t('Întâi preludiul:')}</strong> {t('apeși Enter în clipa în care începe cântarea. Dacă imnul începe direct cu cântarea, apeși „Fără preludiu".')}</li>
                                 <li><strong>{t('Apoi fiecare bucată, până la ultima inclusiv:')}</strong> {t('apeși Enter când s-a terminat de cântat. Sus scrie mereu ce urmează.')}</li>
                                 <li><strong>{t('Dacă pianul se oprește înainte de sfârșitul textului,')}</strong> {t('marchezi doar cât cântă pianul.')}</li>
-                                <li><strong>{t('Salvezi.')}</strong> {t('Imnul merge apoi singur pe acest calculator: îl încerci cu proiecția pornită și imnul pe ecran, apăsând „Cântă singur".')}</li>
+                                <li><strong>{t('Salvezi.')}</strong> {t('Imnul merge apoi singur pe acest calculator: îl încerci apăsând „Proiectează cu acompaniament sincronizat".')}</li>
                             </ol>
                         </div>
                         <div className="field">

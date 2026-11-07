@@ -13,7 +13,7 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+- Când imnul nu e încă pe ecran, butonul de acompaniament îl și proiectează: „Proiectează cu acompaniament sincronizat” (sau „Proiectează cu acompaniament”) pune imnul pe ecran și pornește acompaniamentul dintr-o singură apăsare. „Doar acompaniamentul” pornește doar sunetul, fără proiecție. Butoanele au aceleași iconițe ca în lista de imnuri, iar cât cântă scrie MERGE SINGUR, AI PRELUAT sau DOAR ACOMPANIAMENT.
 
 ---
 
