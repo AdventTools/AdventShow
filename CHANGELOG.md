@@ -1,5 +1,18 @@
 # Changelog — AdventShow
 
+## v1.6.17 (07 Noiembrie 2026)
+
+### Modificări
+- Când imnul nu e încă pe ecran, butonul de acompaniament îl și proiectează: „Proiectează cu acompaniament sincronizat” (sau „Proiectează cu acompaniament”) pune imnul pe ecran și pornește acompaniamentul dintr-o singură apăsare. „Doar acompaniamentul” pornește doar sunetul, fără proiecție. Butoanele au aceleași iconițe ca în lista de imnuri, iar cât cântă scrie MERGE SINGUR, AI PRELUAT sau DOAR ACOMPANIAMENT.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.6.16 (07 Noiembrie 2026)
 
 ### Modificări
@@ -8,12 +21,6 @@
 - La imnurile la care pianul cântă mai puțin sau mai mult decât textul, aplicația spune dinainte ce urmează: un semn în lista de imnuri și o frază sub butoane, de exemplu „Pianul cântă 3 strofe din 4. După strofa 3, strofele le schimbi tu.”
 - Un imn al cărui text s-a schimbat față de cel după care s-a făcut sincronizarea (o strofă adăugată sau împărțită pe două ecrane) nu mai merge singur, ca să nu schimbe strofele la momentul greșit.
 - Pentru cei care sincronizează imnurile: se marchează și sfârșitul preludiului, ca prima strofă să apară exact înainte să înceapă cântarea; instrucțiunile sunt pas cu pas; cu parola de marcator, munca pleacă în hangar, iar imnurile cerute de noi apar primele, ca urgente. Marcajele salvate se folosesc imediat, fără să alegi alt imn.
-
----
-
-## Nepublicat
-
-- Când imnul nu e încă pe ecran, butonul de acompaniament îl și proiectează: „Proiectează cu acompaniament sincronizat” (sau „Proiectează cu acompaniament”) pune imnul pe ecran și pornește acompaniamentul dintr-o singură apăsare. „Doar acompaniamentul” pornește doar sunetul, fără proiecție. Butoanele au aceleași iconițe ca în lista de imnuri, iar cât cântă scrie MERGE SINGUR, AI PRELUAT sau DOAR ACOMPANIAMENT.
 
 ---
 
