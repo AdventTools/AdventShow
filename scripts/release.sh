@@ -403,7 +403,11 @@ if ! step_done winsync; then
       --exclude=release --exclude=.git --exclude='._*' --exclude='*.log' \
       --exclude=analyze_pptx.mjs --exclude=pptx-example --exclude=tmp --exclude=.venv \
       --exclude=scripts/.release-state \
+      --exclude=./docs \
       -czf "$TAR" .
+  # docs/ e local (gitignored) și nu trebuie la build: ținea documentația internă și,
+  # din 2026-11-07, cele 922 de înregistrări ale detectorului (3,4 GB) — arhiva urcase
+  # la 2,9 GB în loc de ~9 MB.
   log "tar: $(du -h "$TAR" | cut -f1)"
   retry "ssh mkdir" 40 15 -- ssh "${WIN_SSH_OPTS[@]}" "$WIN_HOST" "if not exist ${WIN_REPO} mkdir ${WIN_REPO}" 2>/dev/null || true
   retry "ssh mkdir proj" 40 15 -- ssh "${WIN_SSH_OPTS[@]}" "$WIN_HOST" "if not exist ${WIN_PROJECT} mkdir ${WIN_PROJECT}" 2>/dev/null || true
