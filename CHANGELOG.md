@@ -1,15 +1,22 @@
 # Changelog — AdventShow
 
-## v1.6.17 (07 Noiembrie 2026)
+## v1.6.18 (07 Noiembrie 2026)
 
 ### Modificări
-- Când imnul nu e încă pe ecran, butonul de acompaniament îl și proiectează: „Proiectează cu acompaniament sincronizat” (sau „Proiectează cu acompaniament”) pune imnul pe ecran și pornește acompaniamentul dintr-o singură apăsare. „Doar acompaniamentul” pornește doar sunetul, fără proiecție. Butoanele au aceleași iconițe ca în lista de imnuri, iar cât cântă scrie MERGE SINGUR, AI PRELUAT sau DOAR ACOMPANIAMENT.
+- Pentru cei care sincronizează imnurile: marcajele salvate pleacă în hangar imediat, nu abia după repornirea aplicației, iar imnul trece din „de făcut” în „trimis de tine”.
 
 ---
 
 ## Nepublicat
 
-- Pentru cei care sincronizează imnurile: marcajele salvate pleacă în hangar imediat, nu abia după repornirea aplicației, iar imnul trece din „de făcut” în „trimis de tine”.
+_(nimic încă)_
+
+---
+
+## v1.6.17 (07 Noiembrie 2026)
+
+### Modificări
+- Când imnul nu e încă pe ecran, butonul de acompaniament îl și proiectează: „Proiectează cu acompaniament sincronizat” (sau „Proiectează cu acompaniament”) pune imnul pe ecran și pornește acompaniamentul dintr-o singură apăsare. „Doar acompaniamentul” pornește doar sunetul, fără proiecție. Butoanele au aceleași iconițe ca în lista de imnuri, iar cât cântă scrie MERGE SINGUR, AI PRELUAT sau DOAR ACOMPANIAMENT.
 
 ---
 
