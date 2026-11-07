@@ -641,6 +641,183 @@
    in a narrow sidebar. Double-class selectors so these ALWAYS beat the shared
    horizontal .update-banner rule (defined later in this file) regardless of
    cascade order — on Windows the banner was rendering inline/cramped. */
+/* ── Caseta de mesaje, sub colecții (2026-11-07) ──
+   Familia casetei de actualizări (chenar, colțuri, spațiere), dar albastră: răspunsurile
+   și anunțurile nu se confundă cu „versiune nouă”. Un singur mesaj deschis; când mai
+   sunt, două margini de cărți ies de sub ea, ca un teanc. */
+.caseta-mesaje {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 8px 10px;
+    padding: 10px 12px;
+    background: rgba(56, 189, 248, 0.07);
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    border-radius: var(--radius);
+    flex-shrink: 0;
+    font-size: 12px;
+}
+
+.caseta-mesaje.anunt {
+    background: rgba(167, 139, 250, 0.08);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.caseta-mesaje.teanc {
+    margin-bottom: 18px;
+    box-shadow:
+        0 4px 0 -1px var(--bg-sidebar), 0 4px 0 0 rgba(56, 189, 248, 0.22),
+        0 8px 0 -1px var(--bg-sidebar), 0 8px 0 0 rgba(56, 189, 248, 0.14);
+}
+
+.caseta-mesaje.strans {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    color: var(--text-secondary);
+}
+
+.caseta-mesaje-cap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    color: #7dd3fc;
+}
+
+.caseta-mesaje.anunt .caseta-mesaje-cap { color: #c4b5fd; }
+
+.caseta-mesaje-eticheta {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.caseta-mesaje-nav {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-weight: 500;
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.caseta-mesaje-nav button {
+    padding: 0 5px;
+    font-size: 14px;
+    line-height: 1;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.caseta-mesaje-nav button:disabled { opacity: 0.3; cursor: default; }
+
+.caseta-mesaje-intrebare {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    width: 100%;
+    padding: 0;
+    text-align: left;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.caseta-mesaje-sageata { margin-left: auto; opacity: 0.7; }
+
+.caseta-mesaje-original {
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    background: rgb(var(--fg-rgb) / 0.04);
+    border-radius: var(--radius-sm);
+    white-space: pre-line;
+}
+
+.caseta-mesaje-titlu { font-weight: 700; color: var(--text-primary); }
+
+.caseta-mesaje-text {
+    margin: 0;
+    padding-top: 8px;
+    border-top: 1px solid rgb(var(--fg-rgb) / 0.08);
+    line-height: 1.5;
+    color: var(--text-primary);
+    white-space: pre-line;
+}
+
+.caseta-mesaje-text.scurtat {
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.caseta-mesaje-jos {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.caseta-mesaje-citit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #052e1b;
+    background: #7dd3fc;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.caseta-mesaje.anunt .caseta-mesaje-citit { background: #c4b5fd; color: #1e1b4b; }
+
+.caseta-mesaje-citit:disabled {
+    color: var(--text-secondary);
+    background: rgb(var(--fg-rgb) / 0.06);
+    cursor: default;
+}
+
+/* Tema deschisă: albastrul și movul deschise nu se citesc pe alb. */
+:root[data-theme="light"] .caseta-mesaje-cap { color: #0369a1; }
+:root[data-theme="light"] .caseta-mesaje.anunt .caseta-mesaje-cap { color: #6d28d9; }
+
+/* Inelul care se umple cât stă anunțul pe ecran. */
+.caseta-mesaje-inel {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: conic-gradient(#c4b5fd var(--progres, 0deg), rgb(var(--fg-rgb) / 0.15) 0);
+    -webkit-mask: radial-gradient(circle, transparent 3px, #000 3.5px);
+    mask: radial-gradient(circle, transparent 3px, #000 3.5px);
+}
+
+.caseta-mesaje-link {
+    padding: 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-decoration: underline;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
 .update-banner.update-banner-sidebar {
     display: flex;
     flex-direction: column;

@@ -56,6 +56,7 @@ import {
     Headphones,
     HelpCircle,
     Mail,
+    Sparkles,
     Bug,
     Lightbulb,
     TriangleAlert,
@@ -99,6 +100,7 @@ import type {
     DisplayInfo,
     ProjectionTextData,
     SentMessage,
+    Announcement,
     SyncMarkerStatus,
     SyncWarning,
     SyncWorkItem,
@@ -488,6 +490,8 @@ function App() {
     const [decisionsOpen, setDecisionsOpen] = useState(false);
     // Recalcularea contorului, ca s-o poată cere și fereastra de avertismente.
     const numaraRaspunsuriRef = useRef<(() => void) | null>(null);
+    /** Crește după fiecare verificare la hangar: caseta de mesaje se reîncarcă. */
+    const [mesajeRev, setMesajeRev] = useState(0);
     // Rutina de conținut poate muta un imn acceptat din „Imnurile mele" în colecția
     // oficială; fără reîncărcare, numărul din dreptul colecției rămânea vechi.
     const reincarcaListeleRef = useRef<(() => void) | null>(null);
@@ -755,7 +759,10 @@ function App() {
             }
         }).catch(() => { });
         vestiDecizii();
-        window.electron.contrib.onDecisions(() => { numaraRaspunsuri(); vestiDecizii(); reincarcaListeleRef.current?.(); });
+        window.electron.contrib.onDecisions(() => {
+            numaraRaspunsuri(); vestiDecizii(); reincarcaListeleRef.current?.();
+            setMesajeRev(r => r + 1);   // caseta de mesaje se reîncarcă după fiecare verificare
+        });
         window.electron.update.forcedState()
             .then(s => { if (s.required) setForcedUpdate({ version: s.version, reason: s.reason, waitingForProjection: false }); })
             .catch(() => { /* fără rețea, se reia la următoarea pornire */ });
@@ -2510,6 +2517,8 @@ function App() {
                             youtubePlaylist={youtubePlaylist}
                         />
                     )}
+                    <CasetaMesaje projecting={projecting} rev={mesajeRev}
+                        onChanged={() => numaraRaspunsuriRef.current?.()} />
                     {/* Update banner */}
                     {(updateInfo?.available || updateReady) && (
                         <div className="update-banner update-banner-sidebar">
@@ -4411,6 +4420,8 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     /** Marcajele de dinaintea fiecărei mutări cu butoanele, pentru „Anulează". */
     const istoricRef = useRef<Marcaj[][]>([]);
     const [areIstoric, setAreIstoric] = useState(false);
+    /** Marcajele încărcate vin din calcul (lista de lucru), nu de la un om. */
+    const [dinCalcul, setDinCalcul] = useState(false);
     const josPeFundalRef = useRef(false);
     /** Refuzul unei mutări, spus lângă butoane, unde se uită omul. */
     const [mesajTrecere, setMesajTrecere] = useState('');
@@ -4461,15 +4472,24 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         if (!Number.isFinite(n)) { setStare(t('Scrie un număr de imn.')); return; }
         if (dinLista !== undefined) setNumar(String(dinLista));
         setOcupat(true); setStare(''); setMarks(null); setPeaks(null);
-        setSelectat(null); setModificat(false); setImnCurent(null); setSectiuni([]);
+        setSelectat(null); setModificat(false); setImnCurent(null); setSectiuni([]); setDinCalcul(false);
         apasariRef.current = [];
         istoricRef.current = []; setAreIstoric(false); setMesajTrecere('');
         // Din căsuța cu numărul: Space ar scrie acolo un spațiu în loc să pornească ascultarea.
         if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur();
         try {
             const m = await window.electron.accompaniment.marks(n);
-            setMarks(m ? m.map(x => [...x] as Marcaj) : []);
-            setCuPreludiu(!m || m.length === 0 || m[0][0] === -1);
+            // Fără marcaje pe calculator, dar imnul e pe lista de lucru cu calculul
+            // atașat: omul pornește de la el și corectează doar ce nu se potrivește.
+            const calcul = !m || m.length === 0
+                ? lucru?.find(i => i.n === n && !i.variant)?.hint
+                : undefined;
+            const deLucru = calcul ?? m;
+            setMarks(deLucru ? deLucru.map(x => [...x] as Marcaj) : []);
+            setCuPreludiu(!deLucru || deLucru.length === 0 || deLucru[0][0] === -1);
+            setDinCalcul(!!calcul);
+            // Calculul confirmat prin ascultare se trimite ca munca omului: Salvează e activ.
+            if (calcul) setModificat(true);
 
             // Câte slide-uri are imnul la proiecție. De aici știe programul că a
             // treia linie e sfârșitul unui refren — omul nu trebuie să ne spună asta.
@@ -4516,7 +4536,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         } finally {
             setOcupat(false);
         }
-    }, [numar, t]);
+    }, [numar, lucru, t]);
 
     // ── unelte pe timp ───────────────────────────────────────────────────────
 
@@ -5451,6 +5471,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         )}
                                     </div>
                                 </div>
+
+                                {dinCalcul && (
+                                    <div className="admin-cere atentie">
+                                        {t('Liniile vin din calcul, nu de la un om. Ascultă imnul, mută cu butoanele de trecere ce nu se potrivește, apoi salvează.')}
+                                    </div>
+                                )}
 
                                 {sectiuni.length > 0 && (
                                     <div className="admin-progres">
@@ -6554,6 +6580,147 @@ function MessageCard({ m, children }: { m: SentMessage; children?: React.ReactNo
                 </div>
             )}
             {children && <div className="row">{children}</div>}
+        </div>
+    );
+}
+
+type ElementCaseta =
+    | { fel: 'raspuns'; m: SentMessage & { unread: boolean } }
+    | { fel: 'anunt'; a: Announcement };
+
+/**
+ * Caseta de mesaje de sub colecții (decizia ownerului, 2026-11-07): răspunsurile
+ * autorilor la ce a trimis calculatorul ăsta, apoi anunțurile generale. Un singur
+ * mesaj deschis, teanc cu „1/n”. Un anunț important stă pe ecran cel puțin
+ * `min_seconds`; numărătoarea curge doar cât e chiar văzut (fereastra în față, fără
+ * proiecție pornită) și continuă după repornire. În timpul proiecției caseta se
+ * strânge la un rând, ca să nu tragă ochiul tehnicianului de pe strofe.
+ */
+function CasetaMesaje({ projecting, rev, onChanged }: { projecting: boolean; rev: number; onChanged: () => void }) {
+    const t = useT();
+    const [lista, setLista] = useState<ElementCaseta[]>([]);
+    const [idx, setIdx] = useState(0);
+    const [intrebare, setIntrebare] = useState(false);
+    const [tot, setTot] = useState(false);
+    const [toateMesajele, setToateMesajele] = useState(false);
+    const [inPlus, setInPlus] = useState<Record<number, number>>({});
+    const netrimis = useRef<Record<number, number>>({});
+
+    const incarca = useCallback(async () => {
+        const [m, a] = await Promise.all([
+            window.electron.feedback.messages().catch(() => [] as (SentMessage & { unread: boolean })[]),
+            window.electron.feedback.announcements().catch(() => [] as Announcement[]),
+        ]);
+        const raspunsuri = (m as (SentMessage & { unread: boolean })[]).filter(x => x.unread)
+            .sort((x, y) => (x.replied_at ?? '').localeCompare(y.replied_at ?? ''));
+        const anunturi = [...a].sort((x, y) => x.created_at.localeCompare(y.created_at));
+        setLista([...raspunsuri.map(m => ({ fel: 'raspuns' as const, m })),
+            ...anunturi.map(a => ({ fel: 'anunt' as const, a }))]);
+    }, []);
+    useEffect(() => { void incarca(); }, [incarca, rev]);
+
+    const curent = lista[Math.min(idx, Math.max(0, lista.length - 1))];
+    useEffect(() => { setIntrebare(false); setTot(false); }, [idx, curent]);
+
+    // Timpul pe ecran al anunțului important deschis acum.
+    const anuntDeNumarat = curent?.fel === 'anunt' && curent.a.important && curent.a.min_seconds > 0 ? curent.a : null;
+    useEffect(() => {
+        if (!anuntDeNumarat) return;
+        const id = anuntDeNumarat.id;
+        const coada = netrimis.current;
+        const tick = window.setInterval(() => {
+            if (projecting || document.visibilityState !== 'visible' || !document.hasFocus()) return;
+            setInPlus(p => ({ ...p, [id]: (p[id] ?? 0) + 1 }));
+            coada[id] = (coada[id] ?? 0) + 1;
+            if (coada[id] >= 5) {
+                void window.electron.feedback.announcementShown(id, coada[id]);
+                coada[id] = 0;
+            }
+        }, 1000);
+        return () => {
+            window.clearInterval(tick);
+            if (coada[id]) {
+                void window.electron.feedback.announcementShown(id, coada[id]);
+                coada[id] = 0;
+            }
+        };
+    }, [anuntDeNumarat, projecting]);
+
+    if (lista.length === 0 || !curent) return null;
+
+    if (projecting) {
+        return (
+            <div className="caseta-mesaje strans" title={t('Mesajele se citesc după proiecție.')}>
+                <Mail className="icon-xs" />
+                {t(lista.length === 1 ? 'Un mesaj necitit' : '{n} mesaje necitite', { n: lista.length })}
+            </div>
+        );
+    }
+
+    const ramase = anuntDeNumarat
+        ? Math.max(0, Math.ceil(anuntDeNumarat.min_seconds - anuntDeNumarat.shown - (inPlus[anuntDeNumarat.id] ?? 0)))
+        : 0;
+    const procent = anuntDeNumarat ? 1 - ramase / anuntDeNumarat.min_seconds : 1;
+    const data = (iso: string) => new Date(iso).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
+    const textul = curent.fel === 'raspuns' ? curent.m.reply : curent.a.body;
+    const lung = textul.length > 260;
+
+    const amCitit = async () => {
+        if (ramase > 0) return;
+        if (curent.fel === 'raspuns') await window.electron.feedback.markRead([curent.m.id]);
+        else await window.electron.feedback.announcementRead(curent.a.id);
+        await incarca();
+        setIdx(i => Math.max(0, Math.min(i, lista.length - 2)));
+        onChanged();
+    };
+
+    return (
+        <div className={`caseta-mesaje ${curent.fel} ${lista.length > 1 ? 'teanc' : ''}`}>
+            <div className="caseta-mesaje-cap">
+                {curent.fel === 'raspuns'
+                    ? <><Mail className="icon-xs" /><span className="caseta-mesaje-eticheta">{t('Răspuns AdventShow')}</span></>
+                    : <><Sparkles className="icon-xs" /><span className="caseta-mesaje-eticheta">{t('Noutate')}</span></>}
+                {lista.length > 1 && (
+                    <span className="caseta-mesaje-nav">
+                        <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
+                            aria-label={t('Mesajul anterior')}>‹</button>
+                        {Math.min(idx, lista.length - 1) + 1}/{lista.length}
+                        <button onClick={() => setIdx(i => Math.min(lista.length - 1, i + 1))}
+                            disabled={idx >= lista.length - 1} aria-label={t('Mesajul următor')}>›</button>
+                    </span>
+                )}
+            </div>
+            {curent.fel === 'raspuns' ? (
+                <button className="caseta-mesaje-intrebare" onClick={() => setIntrebare(v => !v)}>
+                    <span>
+                        {t(curent.m.kind === 'bug' ? 'La problema trimisă pe {data}:' : 'La sugestia trimisă pe {data}:',
+                            { data: data(curent.m.created_at) })}{' '}
+                        <strong>„{curent.m.subject || t('fără subiect')}”</strong>
+                    </span>
+                    <span className="caseta-mesaje-sageata">{intrebare ? '▾' : '▸'}</span>
+                </button>
+            ) : (
+                curent.a.title && <div className="caseta-mesaje-titlu">{curent.a.title}</div>
+            )}
+            {curent.fel === 'raspuns' && intrebare && curent.m.body && (
+                <p className="caseta-mesaje-original">{curent.m.body}</p>
+            )}
+            <p className={`caseta-mesaje-text ${lung && !tot ? 'scurtat' : ''}`}>{textul}</p>
+            {lung && !tot && (
+                <button className="caseta-mesaje-link" onClick={() => setTot(true)}>{t('Citește tot')}</button>
+            )}
+            <div className="caseta-mesaje-jos">
+                <button className="caseta-mesaje-citit" onClick={() => void amCitit()} disabled={ramase > 0}
+                    style={{ ['--progres' as string]: `${Math.round(procent * 360)}deg` }}>
+                    {ramase > 0
+                        ? <><span className="caseta-mesaje-inel" />{t('Poți închide în {t}', { t: `${Math.floor(ramase / 60)}:${String(ramase % 60).padStart(2, '0')}` })}</>
+                        : t('Am citit')}
+                </button>
+                {curent.fel === 'raspuns' && (
+                    <button className="caseta-mesaje-link" onClick={() => setToateMesajele(true)}>{t('Toate mesajele')}</button>
+                )}
+            </div>
+            {toateMesajele && <MessagesModal onClose={() => { setToateMesajele(false); void incarca(); onChanged(); }} />}
         </div>
     );
 }

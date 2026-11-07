@@ -171,6 +171,18 @@ export interface ProjectionTextData {
 }
 
 /** O problemă sau o sugestie trimisă autorilor, cu starea și răspunsul lor. */
+/** Anunț general de la autori; `shown` = secundele în care a stat deja pe ecran. */
+export interface Announcement {
+  id: number;
+  title: string;
+  body: string;
+  important: boolean;
+  min_seconds: number;
+  until: string | null;
+  created_at: string;
+  shown: number;
+}
+
 export interface SentMessage {
   id: number;
   kind: 'bug' | 'suggestion';
@@ -251,6 +263,8 @@ export interface SyncWorkItem {
   submissions: number;
   installs: number;
   mine: number;
+  /** Marcajele calculate, punct de plecare pentru om; nu se publică. */
+  hint?: [number, number, number][];
 }
 
 export interface AppSettings {
@@ -549,6 +563,10 @@ export interface IElectronAPI {
     messages: () => Promise<SentMessage[]>;
     unreadReplies: () => Promise<number>;
     markRead: (ids: number[]) => Promise<void>;
+    /** Anunțurile generale necitite și încă valabile, cu cât au stat deja pe ecran. */
+    announcements: () => Promise<Announcement[]>;
+    announcementShown: (id: number, seconds: number) => Promise<void>;
+    announcementRead: (id: number) => Promise<void>;
   };
   video: {
     pickFile: () => Promise<string | undefined>;

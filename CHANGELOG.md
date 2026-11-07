@@ -12,6 +12,8 @@
 
 ## Nepublicat
 
+- Răspunsurile autorilor la problemele și sugestiile trimise apar acum la vedere, într-o casetă sub colecțiile de imnuri, împreună cu anunțurile generale de la AdventShow: un mesaj deschis, celelalte în teanc („1/3”), cu întrebarea trimisă alături, ca oricine stă la calculator să știe despre ce e vorba. Anunțurile importante pot fi închise după ce au stat puțin pe ecran. În timpul proiecției caseta se strânge la un rând.
+- Pentru cei care sincronizează imnurile: imnurile din lista de lucru pot veni cu marcajele calculate, ca punct de plecare de verificat și corectat.
 - Lista de imnuri desenează doar rândurile care se văd: aplicația folosește mai puțină memorie și se mișcă mai repede pe calculatoarele mai slabe.
 - Pentru cei care sincronizează imnurile: după ce marchezi începutul ultimei strofe, linia de final se pune singură la capătul înregistrării.
 - Pe Windows, curățenia certificatului vechi nu se mai oprește când sistemul refuză ștergerea fără drepturi de administrator: cere acordul o singură dată și, dacă nu reușește, reîncearcă abia peste o lună.

@@ -434,7 +434,30 @@ export interface SentMessage {
   created_at: string;
 }
 
-interface MessagesFile { items: SentMessage[]; seen: Record<string, string> }
+/**
+ * Anunț general de la autori, pentru toate instalările (cerut hangarului pe 2026-11-07:
+ * vine în același răspuns cu `do=replies`, ca `announcements`). `min_seconds` = cât
+ * trebuie să stea pe ecran un anunț important înainte să poată fi închis.
+ */
+export interface Announcement {
+  id: number;
+  title: string;
+  body: string;
+  important: boolean;
+  min_seconds: number;
+  until: string | null;
+  created_at: string;
+}
+
+interface MessagesFile {
+  items: SentMessage[];
+  seen: Record<string, string>;
+  announcements?: Announcement[];
+  /** Anunțurile închise cu „Am citit”. */
+  annRead?: Record<string, true>;
+  /** Cât a stat fiecare anunț pe ecran, în secunde — numărătoarea continuă după repornire. */
+  annShown?: Record<string, number>;
+}
 
 function messagesPath(deps: HangarDeps): string {
   return path.join(deps.userDataDir, MESSAGES_FILE);
@@ -443,7 +466,13 @@ function messagesPath(deps: HangarDeps): string {
 function readMessages(deps: HangarDeps): MessagesFile {
   try {
     const raw = JSON.parse(fs.readFileSync(messagesPath(deps), 'utf-8')) as MessagesFile;
-    return { items: Array.isArray(raw.items) ? raw.items : [], seen: raw.seen ?? {} };
+    return {
+      items: Array.isArray(raw.items) ? raw.items : [],
+      seen: raw.seen ?? {},
+      announcements: Array.isArray(raw.announcements) ? raw.announcements : [],
+      annRead: raw.annRead ?? {},
+      annShown: raw.annShown ?? {},
+    };
   } catch {
     return { items: [], seen: {} };
   }
@@ -471,7 +500,54 @@ export async function refreshMessages(deps: HangarDeps): Promise<void> {
   if (!out || hubStatus(out.res) !== 200 || !out.json.ok || !Array.isArray(out.json.items)) return;
   const m = readMessages(deps);
   m.items = out.json.items as SentMessage[];
+  // Anunțurile, dacă hangarul le trimite. Lipsa listei nu le șterge pe cele știute:
+  // un hangar fără anunțuri și unul vechi, care nu le cunoaște, arată la fel.
+  if (Array.isArray(out.json.announcements)) {
+    m.announcements = (out.json.announcements as Record<string, unknown>[])
+      .filter(a => Number.isInteger(a.id) && typeof a.body === 'string')
+      .map(a => ({
+        id: Number(a.id),
+        title: String(a.title ?? ''),
+        body: String(a.body),
+        important: a.important === true || a.important === 1,
+        min_seconds: Math.max(0, Math.min(600, Number(a.min_seconds) || 0)),
+        until: typeof a.until === 'string' ? a.until : null,
+        created_at: String(a.created_at ?? ''),
+      }));
+  }
   writeMessages(deps, m);
+}
+
+/** Anunțurile de arătat: necitite și încă valabile, cu cât au stat deja pe ecran. */
+export function listAnnouncements(deps: HangarDeps): (Announcement & { shown: number })[] {
+  const m = readMessages(deps);
+  const acum = Date.now();
+  return (m.announcements ?? [])
+    .filter(a => !m.annRead?.[String(a.id)])
+    .filter(a => !a.until || !Number.isFinite(Date.parse(a.until)) || Date.parse(a.until) > acum)
+    .map(a => ({ ...a, shown: m.annShown?.[String(a.id)] ?? 0 }));
+}
+
+/** Timpul pe ecran al unui anunț, adunat de fereastră cât e chiar vizibil. */
+export function addAnnouncementShown(deps: HangarDeps, id: number, seconds: number): void {
+  if (!Number.isFinite(seconds) || seconds <= 0) return;
+  const m = readMessages(deps);
+  m.annShown = { ...(m.annShown ?? {}), [String(id)]: (m.annShown?.[String(id)] ?? 0) + Math.min(seconds, 120) };
+  writeMessages(deps, m);
+}
+
+/** „Am citit” la un anunț: nu mai apare, iar hangarul numără cine l-a citit. */
+export async function markAnnouncementRead(deps: HangarDeps, id: number): Promise<void> {
+  const m = readMessages(deps);
+  m.annRead = { ...(m.annRead ?? {}), [String(id)]: true };
+  writeMessages(deps, m);
+  await postJson(TRACK_URL, {
+    project: HANGAR_KEY,
+    install: installId(deps),
+    event: 'announcement_read',
+    version: deps.appVersion,
+    announcement: { id, shown_seconds: Math.round(m.annShown?.[String(id)] ?? 0) },
+  }, 6000);
 }
 
 /** Răspunsurile încă necitite: un răspuns schimbat de autori contează iar ca nou. */
@@ -657,6 +733,18 @@ export interface SyncWorkItem {
   submissions: number;
   installs: number;
   mine: number;
+  /**
+   * Marcajele calculate, doar ca punct de plecare pentru om (cerut hangarului pe
+   * 2026-11-07, `hint` în `do=work`): nu sunt propuse, aprobate sau publicate.
+   */
+  hint?: [number, number, number][];
+}
+
+/** Un `hint` venit din hangar, păstrat doar dacă are forma marcajelor: [slide, sfârșit, reintrare]. */
+function marcajeValide(x: unknown): [number, number, number][] | undefined {
+  if (!Array.isArray(x) || x.length === 0) return undefined
+  const ok = x.every(m => Array.isArray(m) && m.length === 3 && m.every(v => Number.isInteger(v)))
+  return ok ? (x as [number, number, number][]).map(m => [m[0], m[1], m[2]]) : undefined
 }
 
 /** Lista de imnuri cerute marcatorilor, în ordinea de lucru. null = n-am putut-o aduce. */
@@ -676,6 +764,7 @@ export async function syncWork(deps: HangarDeps): Promise<SyncWorkItem[] | null>
     submissions: Number(i.submissions) || 0,
     installs: Number(i.installs) || 0,
     mine: Number(i.mine) || 0,
+    hint: marcajeValide(i.hint),
   })).filter(i => Number.isFinite(i.n));
 }
 

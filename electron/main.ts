@@ -62,6 +62,7 @@ import {
 import {
   HangarDeps, HANGAR_DOWNLOAD_URL, ReportPayload, SystemInfo, compareVersions, flushReportQueue,
   hangarPlatform, listMessages, markRepliesRead, pendingReportCount, refreshMessages, sendReport,
+  listAnnouncements, addAnnouncementShown, markAnnouncementRead,
   startHeartbeat, track, unreadReplyCount, updateChannel,
   syncLogin, syncLogout, syncKeyValid, syncSubmit, syncWork, trackTakeover,
 } from './hangar'
@@ -2621,6 +2622,14 @@ app.whenReady().then(() => {
   ipcMain.handle('feedback:unread-replies', () => unreadReplyCount(hangarDeps()))
   ipcMain.handle('feedback:mark-read', (_e, ids: number[]) => {
     markRepliesRead(hangarDeps(), Array.isArray(ids) ? ids.map(Number) : [])
+  })
+  // Anunțurile generale de la autori (caseta de sub colecții).
+  ipcMain.handle('feedback:announcements', () => listAnnouncements(hangarDeps()))
+  ipcMain.handle('feedback:announcement-shown', (_e, id: number, seconds: number) => {
+    addAnnouncementShown(hangarDeps(), Number(id), Number(seconds))
+  })
+  ipcMain.handle('feedback:announcement-read', async (_e, id: number) => {
+    await markAnnouncementRead(hangarDeps(), Number(id)).catch(() => { /* confirmarea e best-effort */ })
   })
   ipcMain.handle('feedback:retry-pending', async () => {
     await flushReportQueue(hangarDeps())

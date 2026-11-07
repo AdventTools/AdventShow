@@ -300,6 +300,10 @@ contextBridge.exposeInMainWorld('electron', {
     messages: () => ipcRenderer.invoke('feedback:messages'),
     unreadReplies: () => ipcRenderer.invoke('feedback:unread-replies') as Promise<number>,
     markRead: (ids: number[]) => ipcRenderer.invoke('feedback:mark-read', ids) as Promise<void>,
+    announcements: () => ipcRenderer.invoke('feedback:announcements'),
+    announcementShown: (id: number, seconds: number) =>
+      ipcRenderer.invoke('feedback:announcement-shown', id, seconds) as Promise<void>,
+    announcementRead: (id: number) => ipcRenderer.invoke('feedback:announcement-read', id) as Promise<void>,
   },
 
   video: {
