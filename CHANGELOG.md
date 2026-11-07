@@ -1,17 +1,8 @@
 # Changelog — AdventShow
 
-## v1.7.1 (07 Noiembrie 2026)
+## v1.7.2 (07 Noiembrie 2026)
 
 ### Modificări
-- Pentru cei care sincronizează imnurile: meniul nu se mai închide singur când tragi ultima linie până la capăt și dai drumul mouse-ului în afara undei; linia se poate trage și peste margine.
-- Ascultarea nu se mai oprește singură după câteva secunde. Un clic lângă o linie mută doar ascultarea, fără să miște linia.
-- „Salvează” și „Exportă tot” stau acum sus, lângă „Ascultă”, iar „Salvează” se colorează cât ai ceva nesalvat.
-- Lista imnurilor cerute pornește pe „Nefăcute de nimeni”.
-
----
-
-## Nepublicat
-
 - Răspunsurile autorilor la problemele și sugestiile trimise apar acum la vedere, într-o casetă sub colecțiile de imnuri, împreună cu anunțurile generale de la AdventShow: un mesaj deschis, celelalte în teanc („1/3”), cu întrebarea trimisă alături, ca oricine stă la calculator să știe despre ce e vorba. Anunțurile importante pot fi închise după ce au stat puțin pe ecran. În timpul proiecției caseta se strânge la un rând.
 - Pentru cei care sincronizează imnurile: imnurile din lista de lucru pot veni cu marcajele calculate, ca punct de plecare de verificat și corectat.
 - Recuperarea parolei e mai simplă: fereastra ține minte cererea trimisă și nu se mai închide din greșeală, iar după ce autorii aprobă cererea, aplicația se deblochează singură, fără cod dictat la telefon (codul rămâne ca rezervă).
@@ -20,6 +11,22 @@
 - Pentru cei care sincronizează imnurile: după ce marchezi începutul ultimei strofe, linia de final se pune singură la capătul înregistrării.
 - Pe Windows, curățenia certificatului vechi nu se mai oprește când sistemul refuză ștergerea fără drepturi de administrator: cere acordul o singură dată și, dacă nu reușește, reîncearcă abia peste o lună.
 - Versetele biblice au acum aceeași mărime peste tot, oricât de scurt sau de lung e versetul și din orice carte e: textul nu mai sare între pasaje. Tastele + și − schimbă mărimea pentru toată Biblia; doar versetele foarte lungi se micșorează cât să încapă pe ecran.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
+## v1.7.1 (07 Noiembrie 2026)
+
+### Modificări
+- Pentru cei care sincronizează imnurile: meniul nu se mai închide singur când tragi ultima linie până la capăt și dai drumul mouse-ului în afara undei; linia se poate trage și peste margine.
+- Ascultarea nu se mai oprește singură după câteva secunde. Un clic lângă o linie mută doar ascultarea, fără să miște linia.
+- „Salvează” și „Exportă tot” stau acum sus, lângă „Ascultă”, iar „Salvează” se colorează cât ai ceva nesalvat.
+- Lista imnurilor cerute pornește pe „Nefăcute de nimeni”.
 
 ---
 
