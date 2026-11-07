@@ -4212,10 +4212,6 @@ select optgroup {
     margin: 0 4px;
 }
 
-.admin-bar .admin-spacer {
-    flex: 1;
-}
-
 .admin-check {
     display: flex;
     align-items: center;
@@ -4356,6 +4352,22 @@ select optgroup {
 
 .btn-mare.accent:hover {
     background: #6ee7b7;
+}
+
+/* Ceva nesalvat: butonul se vede de departe. Salvat = stins. */
+.btn-mare.salveaza {
+    color: #1e1b4b;
+    background: #a5b4fc;
+    border-color: #a5b4fc;
+}
+
+.btn-mare.salveaza:hover {
+    background: #c7d2fe;
+}
+
+.btn-mare:disabled {
+    opacity: 0.45;
+    cursor: default;
 }
 
 .admin-timp {

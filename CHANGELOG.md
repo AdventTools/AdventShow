@@ -16,7 +16,10 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+- Pentru cei care sincronizează imnurile: meniul nu se mai închide singur când tragi ultima linie până la capăt și dai drumul mouse-ului în afara undei; linia se poate trage și peste margine.
+- Ascultarea nu se mai oprește singură după câteva secunde. Un clic lângă o linie mută doar ascultarea, fără să miște linia.
+- „Salvează” și „Exportă tot” stau acum sus, lângă „Ascultă”, iar „Salvează” se colorează cât ai ceva nesalvat.
+- Lista imnurilor cerute pornește pe „Nefăcute de nimeni”.
 
 ---
 

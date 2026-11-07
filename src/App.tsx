@@ -4372,6 +4372,7 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     /** Marcajele de dinaintea fiecărei mutări cu butoanele, pentru „Anulează". */
     const istoricRef = useRef<Marcaj[][]>([]);
     const [areIstoric, setAreIstoric] = useState(false);
+    const josPeFundalRef = useRef(false);
     /** Refuzul unei mutări, spus lângă butoane, unde se uită omul. */
     const [mesajTrecere, setMesajTrecere] = useState('');
     const [marker, setMarker] = useState<SyncMarkerStatus | null>(null);
@@ -4379,11 +4380,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const [mesajMarcator, setMesajMarcator] = useState('');
     const [lucru, setLucru] = useState<SyncWorkItem[] | null>(null);
     /**
-     * Ce arată lista urgentelor. Implicit doar ce n-ai trimis tu: cele făcute de
-     * tine n-au ce căuta în fața ochilor. Cele făcute doar de alții rămân, cu
-     * semn: același imn marcat de doi oameni e exact ce cere comparația.
+     * Ce arată lista urgentelor. Implicit ce n-a marcat nimeni încă (decizia
+     * ownerului, 2026-11-07): întâi se acoperă tot lotul. „Nefăcute de mine" le
+     * arată și pe cele făcute doar de alții, cu semn — același imn marcat de doi
+     * oameni e exact ce cere comparația.
      */
-    const [filtruLucru, setFiltruLucru] = useState<'nefacuteDeMine' | 'nefacute' | 'toate'>('nefacuteDeMine');
+    const [filtruLucru, setFiltruLucru] = useState<'nefacuteDeMine' | 'nefacute' | 'toate'>('nefacute');
     const [titluri, setTitluri] = useState<Record<number, string>>({});
     const [selectat, setSelectat] = useState<number | null>(null);
     const [modificat, setModificat] = useState(false);
@@ -4395,13 +4397,14 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const hartaRef = useRef<HTMLCanvasElement>(null);
     const trageRef = useRef<number | null>(null);
+    /** Unde a început apăsarea pe o linie și dacă s-a tras de fapt de ea. */
+    const tragereRef = useRef({ x: 0, mutat: false });
     /**
      * Bara de jos, ca în Audition: tras peste o bucată = mărești bucata aia; tras
      * de dreptunghi (când e mărit) = te muți; dublu clic = tot imnul.
      */
     const trageHartaRef = useRef<{ fel: 'muta' | 'alege'; deLa: number; xDeLa: number } | null>(null);
     const [alegereHarta, setAlegereHarta] = useState<[number, number] | null>(null);
-    const opresteLaRef = useRef<number | null>(null);
 
     useEffect(() => {
         window.electron.settings.get().then(setSettings).catch(() => { /* implicit */ });
@@ -4508,17 +4511,16 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         return Math.round(best * perCol);
     }, [peaks, durata]);
 
-    /** Redă bucata din jurul unui marcaj: 3 secunde înainte, una după. */
+    /**
+     * Ascultă o trecere: de la 3 secunde înainte, și merge mai departe. Nu se mai
+     * oprește singură după 4 secunde — oprirea venea și după un clic oarecare pe
+     * undă, iar omul nu înțelegea de ce tace (ownerul, 2026-11-07). Pauza e Space.
+     */
     const asculta = useCallback((ms: number) => {
         const a = audioRef.current;
         if (!a) return;
         a.currentTime = Math.max(0, ms / 1000 - 3);
-        if (opresteLaRef.current !== null) window.clearTimeout(opresteLaRef.current);
         void a.play().then(() => setReda(true)).catch(() => { /* încă se încarcă */ });
-        opresteLaRef.current = window.setTimeout(() => {
-            opresteLaRef.current = null;
-            a.pause(); setReda(false);
-        }, 4200);
     }, []);
 
     // ── operații pe marcaje ──────────────────────────────────────────────────
@@ -4693,10 +4695,6 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const redaPauza = useCallback(() => {
         const a = audioRef.current;
         if (!a) return;
-        if (opresteLaRef.current !== null) {
-            window.clearTimeout(opresteLaRef.current);
-            opresteLaRef.current = null;
-        }
         if (a.paused) { void a.play().then(() => setReda(true)).catch(() => undefined); }
         else { a.pause(); setReda(false); }
     }, []);
@@ -4991,34 +4989,68 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
         return best;
     }, [marks, vedere]);
 
-    const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (!peaks) return;
-        const idx = marcajLaX(e.clientX);
-        if (idx !== null) { setSelectat(idx); trageRef.current = idx; return; }
-        const a = audioRef.current;
-        if (a) { a.currentTime = Math.max(0, timpLaX(e.clientX, canvasRef.current, vedere)); setPozitie(a.currentTime); }
-        setSelectat(null);
-    };
-
-    const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const tragLinia = (clientX: number) => {
         const idx = trageRef.current;
         if (idx === null || !marks) return;
-        const ms = Math.max(0, Math.min(durata * 1000, timpLaX(e.clientX, canvasRef.current, vedere) * 1000));
+        // Câțiva pixeli de tremur nu înseamnă tragere: clicul rămâne clic.
+        if (!tragereRef.current.mutat && Math.abs(clientX - tragereRef.current.x) < 4) return;
+        tragereRef.current.mutat = true;
+        const ms = Math.max(0, Math.min(durata * 1000, timpLaX(clientX, canvasRef.current, vedere) * 1000));
         setMarks(marks.map((m, i) => (i === idx ? [m[0], ms, ms] : m)));
         setModificat(true);
     };
 
-    const onMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const lasaLinia = (clientX: number) => {
         const idx = trageRef.current;
         trageRef.current = null;
         if (idx === null || !marks) return;
+        // Clic lângă o linie, fără tragere: mută doar ascultarea acolo. Înainte
+        // „apuca" linia și o lipea de cea mai apropiată liniște, deci o putea muta.
+        if (!tragereRef.current.mutat) {
+            const a = audioRef.current;
+            if (a) { a.currentTime = Math.max(0, timpLaX(clientX, canvasRef.current, vedere)); setPozitie(a.currentTime); }
+            return;
+        }
         // Lipirea se face la eliberare, nu în timpul tragerii: altfel marcajul ar
         // sări din mână, iar omul n-ar mai ști dacă îl mișcă el sau programul.
         const ms = lipesteDeTacere(Math.max(0, Math.min(durata * 1000,
-            timpLaX(e.clientX, canvasRef.current, vedere) * 1000)));
+            timpLaX(clientX, canvasRef.current, vedere) * 1000)));
         const dupa = scrieMarcaje(marks.map((m, i) => (i === idx ? [m[0], ms, ms] : m)));
         setSelectat(dupa.findIndex(m => m[1] === ms));
         asculta(ms);
+    };
+
+    // Ascultătorii de pe fereastră trăiesc cât ține tragerea; ei cheamă mereu
+    // varianta proaspătă, cu marcajele de acum.
+    const tragLiniaRef = useRef(tragLinia);
+    const lasaLiniaRef = useRef(lasaLinia);
+    useEffect(() => { tragLiniaRef.current = tragLinia; lasaLiniaRef.current = lasaLinia; });
+
+    /**
+     * Tragerea unei linii continuă și în afara undei — ultima linie se duce la
+     * capăt trăgând peste margine. Pe fereastră, nu pe undă: altfel eliberarea în
+     * afara ei pierdea linia pe drum.
+     */
+    const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (!peaks) return;
+        const idx = marcajLaX(e.clientX);
+        if (idx !== null) {
+            setSelectat(idx);
+            trageRef.current = idx;
+            tragereRef.current = { x: e.clientX, mutat: false };
+            const muta = (ev: MouseEvent) => tragLiniaRef.current(ev.clientX);
+            const lasa = (ev: MouseEvent) => {
+                window.removeEventListener('mousemove', muta);
+                window.removeEventListener('mouseup', lasa);
+                lasaLiniaRef.current(ev.clientX);
+            };
+            window.addEventListener('mousemove', muta);
+            window.addEventListener('mouseup', lasa);
+            return;
+        }
+        const a = audioRef.current;
+        if (a) { a.currentTime = Math.max(0, timpLaX(e.clientX, canvasRef.current, vedere)); setPozitie(a.currentTime); }
+        setSelectat(null);
     };
 
     /**
@@ -5113,7 +5145,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
     const totVizibil = durata > 0 && vedere[1] - vedere[0] >= durata - 0.01;
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        // Se închide doar la un clic care a ÎNCEPUT pe fundal. O linie trasă peste
+        // marginea undei, eliberată pe fundal, dă și ea un „clic" pe fundal — și
+        // închidea meniul cu tot ce nu era salvat.
+        <div className="modal-overlay"
+            onMouseDown={e => { josPeFundalRef.current = e.target === e.currentTarget; }}
+            onClick={e => { if (josPeFundalRef.current && e.target === e.currentTarget) onClose(); }}>
             <div className="modal-dialog admin-sync" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3>{t('Administrare — sincronizare')}</h3>
@@ -5214,8 +5251,8 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                             </div>
                             <div className="admin-filtru">
                                 {([
-                                    ['nefacuteDeMine', t('Nefăcute de mine'), lucru.filter(i => i.mine === 0).length],
                                     ['nefacute', t('Nefăcute de nimeni'), lucru.filter(i => i.installs === 0).length],
+                                    ['nefacuteDeMine', t('Nefăcute de mine'), lucru.filter(i => i.mine === 0).length],
                                     ['toate', t('Toate'), lucru.length],
                                 ] as const).map(([cheie, eticheta, cate]) => (
                                     <button key={cheie}
@@ -5297,6 +5334,16 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                         <span className="admin-timp tabular">
                                             {mmssSec(pozitie)} / {mmssSec(durata)}
                                         </span>
+                                        {/* Lângă butoanele de lucru, unde se uită omul — nu jos, lângă
+                                            zoom, unde nu-l găsea nimeni (decizia ownerului, 2026-11-07). */}
+                                        <button className={`btn-mare ${modificat ? 'salveaza' : ''}`}
+                                            onMouseDown={e => e.preventDefault()}
+                                            onClick={() => void salveazaMarcaje()}
+                                            disabled={!modificat || imnCurent == null}>
+                                            {modificat ? t('Salvează') : t('Salvat')}
+                                        </button>
+                                        <button className="btn-sm" onMouseDown={e => e.preventDefault()}
+                                            onClick={() => void exporta()}>{t('Exportă tot')}</button>
                                     </div>
                                     <div className="admin-pas-dreapta">
                                         {cerePreludiu ? (
@@ -5468,21 +5515,12 @@ function AdminSyncPanel({ onClose }: { onClose: () => void }) {
                                             ? t('vezi tot imnul ({d})', { d: mmssSec(durata) })
                                             : t('vezi {a} – {b} din {d}', { a: mmssSec(vedere[0]), b: mmssSec(vedere[1]), d: mmssSec(durata) })}
                                     </span>
-                                    <span className="admin-spacer" />
-                                    <button className="btn-sm" onClick={() => void salveazaMarcaje()}
-                                        disabled={!modificat || imnCurent == null}>
-                                        {modificat ? t('Salvează') : t('Salvat')}
-                                    </button>
-                                    <button className="btn-sm" onClick={() => void exporta()}>{t('Exportă tot')}</button>
                                 </div>
 
                                 <div className="admin-wave-loc">
                                     <canvas ref={canvasRef} width={1400} height={200}
                                         className="admin-wave"
                                         onMouseDown={onMouseDown}
-                                        onMouseMove={onMouseMove}
-                                        onMouseUp={onMouseUp}
-                                        onMouseLeave={() => { trageRef.current = null; }}
                                         onWheel={onWheel} />
                                     {/* Cine a mărit unda și n-o mai găsește întreagă: ieșirea stă
                                         pe ea, nu printre butoanele mici de deasupra. */}
