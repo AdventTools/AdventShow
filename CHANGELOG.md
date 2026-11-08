@@ -16,7 +16,9 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+- La Video, fiecare clip din listă are acum o imagine și durata, ca să recunoști repede ce urmează. Apar singure, și la clipurile adăugate mai demult; în timpul proiecției aplicația așteaptă, ca să nu încarce calculatorul.
+- Eticheta unui clip se schimbă din creionul de lângă titlu: clic, scrii, Enter. La YouTube pornește de la titlul de acolo. O etichetă goală nu se mai salvează, iar Esc renunță la modificare, fără să oprească proiecția.
+- Bara de nivel a sunetului de la Video arată corect: e verde la volum mic și ajunge la roșu doar când sunetul chiar e tare.
 
 ---
 

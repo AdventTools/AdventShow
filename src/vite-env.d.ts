@@ -343,6 +343,8 @@ export interface YouTubeEntry {
   addedAt: string;
   audioOnly?: boolean; // descărcat fără imagine (.m4a)
   localUrl?: string; // present for local file entries in unified playlist
+  durationSec?: number;
+  thumbUrl?: string; // imagine din clip, ca adresă data:
 }
 
 export interface IElectronAPI {
@@ -629,6 +631,8 @@ export interface IElectronAPI {
     offProgress: () => void;
     onStatus: (cb: (id: string, status: string, error: string) => void) => void;
     offStatus: () => void;
+    onInfo: (cb: (id: string, durationSec: number | undefined, thumbUrl: string | undefined) => void) => void;
+    offInfo: () => void;
   };
   playlist: {
     addLocal: (url: string, name: string) => Promise<{ entry?: YouTubeEntry; error?: string }>;

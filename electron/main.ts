@@ -1024,6 +1024,9 @@ interface YouTubeEntry {
   addedAt: string
   audioOnly?: boolean
   localUrl?: string // fișier de pe calculator: se redă direct de la adresa asta
+  durationSec?: number
+  thumbFile?: string // numele imaginii din userData/video-thumbs
+  infoDone?: boolean // s-a încercat deja citirea duratei și a imaginii
 }
 
 function getYouTubeDir(): string {
@@ -1238,6 +1241,7 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
 
       updateStatus('ready', undefined, finalFile)
       win?.webContents.send('youtube:progress', entry.id, 100, 'done')
+      scheduleVideoInfo(0)
     } catch (err) {
       debugLog('[yt-dlp-download] ERROR:', errMsg(err))
       try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch { /* best effort */ }
@@ -1245,6 +1249,115 @@ function runYouTubeDownload(entry: YouTubeEntry): Promise<void> {
       updateStatus('error', errMsg(err) || String(err))
     }
   })()
+}
+
+// ── Durata și imaginea clipurilor din listă ───────────────────────────────────
+
+function videoThumbDir(): string {
+  const dir = path.join(app.getPath('userData'), 'video-thumbs')
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function playlistEntryPath(entry: YouTubeEntry): string | null {
+  if (entry.fileName) return path.join(getYouTubeDir(), entry.fileName)
+  if (!entry.localUrl) return null
+  try {
+    if (entry.localUrl.startsWith('file:')) return fileURLToPath(entry.localUrl)
+    return decodeURIComponent(entry.localUrl.replace(/^localfile:\/\//, ''))
+  } catch {
+    return null
+  }
+}
+
+/** Adresă `data:`, ca imaginea să se vadă la fel pe orice sistem, cu orice cale. */
+function videoThumbUrl(entry: YouTubeEntry): string | undefined {
+  if (!entry.thumbFile) return undefined
+  try {
+    const bytes = fs.readFileSync(path.join(videoThumbDir(), entry.thumbFile))
+    return `data:image/jpeg;base64,${bytes.toString('base64')}`
+  } catch {
+    return undefined
+  }
+}
+
+function deleteVideoThumb(thumbFile: string | undefined): void {
+  if (!thumbFile) return
+  try { fs.unlinkSync(path.join(videoThumbDir(), thumbFile)) } catch { /* deja ștearsă */ }
+}
+
+function runLowPriorityFFmpeg(args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    const proc = trackChild(execFile(getFFmpegPath(), args, { timeout: 60000 }, (_err, _stdout, stderr) => {
+      resolve(stderr || '')
+    }))
+    if (proc.pid) {
+      try { os.setPriority(proc.pid, os.constants.priority.PRIORITY_LOW) } catch { /* fără drept → prioritatea implicită */ }
+    }
+  })
+}
+
+async function readVideoInfo(entry: YouTubeEntry, filePath: string): Promise<Pick<YouTubeEntry, 'durationSec' | 'thumbFile'>> {
+  const probe = await runLowPriorityFFmpeg(['-hide_banner', '-i', filePath])
+  const d = probe.match(/Duration: (\d+):(\d+):([\d.]+)/)
+  const durationSec = d ? Number(d[1]) * 3600 + Number(d[2]) * 60 + Number(d[3]) : undefined
+  if (entry.audioOnly || !/: Video:/.test(probe)) return { durationSec }
+
+  // Primele cadre sunt adesea negre, deci luăm unul de mai încolo.
+  const seekSec = Math.min(5, (durationSec ?? 0) * 0.1)
+  const thumbFile = `${entry.id}.jpg`
+  const thumbPath = path.join(videoThumbDir(), thumbFile)
+  await runLowPriorityFFmpeg([
+    '-hide_banner', '-ss', String(seekSec), '-i', filePath,
+    '-frames:v', '1', '-vf', 'scale=192:-2', '-q:v', '5', '-threads', '1', '-y', thumbPath,
+  ])
+  return { durationSec, thumbFile: fs.existsSync(thumbPath) ? thumbFile : undefined }
+}
+
+let videoInfoRunning = false
+let videoInfoTimer: NodeJS.Timeout | null = null
+// Un fișier mutat poate reveni: nu-l marcăm definitiv, doar nu-l reîncercăm până la repornire.
+const videoInfoMissing = new Set<string>()
+
+function scheduleVideoInfo(delayMs: number): void {
+  if (videoInfoTimer) clearTimeout(videoInfoTimer)
+  videoInfoTimer = setTimeout(() => {
+    videoInfoTimer = null
+    fillVideoInfo().catch((err) => debugLog('[video-info] ERROR:', errMsg(err)))
+  }, delayMs)
+}
+
+/** Un clip pe rând și niciodată în timpul proiecției, ca slujba să nu simtă nimic. */
+async function fillVideoInfo(): Promise<void> {
+  if (videoInfoRunning) return
+  videoInfoRunning = true
+  try {
+    for (;;) {
+      const next = readYouTubePlaylist().find(e => e.status === 'ready' && !e.infoDone && !videoInfoMissing.has(e.id))
+      if (!next) return
+      if (isWinAlive(projectionWin)) {
+        scheduleVideoInfo(30000)
+        return
+      }
+      const filePath = playlistEntryPath(next)
+      if (!filePath || !fs.existsSync(filePath)) {
+        videoInfoMissing.add(next.id)
+        continue
+      }
+      const info = await readVideoInfo(next, filePath)
+      const playlist = readYouTubePlaylist()
+      const current = playlist.find(e => e.id === next.id)
+      if (!current) {
+        deleteVideoThumb(info.thumbFile)
+        continue
+      }
+      Object.assign(current, info, { infoDone: true })
+      writeYouTubePlaylist(playlist)
+      win?.webContents.send('youtube:info', current.id, current.durationSec, videoThumbUrl(current))
+    }
+  } finally {
+    videoInfoRunning = false
+  }
 }
 
 // ── Projection state ──────────────────────────────────────────────────────────
@@ -2822,7 +2935,9 @@ app.whenReady().then(() => {
 
   // ── YouTube Playlist ────────────────────────────────────────────────────────
   ipcMain.handle('youtube:get-playlist', () => {
-    return readYouTubePlaylist()
+    // Clipurile adăugate înainte de versiunea asta se completează după pornire, nu în timpul ei.
+    scheduleVideoInfo(15000)
+    return readYouTubePlaylist().map(e => ({ ...e, thumbUrl: videoThumbUrl(e) }))
   })
 
   ipcMain.handle('youtube:add', async (_e, url: string, userTitle?: string, audioOnly?: boolean) => {
@@ -2877,6 +2992,7 @@ app.whenReady().then(() => {
   ipcMain.handle('youtube:remove', (_e, id: string) => {
     debugLog('[youtube:remove] Removing entry:', id)
     const playlist = readYouTubePlaylist()
+    deleteVideoThumb(playlist.find(e => e.id === id)?.thumbFile)
     const filtered = playlist.filter(e => e.id !== id)
     writeYouTubePlaylist(filtered)
   })
@@ -2889,6 +3005,7 @@ app.whenReady().then(() => {
       const filePath = path.join(getYouTubeDir(), entry.fileName)
       try { fs.unlinkSync(filePath) } catch { /* ignore */ }
     }
+    deleteVideoThumb(entry?.thumbFile)
     writeYouTubePlaylist(playlist.filter(e => e.id !== id))
   })
 
@@ -2952,6 +3069,7 @@ app.whenReady().then(() => {
     }
     playlist.push(entry)
     writeYouTubePlaylist(playlist)
+    scheduleVideoInfo(0)
     return { entry: { ...entry, localUrl: url } }
   })
 

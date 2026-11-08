@@ -370,6 +370,9 @@ contextBridge.exposeInMainWorld('electron', {
     reorder: (orderedIds: string[]) => ipcRenderer.invoke('youtube:reorder', orderedIds),
     retryDownload: (id: string) => ipcRenderer.invoke('youtube:retry-download', id),
     getFileUrl: (id: string) => ipcRenderer.invoke('youtube:get-file-url', id),
+    onInfo: (cb: (id: string, durationSec: number | undefined, thumbUrl: string | undefined) => void) =>
+      ipcRenderer.on('youtube:info', (_e, id, durationSec, thumbUrl) => cb(id, durationSec, thumbUrl)),
+    offInfo: () => ipcRenderer.removeAllListeners('youtube:info'),
     onProgress: (cb: (id: string, percent: number, line: string) => void) =>
       ipcRenderer.on('youtube:progress', (_e, id, percent, line) => cb(id, percent, line)),
     offProgress: () => ipcRenderer.removeAllListeners('youtube:progress'),

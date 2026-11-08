@@ -1,5 +1,6 @@
 ## Deschise
 
+- **Raspunsuri catre biserici (2026-11-08):** deciziile ownerului si textele sunt in `docs/ops/raspunsuri-feedback-de-trimis.md`. Nimic trimis pana nu da voie ownerul. Vumetrul (#52) si clipurile (#51) sunt facute; urmeaza textele lor, dupa versiunea care le contine.
 - Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
 - v1.6.15 e in hangar, in staging (2026-10-25): o promoveaza ownerul. Baza e trimisa in hangar, propunerea #340 e inchisa.
 - Mesajul de la import pentru imnurile care exista deja oficial n-a fost vazut in aplicatie (lipseste un PowerPoint de imn pentru test); regula de recunoastere e verificata pe cele 211 copii reale.

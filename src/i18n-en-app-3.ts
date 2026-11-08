@@ -465,4 +465,5 @@ export const EN_APP_3: Record<string, string> = {
     'Implicit': 'Default',
     'Fontul imnurilor': 'Hymn font',
     'Fontul versetelor': 'Verse font',
+    'Schimbă eticheta': 'Change the label',
 };

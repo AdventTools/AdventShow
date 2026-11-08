@@ -8,6 +8,7 @@ import {
     Download,
     Edit3,
     Film,
+    Pencil,
     FolderOpen,
     Loader,
     Lock,
@@ -800,6 +801,9 @@ function App() {
     // YouTube playlist: load on mount + listen for progress/status events
     useEffect(() => {
         window.electron.youtube.getPlaylist().then(setYoutubePlaylist);
+        window.electron.youtube.onInfo((id, durationSec, thumbUrl) => {
+            setYoutubePlaylist(prev => prev.map(e => (e.id === id ? { ...e, durationSec, thumbUrl } : e)));
+        });
         window.electron.youtube.onProgress((id, percent) => {
             setYoutubeProgress(prev => ({ ...prev, [id]: percent }));
         });
@@ -819,6 +823,7 @@ function App() {
         return () => {
             window.electron.youtube.offProgress();
             window.electron.youtube.offStatus();
+            window.electron.youtube.offInfo();
         };
     }, []);
 
@@ -1912,6 +1917,9 @@ function App() {
             // proiecta imnul pregătit la fiecare Enter de marcare.
             if (modalOpen || feedbackKind || whatsNew || hymnEditor || passwordModal || needsPasswordSetup
                 || needsChurchInfo || forgotPwOpen || setPwOpen || adminOpen) return;
+
+            // Esc în caseta de etichetă renunță la modificare; nu oprește proiecția.
+            if (e.target instanceof HTMLElement && e.target.classList.contains('yt-playlist-title-input')) return;
 
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -3522,6 +3530,17 @@ function VideoController({
     const [editingTitle, setEditingTitle] = useState<string | null>(null);
     const [editTitleValue, setEditTitleValue] = useState('');
 
+    const startEditingTitle = (entry: YouTubeEntry) => {
+        setEditingTitle(entry.id);
+        setEditTitleValue(entry.title);
+    };
+    // O etichetă goală ar lăsa clipul fără nume în listă: rămâne cea veche.
+    const saveEditedTitle = (id: string) => {
+        const title = editTitleValue.trim();
+        if (title) onYoutubeUpdateTitle(id, title);
+        setEditingTitle(null);
+    };
+
     // File paths for reveal in folder
     const [filePaths, setFilePaths] = useState<Record<string, string>>({});
 
@@ -3778,6 +3797,11 @@ function VideoController({
                         return (
                             <div key={entry.id} className={`yt-playlist-item yt-status-${entry.status}`}>
                                 <div className="yt-playlist-item-top">
+                                    <div className="yt-thumb">
+                                        {entry.audioOnly ? <Headphones className="icon-sm" /> : <Film className="icon-sm" />}
+                                        {entry.thumbUrl && <img src={entry.thumbUrl} alt="" />}
+                                        {!!entry.durationSec && <span className="yt-thumb-time">{formatTime(entry.durationSec)}</span>}
+                                    </div>
                                     <span className={`yt-source-badge ${isLocal ? 'yt-badge-local' : 'yt-badge-yt'}`}>
                                         {isLocal ? t('Local') : 'YT'}
                                     </span>
@@ -3786,31 +3810,32 @@ function VideoController({
                                             className="yt-playlist-title-input"
                                             value={editTitleValue}
                                             onChange={(e) => setEditTitleValue(e.target.value)}
-                                            onBlur={() => {
-                                                onYoutubeUpdateTitle(entry.id, editTitleValue);
-                                                setEditingTitle(null);
-                                            }}
+                                            onBlur={() => saveEditedTitle(entry.id)}
                                             onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    onYoutubeUpdateTitle(entry.id, editTitleValue);
-                                                    setEditingTitle(null);
-                                                }
+                                                if (e.key === 'Enter') saveEditedTitle(entry.id);
                                                 if (e.key === 'Escape') setEditingTitle(null);
                                             }}
                                             autoFocus
                                         />
                                     ) : (
-                                        <span
-                                            className="yt-playlist-title"
-                                            onDoubleClick={() => {
-                                                setEditingTitle(entry.id);
-                                                setEditTitleValue(entry.title);
-                                            }}
-                                            title={t('Dublu-click pentru a edita titlul')}
-                                        >
-                                            {entry.audioOnly && <Headphones className="icon-xs yt-audio-icon" aria-label={t('Doar audio')} />}
-                                            {entry.title}
-                                        </span>
+                                        <>
+                                            <span
+                                                className="yt-playlist-title"
+                                                onDoubleClick={() => startEditingTitle(entry)}
+                                                title={t('Dublu-click pentru a edita titlul')}
+                                            >
+                                                {entry.audioOnly && <Headphones className="icon-xs yt-audio-icon" aria-label={t('Doar audio')} />}
+                                                {entry.title}
+                                            </span>
+                                            <button
+                                                className="yt-title-edit"
+                                                onClick={() => startEditingTitle(entry)}
+                                                title={t('Schimbă eticheta')}
+                                                aria-label={t('Schimbă eticheta')}
+                                            >
+                                                <Pencil className="icon-xs" />
+                                            </button>
+                                        </>
                                     )}
                                     <span className={`yt-status-badge yt-badge-${entry.status}`}>
                                         {entry.status === 'downloading' && <Loader className="icon-xs animate-spin" />}
@@ -4043,7 +4068,7 @@ function VideoReturnMonitor({ videoUrl, videoStatus, videoName, floating = false
                 </span>
                 {enableAudio && (
                     <div className="video-vu" title={t('Nivel sunet (din fișier)')}>
-                        <div className="video-vu-fill" style={{ width: `${Math.round(vu * 100)}%` }} />
+                        <div className="video-vu-fill" style={{ clipPath: `inset(0 ${100 - Math.round(vu * 100)}% 0 0 round 4px)` }} />
                     </div>
                 )}
             </div>
