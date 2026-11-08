@@ -1,5 +1,20 @@
 # Changelog — AdventShow
 
+## v1.7.3 (08 Noiembrie 2026)
+
+### Modificări
+- La Video, fiecare clip din listă are acum o imagine și durata, ca să recunoști repede ce urmează. Apar singure, și la clipurile adăugate mai demult; în timpul proiecției aplicația așteaptă, ca să nu încarce calculatorul.
+- Eticheta unui clip se schimbă din creionul de lângă titlu: clic, scrii, Enter. La YouTube pornește de la titlul de acolo. O etichetă goală nu se mai salvează, iar Esc renunță la modificare, fără să oprească proiecția.
+- Bara de nivel a sunetului de la Video arată corect: e verde la volum mic și ajunge la roșu doar când sunetul chiar e tare.
+
+---
+
+## Nepublicat
+
+_(nimic încă)_
+
+---
+
 ## v1.7.2 (07 Noiembrie 2026)
 
 ### Modificări
@@ -11,14 +26,6 @@
 - Pentru cei care sincronizează imnurile: după ce marchezi începutul ultimei strofe, linia de final se pune singură la capătul înregistrării.
 - Pe Windows, curățenia certificatului vechi nu se mai oprește când sistemul refuză ștergerea fără drepturi de administrator: cere acordul o singură dată și, dacă nu reușește, reîncearcă abia peste o lună.
 - Versetele biblice au acum aceeași mărime peste tot, oricât de scurt sau de lung e versetul și din orice carte e: textul nu mai sare între pasaje. Tastele + și − schimbă mărimea pentru toată Biblia; doar versetele foarte lungi se micșorează cât să încapă pe ecran.
-
----
-
-## Nepublicat
-
-- La Video, fiecare clip din listă are acum o imagine și durata, ca să recunoști repede ce urmează. Apar singure, și la clipurile adăugate mai demult; în timpul proiecției aplicația așteaptă, ca să nu încarce calculatorul.
-- Eticheta unui clip se schimbă din creionul de lângă titlu: clic, scrii, Enter. La YouTube pornește de la titlul de acolo. O etichetă goală nu se mai salvează, iar Esc renunță la modificare, fără să oprească proiecția.
-- Bara de nivel a sunetului de la Video arată corect: e verde la volum mic și ajunge la roșu doar când sunetul chiar e tare.
 
 ---
 
