@@ -1,7 +1,7 @@
 ## Deschise
 
 - **Colectiile copiilor si tinerilor citite cu partitura (2026-11-14, `docs/ops/continut-imnuri.md`, „Sursele”).** In baza livrata, nepublicat: 123 de imnuri atinse. In hangar, tabul Propuneri (v1.62.0, sursa „proiect”, unificat cu propunerile bisericilor): 152 de imnuri, 120 „sigur” (deja in baza) si 32 „nesigur” (baza neatinsa), cu partitura alaturi. Urmeaza: ownerul decide; inainte de release citim `review.list` si aducem baza la zi (pasii in `continut-imnuri.md`).
-- **Partituri PDF in aplicatie, doar studiu (2026-11-14):** deschidere + print, fara proiectie; varianta B (PDF-urile in hangar ca audio, descarcate la cerere si pastrate local, „toate” din Setari). Ownerul cere intai acordul editurii/mybible. Plan pentru viitor, convenit cu Hangar: `continut-imnuri.md`, „Partituri PDF”.
+- **Partituri PDF in aplicatie, doar studiu (2026-11-14):** deschidere + print, PDF-urile in hangar ca audio. Ownerul cere intai acordul editurii/mybible. Plan pentru viitor, convenit cu Hangar: `continut-imnuri.md`, „Partituri PDF”.
   - Intrebarile vechi din octombrie fara text propus nu mai intra in hangar: Amicus 002 e corect (partitura: „Senin prea plin de caldă zi”); raman fara raspuns Imnuri Crestine 654, 702, 784, 800, 802, 880, 887, 917, 919 si Imnuri Speciale 018 (de pregatit cu text propus, daca vrea ownerul).
 
 - **Raspunsuri catre biserici (2026-11-08):** deciziile ownerului si textele sunt in `docs/ops/raspunsuri-feedback-de-trimis.md`. Nimic trimis pana nu da voie ownerul. Vumetrul (#52) si clipurile (#51) sunt facute; urmeaza textele lor, dupa versiunea care le contine.
