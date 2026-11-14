@@ -12,7 +12,7 @@
 ## Nepublicat
 
 ### Modificări
-- 83 de cântări din Amicus, Companioni, Exploratori, Licurici și Tineret au fost verificate cu partitura din carte și corectate: cuvinte citite greșit, strofe puse în altă ordine (Exploratori 15), refrenul altui imn (Tineret 12), refrenul de final al lui Amicus 8, strofele lui Licurici 78 („Blu, cip, mu”) și titluri scrise cum sunt în carte. Amicus 36 („La hotar de veșnicii”) are acum textul lui adevărat, nu pe al altui imn.
+- Toate cântările din Amicus, Companioni, Exploratori, Licurici și Tineret au fost citite cu partitura din carte, iar 123 au fost corectate: cuvinte citite greșit, versuri și strofe care lipseau (Exploratori 131, Licurici 85), strofe puse în altă ordine (Exploratori 15), refrenul altui imn (Tineret 12), refrenul de final al lui Amicus 8, strofele lui Licurici 78 („Blu, cip, mu”) și titluri scrise cum sunt în carte. Amicus 36 („La hotar de veșnicii”) are acum textul lui adevărat, nu pe al altui imn.
 
 ---
 
