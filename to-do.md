@@ -1,5 +1,7 @@
 ## Deschise
 
+- **Colectiile copiilor si tinerilor verificate cu partitura (2026-11-14, `docs/ops/continut-imnuri.md`, „Sursele”).** In baza livrata (nepublicat, fara release): 81 de imnuri atinse (60 cu textul corectat, 24 cu titlul ca in carte). In coada „De verificat” din hangar: 29 de imnuri, fiecare cu textul propus complet in comentariu si linkul spre partitura (ownerul le decide; „Corectat” publica si corectura). Tineret 53 si 54 au corecturi vechi publicate in hangar, deci merg doar pe drumul cozii (altfel `sync:seed` opreste release-ul). Ramas deschis: greselile comune noastre si mybible (ex. Tineret 41 „cortul meu”) nu ies la comparatie; o citire completa a celor 404 imnuri cu partitura costa peste 20$ si asteapta acordul ownerului.
+
 - **Raspunsuri catre biserici (2026-11-08):** deciziile ownerului si textele sunt in `docs/ops/raspunsuri-feedback-de-trimis.md`. Nimic trimis pana nu da voie ownerul. Vumetrul (#52) si clipurile (#51) sunt facute; urmeaza textele lor, dupa versiunea care le contine.
 - Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
 - v1.6.15 e in hangar, in staging (2026-10-25): o promoveaza ownerul. Baza e trimisa in hangar, propunerea #340 e inchisa.

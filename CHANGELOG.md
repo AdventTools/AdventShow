@@ -11,7 +11,8 @@
 
 ## Nepublicat
 
-_(nimic încă)_
+### Modificări
+- 81 de cântări din Amicus, Companioni, Exploratori, Licurici și Tineret au fost verificate cu partitura din carte și corectate: cuvinte citite greșit, strofe puse în altă ordine (Exploratori 15), refrenul altui imn (Tineret 12) și titluri scrise cum sunt în carte. Amicus 36 („La hotar de veșnicii”) are acum textul lui adevărat, nu pe al altui imn.
 
 ---
 
