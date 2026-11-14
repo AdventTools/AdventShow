@@ -9,7 +9,7 @@ docs/ops/continut-imnuri.md:
   - diacriticele cu virgulă (ș, ț), nu cu sedilă (ş, ţ) și nu „ã”;
   - fără spații duble, spații la capăt de rând sau rânduri goale în interior;
   - tipul secțiunii e `strofa` sau `refren`;
-  - `search_text` e cel calculat din număr, titlu și secțiuni.
+  - `search_text`, dacă e completat, e cel calculat din număr, titlu și secțiuni.
 
 Utilizare:
   python3 scripts/verifica_imnuri.py                      # colecțiile copiilor și tinerilor
@@ -96,7 +96,9 @@ def main() -> None:
                 gasite.append(f"titlu cu probleme de scriere: «{title}»")
             for i, (tip, text) in enumerate(secs, 1):
                 gasite += [f"secțiunea {i}: {p}" for p in probleme_sectiune(tip, text)]
-            if stext != search_text(number, title, [t for _, t in secs]):
+            # Căutarea din aplicație citește titlul și secțiunile, nu coloana asta; un
+            # search_text gol e doar necompletat, unul plin și vechi ar minți.
+            if stext and stext != search_text(number, title, [t for _, t in secs]):
                 gasite.append("search_text nu corespunde textului")
             for p in gasite:
                 print(f"{col} {number} «{title}»: {p}")
