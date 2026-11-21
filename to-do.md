@@ -5,7 +5,7 @@
 - **Partituri PDF in aplicatie, doar studiu (2026-11-14):** deschidere + print, PDF-urile in hangar ca audio. Ownerul cere intai acordul editurii/mybible. Plan pentru viitor, convenit cu Hangar: `continut-imnuri.md`, „Partituri PDF”.
   - Intrebarile vechi din octombrie fara text propus nu mai intra in hangar: Amicus 002 e corect (partitura: „Senin prea plin de caldă zi”); raman fara raspuns Imnuri Crestine 654, 702, 784, 800, 802, 880, 887, 917, 919 si Imnuri Speciale 018 (de pregatit cu text propus, daca vrea ownerul).
 
-- **Raspunsuri catre biserici:** 10 trimise in hangar pe 2026-11-21. Raman #20 si #46 (variantele reformulate), de trimis imediat dupa ce iese 1.7.4. Textele: `docs/ops/raspunsuri-feedback-de-trimis.md`.
+- **v1.7.4 in hangar, in staging (2026-11-21, 6 fisiere: Windows + Mac Apple; Intel si Linux raman pe ultimul complet).** O promoveaza ownerul. Raspunsurile catre biserici (12) sunt toate trimise; #20 si #46 vorbesc deja de 1.7.4.
 - Certificatul vechi pe calculatoarele bisericilor: urmarit in hangar, la rapoartele automate „Certificat vechi AdventShow: scos / refuzat / esuat".
 - Mesajul de la import pentru imnurile care exista deja oficial n-a fost vazut in aplicatie (lipseste un PowerPoint de imn pentru test); regula de recunoastere e verificata pe cele 211 copii reale.
 - **Sincronizarea acompaniamentului — fluxul decis de owner (2026-11-06).** Inlocuieste ce se decisese pe 2026-10-25: marcarea ramane in aplicatie, meniul NU se mai scoate, hangarul doar aproba si publica (contract, punctul 5). Azi nu e nimic publicat, deci nicio biserica n-are vreun imn sincronizat.
