@@ -46,6 +46,8 @@ export interface HangarSettings {
   churchName?: string;
   churchCity?: string;
   updateChannel?: UpdateChannel;
+  /** Limba interfeței; hangarul o primește ca să știm câte instalări sunt în engleză. */
+  uiLanguage?: 'ro' | 'en';
   /** Cheia de marcator primită pe parola comună; legată de instalare, expiră singură. */
   syncKey?: string;
   /** Secunde Unix. */
@@ -146,6 +148,10 @@ export function updateChannel(deps: HangarDeps): UpdateChannel {
   return deps.getSettings().updateChannel === 'beta' ? 'beta' : 'stable';
 }
 
+function limbaInterfetei(deps: HangarDeps): 'ro' | 'en' {
+  return deps.getSettings().uiLanguage === 'en' ? 'en' : 'ro';
+}
+
 /**
  * Codul real de stare. nginx înlocuiește corpul răspunsurilor 400/401/403/404/500
  * cu pagina lui de eroare, așa că hub-ul le remapează pe sârmă; adevărul e în
@@ -205,6 +211,7 @@ export async function track(
     channel: updateChannel(deps),
     platform: hangarPlatform(),
     arch: process.arch,
+    lang: limbaInterfetei(deps),
     ...(system ? { system } : {}),
     ...(Object.keys(profile).length ? { profile } : {}),
   }, 6000);
@@ -457,6 +464,8 @@ interface MessagesFile {
   annRead?: Record<string, true>;
   /** Cât a stat fiecare anunț pe ecran, în secunde — numărătoarea continuă după repornire. */
   annShown?: Record<string, number>;
+  /** „Am citit” a cărui confirmare n-a ajuns încă în hangar (fără internet); pleacă la următoarea verificare. */
+  annReadPending?: Record<string, true>;
   /** Codul de deblocare aprobat de autori în hangar („Deblochează”), încă nefolosit. */
   unlockGrant?: string;
 }
@@ -474,6 +483,7 @@ function readMessages(deps: HangarDeps): MessagesFile {
       announcements: Array.isArray(raw.announcements) ? raw.announcements : [],
       annRead: raw.annRead ?? {},
       annShown: raw.annShown ?? {},
+      annReadPending: raw.annReadPending ?? {},
       unlockGrant: typeof raw.unlockGrant === 'string' ? raw.unlockGrant : undefined,
     };
   } catch {
@@ -495,15 +505,16 @@ function writeMessages(deps: HangarDeps, m: MessagesFile): void {
  * înainte ca aplicația să le țină minte. Copia locală e doar ca lista să se vadă și
  * fără internet. Offline = rămâne ce era.
  */
-export async function refreshMessages(deps: HangarDeps): Promise<void> {
-  // `version` și `platform`: hangarul alege după ele ce anunțuri primește instalarea.
+export async function refreshMessages(deps: HangarDeps): Promise<boolean> {
+  // `version`, `platform` și `lang`: hangarul alege după ele ce anunțuri primește instalarea.
   const out = await postJson(`${REPORT_URL}?do=replies`, {
     project: HANGAR_KEY,
     install: installId(deps),
     version: deps.appVersion,
     platform: hangarPlatform(),
+    lang: limbaInterfetei(deps),
   }, 10000);
-  if (!out || hubStatus(out.res) !== 200 || !out.json.ok || !Array.isArray(out.json.items)) return;
+  if (!out || hubStatus(out.res) !== 200 || !out.json.ok || !Array.isArray(out.json.items)) return false;
   const m = readMessages(deps);
   m.items = out.json.items as SentMessage[];
   // Anunțurile, dacă hangarul le trimite. Lipsa listei nu le șterge pe cele știute:
@@ -525,6 +536,8 @@ export async function refreshMessages(deps: HangarDeps): Promise<void> {
   // verifică singură, fără să-l mai dicteze cineva la telefon.
   if (typeof out.json.unlock === 'string' && out.json.unlock) m.unlockGrant = out.json.unlock;
   writeMessages(deps, m);
+  await sendPendingAnnouncementReads(deps);
+  return true;
 }
 
 /** Codul de deblocare primit din hangar, o singură dată: după citire se șterge. */
@@ -569,14 +582,32 @@ export function addAnnouncementShown(deps: HangarDeps, id: number, seconds: numb
 export async function markAnnouncementRead(deps: HangarDeps, id: number): Promise<void> {
   const m = readMessages(deps);
   m.annRead = { ...(m.annRead ?? {}), [String(id)]: true };
+  m.annReadPending = { ...(m.annReadPending ?? {}), [String(id)]: true };
   writeMessages(deps, m);
-  await postJson(TRACK_URL, {
-    project: HANGAR_KEY,
-    install: installId(deps),
-    event: 'announcement_read',
-    version: deps.appVersion,
-    announcement: { id, shown_seconds: Math.round(m.annShown?.[String(id)] ?? 0) },
-  }, 6000);
+  await sendPendingAnnouncementReads(deps);
+}
+
+/**
+ * Trimite confirmările de citire rămase. Una care nu ajunge (fără internet) rămâne
+ * notată și pleacă la următoarea verificare reușită: altfel hangarul număra mai
+ * puține citiri decât au fost.
+ */
+async function sendPendingAnnouncementReads(deps: HangarDeps): Promise<void> {
+  const ids = Object.keys(readMessages(deps).annReadPending ?? {});
+  for (const id of ids) {
+    const shown = readMessages(deps).annShown?.[id] ?? 0;
+    const out = await postJson(TRACK_URL, {
+      project: HANGAR_KEY,
+      install: installId(deps),
+      event: 'announcement_read',
+      version: deps.appVersion,
+      announcement: { id: Number(id), shown_seconds: Math.round(shown) },
+    }, 6000);
+    if (!out || hubStatus(out.res) !== 200) return;
+    const m = readMessages(deps);
+    delete m.annReadPending?.[id];
+    writeMessages(deps, m);
+  }
 }
 
 /** Răspunsurile încă necitite: un răspuns schimbat de autori contează iar ca nou. */

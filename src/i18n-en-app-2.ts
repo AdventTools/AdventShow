@@ -377,10 +377,12 @@ export const EN_APP_2: Record<string, string> = {
         "AdventShow now keeps a record of the churches where it's installed — so the authors know who the app is helping, and so they can support you when recovering your password. Fill this in once:",
     'Se trimit doar aceste două câmpuri și versiunea aplicației. Nimic altceva.': 'Only these two fields and the app version are sent. Nothing else.',
 
-    // DecisionsModal
+    // Caseta din stânga (alegeri, verdicte, PowerPoint) și unealta YouTube
     'Nu am putut aplica alegerea.': "Couldn't apply your choice.",
-    'Ce te așteaptă': 'Waiting on you',
-    'Nu te așteaptă nimic. Tot ce era de rezolvat e rezolvat.': "Nothing is waiting on you. Everything that needed sorting out is sorted.",
+    'De ales': 'To choose',
+    'Corectura ta': 'Your correction',
+    'De citit': 'To review',
+    'Ai de ales între varianta ta și cea oficială: vezi caseta din stânga.': 'Choose between your version and the official one: see the box on the left.',
     'Unealta de descărcare de pe YouTube e veche': 'The YouTube download tool is old',
     'Unealta de descărcare de pe YouTube lipsește': 'The YouTube download tool is missing',
     'Ai versiunea {v}, veche de {zile} de zile. YouTube schimbă des felul în care servește filmele, iar o unealtă veche se oprește exact când ai nevoie de ea.':
@@ -398,8 +400,6 @@ export const EN_APP_2: Record<string, string> = {
     '{n} secțiuni': '{n} sections',
     'Deschide': 'Open',
     'E bun așa': "It's fine as is",
-    'înlocuit': 'replaced',
-    'variantă nouă': 'new version',
     'Ai varianta ta la imnul ăsta, iar între timp a apărut una oficială nouă. Nu am schimbat nimic — alegi tu.':
         "You have your own version of this hymn, and an official new one has appeared meanwhile. We haven't changed anything — you choose.",
     'Trec pe varianta oficială': 'Switch to the official version',
@@ -408,14 +408,11 @@ export const EN_APP_2: Record<string, string> = {
         'We replaced your version because the official text was wrong. We kept yours — you can put it back any time.',
     'Pune la loc varianta mea': 'Put my version back',
     'E în regulă': "It's fine",
-    'acceptat': 'accepted',
-    'nepreluat': 'not adopted',
-    'Imnul tău a intrat în colecția oficială, la': 'Your hymn made it into the official collection, at',
-    'cu exact textul pe care l-ai trimis. Copia din „{cat}" era identică, așa că am șters-o — ca să nu-l ai de două ori.':
-        'with exactly the text you sent. The copy in "{cat}" was identical, so we removed it — so you wouldn\'t have it twice.',
+    'Imnul tău a intrat în colecția oficială, la {unde}, cu exact textul pe care l-ai trimis. Copia din „{cat}” era identică, așa că am șters-o, ca să nu-l ai de două ori.':
+        'Your hymn made it into the official collection, at {unde}, with exactly the text you sent. The copy in "{cat}" was identical, so we removed it, so you wouldn\'t have it twice.',
     'Am înțeles': 'Got it',
+    'Modificarea ta a fost preluată în versiunea oficială.': 'Your change was adopted into the official version.',
     'Modificarea ta nu a fost preluată în versiunea oficială.': 'Your change was not adopted into the official version.',
-    'Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.': 'Nothing is final: you can always change a hymn back from the editor.',
 
     // FeedbackModal
     'Scrieți pe scurt despre ce e vorba.': "Write a short summary of what it's about.",

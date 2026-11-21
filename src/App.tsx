@@ -108,6 +108,7 @@ import type {
     SyncWorkItem,
     TemplateInfo,
     YouTubeEntry,
+    MarimeProiectie,
 } from './vite-env';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -116,6 +117,12 @@ const MASTER_PASSWORD = 'AdventShowMaster2025!';
 const GRACE_PERIOD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Cheia unui imn în stările din contrib.ts (`colecție|număr`, numărul pe trei cifre). */
+function cheieImn(categorie: string, numar: string): string {
+    const n = String(numar).trim();
+    return `${categorie}|${/^\d+$/.test(n) ? String(parseInt(n, 10)).padStart(3, '0') : n}`;
+}
 
 function normalizeDiacritics(str: string): string {
     return str
@@ -420,7 +427,7 @@ function App() {
     const [previewLive, setPreviewLive] = useState(false);
     // Mărimea textului raportată de proiecție. Stă aici, nu în bara de control: bara
     // se demontează cât e ceva „pregătit" și ar fi pornit iar de la 100%.
-    const [marimeProiectie, setMarimeProiectie] = useState<number | null>(null);
+    const [marimeProiectie, setMarimeProiectie] = useState<MarimeProiectie | null>(null);
     useEffect(() => {
         window.electron.projection.onZoomLevel(setMarimeProiectie);
         return () => { window.electron.projection.offZoomLevel(); };
@@ -486,14 +493,11 @@ function App() {
     const [updateTotal, setUpdateTotal] = useState(0);
     const [updateReady, setUpdateReady] = useState(false);
     const [updateError, setUpdateError] = useState<string | null>(null);
-    // Răspunsuri de la autori care așteaptă o alegere (corectură nepreluată, imn intrat
-    // în colecția oficială). Se vede în antet, ca omul să nu trebuiască să intre în Setări.
-    const [decisionsCount, setDecisionsCount] = useState(0);
-    const [decisionsOpen, setDecisionsOpen] = useState(false);
-    // Recalcularea contorului, ca s-o poată cere și fereastra de avertismente.
-    const numaraRaspunsuriRef = useRef<(() => void) | null>(null);
     /** Crește după fiecare verificare la hangar: caseta de mesaje se reîncarcă. */
     const [mesajeRev, setMesajeRev] = useState(0);
+    const reincarcaCasetaRef = useRef<(() => void) | null>(null);
+    /** Imnurile cu o alegere de făcut în casetă (`colecție|număr`): au un semn în listă. */
+    const [deAles, setDeAles] = useState<Set<string>>(new Set());
     // Rutina de conținut poate muta un imn acceptat din „Imnurile mele" în colecția
     // oficială; fără reîncărcare, numărul din dreptul colecției rămânea vechi.
     const reincarcaListeleRef = useRef<(() => void) | null>(null);
@@ -733,37 +737,30 @@ function App() {
                 waitingForProjection: true,
             }));
         });
-        // Dacă verdictul a venit înainte ca fereastra să fie gata de ascultat.
-        const numaraRaspunsuri = () => Promise.all([
-            window.electron.contrib.decisions(),
-            window.electron.contrib.hymnStates(),
-            window.electron.db.countToReview(),
-            window.electron.ytdlp.health().catch(() => null),
-            window.electron.feedback.unreadReplies(),
-        ]).then(([d, st, rev, yt, rep]) => setDecisionsCount(
-            (d as PendingDecision[]).length + (st as HymnState[]).length + (rev as number)
-            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0) + (rep as number),
-        )).catch(() => { });
-        numaraRaspunsuriRef.current = numaraRaspunsuri;
-        numaraRaspunsuri();
-        // Vești despre decizii, fiecare o singură dată, pe loc: imnul propriu acceptat și
-        // corectura respinsă la un imn oficial. Un imn propriu respins nu se anunță.
+        // Caseta și semnele din listă se reîncarcă după fiecare verificare la hangar
+        // și după orice alegere făcută în casetă.
+        const reincarcaCaseta = () => {
+            setMesajeRev(r => r + 1);
+            window.electron.contrib.hymnStates()
+                .then(st => setDeAles(new Set(st.map(s => cheieImn(s.category, s.number)))))
+                .catch(() => { });
+        };
+        reincarcaCasetaRef.current = reincarcaCaseta;
+        reincarcaCaseta();
+        // Imnul propriu acceptat fără mutare e singura veste care nu are card în casetă:
+        // corectura respinsă și imnul mutat apar acolo, cu „Am înțeles”, deci nu le mai
+        // spunem și printr-o notificare (un loc, nu două — decizia ownerului, 2026-11-21).
         const vestiDecizii = () => window.electron.contrib.notices().then(list => {
             for (const n of list) {
-                const p = { title: n.title, category: n.category, number: n.number };
-                showToast(n.kind === 'respins'
-                    ? t('Corectura ta la {category} {number} «{title}» nu a fost acceptată; varianta ta rămâne doar la tine.', p)
-                        + (n.note ? ` ${n.note}` : '')
-                    : n.moved
-                        ? t('Imnul tău «{title}» a fost acceptat și s-a mutat în {category}, nr. {number}.', p)
-                        : t('Imnul tău «{title}» a fost acceptat în {category}, nr. {number}.', p),
-                12000);
+                if (n.kind !== 'acceptat' || n.moved) continue;
+                showToast(t('Imnul tău «{title}» a fost acceptat în {category}, nr. {number}.',
+                    { title: n.title, category: n.category, number: n.number }), 12000);
             }
         }).catch(() => { });
         vestiDecizii();
         window.electron.contrib.onDecisions(() => {
-            numaraRaspunsuri(); vestiDecizii(); reincarcaListeleRef.current?.();
-            setMesajeRev(r => r + 1);   // caseta de mesaje se reîncarcă după fiecare verificare
+            vestiDecizii(); reincarcaListeleRef.current?.();
+            reincarcaCaseta();
         });
         window.electron.update.forcedState()
             .then(s => { if (s.required) setForcedUpdate({ version: s.version, reason: s.reason, waitingForProjection: false }); })
@@ -1897,13 +1894,11 @@ function App() {
                 await deschideEditorul(r.ids[0]);
                 return;
             }
-            // Mai multe: rămân marcate «de verificat» și se citesc pe rând, din
-            // fereastra de răspunsuri. Nimeni nu se uită peste 200 de imnuri pe loc.
+            // Mai multe: rămân marcate «de verificat» și se citesc pe rând, din cardul
+            // „De citit” al casetei. Nimeni nu se uită peste 200 de imnuri pe loc.
             if (r.success > 0) {
                 showToast(t('{success} imnuri adăugate în «Imnurile mele» — te așteaptă la verificat', { success: r.success }));
-                window.electron.db.countToReview()
-                    .then(n => setDecisionsCount(c => Math.max(c, n)))
-                    .catch(() => { });
+                reincarcaCasetaRef.current?.();
             }
         }, deUnde === 'folder' ? t('Import imnuri din folder') : t('Import imnuri din PowerPoint'));
     }, [categories, requirePassword, loadCategories, loadHymns, deschideEditorul, t]);
@@ -2284,26 +2279,6 @@ function App() {
                 </div>
             )}
 
-            {decisionsOpen && (
-                <DecisionsModal
-                    onClose={() => {
-                        setDecisionsOpen(false);
-                        Promise.all([
-                            window.electron.contrib.decisions(),
-                            window.electron.contrib.hymnStates(),
-                            window.electron.db.countToReview(),
-                            window.electron.ytdlp.health().catch(() => null),
-                            window.electron.feedback.unreadReplies(),
-                        ]).then(([d, st, rev, yt, rep]) => setDecisionsCount(
-                            (d as PendingDecision[]).length + (st as HymnState[]).length + (rev as number)
-                            + (ytCereAtentie(yt as YtDlpHealth | null) ? 1 : 0) + (rep as number),
-                        )).catch(() => { });
-                    }}
-                    onChanged={() => { loadHymns(); numaraRaspunsuriRef.current?.(); }}
-                    onReviewHymn={id => { setDecisionsOpen(false); deschideEditorul(id); }}
-                />
-            )}
-
             {/* ── Header ── */}
             <header className="header">
                 <div className="header-logo">
@@ -2429,19 +2404,6 @@ function App() {
                     </div>
                 )}
 
-                {/* Răspunsuri de la autori — apare doar când chiar așteaptă ceva */}
-                {decisionsCount > 0 && (
-                    <button
-                        className="header-btn header-btn-answers"
-                        onClick={() => setDecisionsOpen(true)}
-                        title={t('Lucruri care te așteaptă: răspunsuri, imnuri de citit, unelte de actualizat')}
-                    >
-                        <Mail className="icon-sm" />
-                        <span className="header-btn-label">
-                            {decisionsCount} {decisionsCount === 1 ? t('de rezolvat') : t('de rezolvat')}
-                        </span>
-                    </button>
-                )}
 
                 {/* O problemă sau o sugestie, trimisă autorilor — la un clic, nu în Setări */}
                 <button className="header-btn" onClick={() => setFeedbackKind('bug')} title={t('Raportează o problemă')}>
@@ -2527,7 +2489,8 @@ function App() {
                         />
                     )}
                     <CasetaMesaje projecting={projecting} rev={mesajeRev}
-                        onChanged={() => numaraRaspunsuriRef.current?.()} />
+                        onChanged={() => { loadHymns(); reincarcaCasetaRef.current?.(); }}
+                        onReviewHymn={deschideEditorul} />
                     {/* Update banner */}
                     {(updateInfo?.available || updateReady) && (
                         <div className="update-banner update-banner-sidebar">
@@ -2632,6 +2595,7 @@ function App() {
                             listRef={hymnListRef}
                             accStates={accStates}
                             accCategoryId={imnuriCrestineCategoryId}
+                            deAles={deAles}
                         />
                     ) : tab === 'video' ? (
                         <VideoController
@@ -2796,7 +2760,7 @@ function App() {
                     onNavigate={navigateSlide}
                     videoActive={!!videoStatus}
                     accompaniment={accControl}
-                    zoomLevel={marimeProiectie}
+                    marime={marimeProiectie}
                     currentIndex={projSlideIndex}
                 />
             )}
@@ -2826,12 +2790,11 @@ function App() {
             {(modalOpen === 'settings' || modalOpen === 'help') && (
                 <SettingsModal
                     initialTab={modalOpen === 'help' ? 'help' : 'projection'}
-                    onClose={() => { setModalOpen(null); numaraRaspunsuriRef.current?.(); }}
+                    onClose={() => { setModalOpen(null); reincarcaCasetaRef.current?.(); }}
                     onCategoriesChanged={loadCategories}
                     onHymnsChanged={loadHymns}
                     onChangePassword={() => { setModalOpen(null); setSetPwOpen('change'); }}
                     onForgotPassword={() => { setModalOpen(null); setForgotPwOpen(true); }}
-                    onReviewHymn={deschideEditorul}
                     onShowHistory={() => {
                         setModalOpen(null);
                         setWhatsNew({ from: null, to: import.meta.env.VITE_APP_VERSION ?? '', all: true });
@@ -3182,7 +3145,7 @@ function AccIcon({ stare, problema }: { stare: StareAcc; problema?: SyncWarning 
 
 function HymnList({
     hymns, categories, activeCategoryId, selectedHymnId, onSelect, onContextMenu, listRef,
-    accStates, accCategoryId,
+    accStates, accCategoryId, deAles,
 }: {
     hymns: Hymn[];
     categories: Category[];
@@ -3195,6 +3158,8 @@ function HymnList({
     accStates: AccStates;
     /** Colecția care are acompaniament; celelalte nu au. */
     accCategoryId?: number;
+    /** Imnurile cu o alegere de făcut în casetă (`cheieImn`). */
+    deAles: Set<string>;
 }) {
     const t = useT();
     const catName = activeCategoryId
@@ -3289,6 +3254,11 @@ function HymnList({
                                         {hymn.needs_review === 1 && (
                                             <span className="needs-review-dot"
                                                 title={t('Adus dintr-un PowerPoint — încă necitit')} />
+                                        )}
+                                        {deAles.size > 0 && deAles.has(cheieImn(
+                                            categories.find(c => c.id === hymn.category_id)?.name ?? '', hymn.number)) && (
+                                            <span className="needs-review-dot de-ales"
+                                                title={t('Ai de ales între varianta ta și cea oficială: vezi caseta din stânga.')} />
                                         )}
                                     </span>
                                     {collectionName && <span className="hymn-collection">{collectionName}</span>}
@@ -3762,6 +3732,7 @@ function VideoController({
                             </>
                         ) : (
                             <>
+                                <YtDlpAvertisment />
                                 <input
                                     type="text"
                                     className="video-youtube-input"
@@ -6305,11 +6276,7 @@ function ChurchInfoModal({ onSave }: { onSave: (church: string, city: string) =>
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Ce s-a hotărât cu ce ai trimis
-//
-// Până la 1.4.0, o corectură trimisă dispărea fără urmă: omul nu afla niciodată
-// dacă a intrat sau nu, iar dacă o refuzam el rămânea cu varianta lui pentru
-// totdeauna, fără să știe. Aici își vede răspunsul și alege ce se întâmplă.
+// Unealta de descărcare de pe YouTube
 // ═════════════════════════════════════════════════════════════════════════════
 
 /** Peste atât, unealta de descărcare e destul de veche cât să pice pe YouTube. */
@@ -6317,261 +6284,52 @@ const YTDLP_ZILE_VECHIME = 90;
 
 type YtDlpHealth = { installed: boolean; version: string; staleDays: number };
 
-/** Lipsă sau prea veche — merită pomenită în avertismente. Nu și când e proaspătă. */
+/** Lipsă sau prea veche — merită spusă la adăugarea unui link YouTube. Nu și când e proaspătă. */
 function ytCereAtentie(h: YtDlpHealth | null): boolean {
   if (!h) return false;
   return !h.installed || h.staleDays > YTDLP_ZILE_VECHIME;
 }
 
-function DecisionsModal({ onClose, onChanged, onReviewHymn }: {
-    onClose: () => void;
-    onChanged: () => void;
-    onReviewHymn: (hymnId: number) => void;
-}) {
+/**
+ * Unealta de descărcare de pe YouTube, lipsă sau veche: se spune doar unde se
+ * folosește, la adăugarea unui link YouTube. Înainte stătea în plicul din antet și-l
+ * ținea aprins pe veci la orice biserică ce n-a descărcat niciodată de pe YouTube.
+ */
+function YtDlpAvertisment() {
     const t = useT();
-    const [items, setItems] = useState<PendingDecision[]>([]);
-    const [states, setStates] = useState<HymnState[]>([]);
-    const [deVerificat, setDeVerificat] = useState<HymnToReview[]>([]);
     const [yt, setYt] = useState<YtDlpHealth | null>(null);
-    const [replies, setReplies] = useState<SentMessage[]>([]);
-    const [allMessagesOpen, setAllMessagesOpen] = useState(false);
-    const [busy, setBusy] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-
-    const load = useCallback(() => {
-        window.electron.feedback.messages().then(m => setReplies(m.filter(i => i.unread))).catch(() => setReplies([]));
-        window.electron.contrib.decisions().then(setItems).catch(() => setItems([]));
-        window.electron.contrib.hymnStates().then(setStates).catch(() => setStates([]));
-        window.electron.db.hymnsToReview().then(setDeVerificat).catch(() => setDeVerificat([]));
-        window.electron.ytdlp.health().then(setYt).catch(() => setYt(null));
-    }, []);
-
-    // Dacă fereastra s-a deschis și nu are nimic de arătat, butonul din antet e
-    // aprins degeaba: îi cerem părintelui să recalculeze, ca să se stingă pe loc.
-    useEffect(() => {
-        if (items.length === 0 && states.length === 0 && deVerificat.length === 0 && !ytCereAtentie(yt)
-            && replies.length === 0) {
-            onChanged();
-        }
-    }, [items, states, deVerificat, yt, replies, onChanged]);
-    useEffect(() => { load(); }, [load]);
-
-    const alegeImn = async (key: string,
-        alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu') => {
-        setBusy(key);
-        setError('');
-        const res = await window.electron.contrib.applyHymnState(key, alegere);
-        setBusy(null);
-        if (!res.ok) { setError(res.error ?? t('Nu am putut aplica alegerea.')); return; }
-        load();
-        onChanged();
-    };
-
-    const amInteles = async (hash: string) => {
-        setBusy(hash);
-        setError('');
-        const res = await window.electron.contrib.resolveDecision(hash);
-        setBusy(null);
-        if (!res.ok) { setError(res.error ?? t('Nu am putut aplica alegerea.')); return; }
-        load();
-        onChanged();
-    };
-
+    useEffect(() => { window.electron.ytdlp.health().then(setYt).catch(() => setYt(null)); }, []);
+    if (!ytCereAtentie(yt)) return null;
     return (
-        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-            <div className="modal-dialog">
-                <div className="modal-header">
-                    <h3>{t('Ce te așteaptă')}</h3>
-                    <button className="modal-close" onClick={onClose}><X className="icon-sm" /></button>
-                </div>
-                <div className="modal-body">
-                    {items.length === 0 && states.length === 0 && deVerificat.length === 0
-                        && !ytCereAtentie(yt) && replies.length === 0 && (
-                        <div className="text-fg/50 text-sm py-6 text-center">
-                            {t('Nu te așteaptă nimic. Tot ce era de rezolvat e rezolvat.')}
-                        </div>
-                    )}
-                    {error && <div className="editor-error">{error}</div>}
-
-                    {replies.length > 0 && (
-                        <div className="review-block">
-                            <div className="review-head">
-                                <strong>{t(replies.length === 1
-                                    ? 'Ai un răspuns la un mesaj trimis de tine'
-                                    : 'Ai {n} răspunsuri la mesajele trimise de tine', { n: replies.length })}</strong>
-                            </div>
-                            {replies.map(m => (
-                                <MessageCard key={m.id} m={m}>
-                                    <button className="btn-action" disabled={busy === `msg${m.id}`}
-                                        onClick={async () => {
-                                            setBusy(`msg${m.id}`);
-                                            await window.electron.feedback.markRead([m.id]);
-                                            setBusy(null);
-                                            load();
-                                            onChanged();
-                                        }}>
-                                        {t('Am citit')}
-                                    </button>
-                                </MessageCard>
-                            ))}
-                            <button className="btn-clear" onClick={() => setAllMessagesOpen(true)}>
-                                {t('Toate mesajele mele')}
-                            </button>
-                        </div>
-                    )}
-
-                    {ytCereAtentie(yt) && (
-                        <div className="review-block">
-                            <div className="review-head">
-                                <strong>{yt?.installed
-                                    ? t('Unealta de descărcare de pe YouTube e veche')
-                                    : t('Unealta de descărcare de pe YouTube lipsește')}</strong>
-                                <p>{yt?.installed
-                                    ? t('Ai versiunea {v}, veche de {zile} de zile. YouTube schimbă des felul în care servește filmele, iar o unealtă veche se oprește exact când ai nevoie de ea.', { v: yt.version, zile: yt.staleDays })
-                                    : t('Fără ea nu se pot descărca filme de pe YouTube. Se ia o singură dată și rămâne.')}</p>
-                            </div>
-                            <div className="row">
-                                <button className="btn-action" disabled={busy === 'ytdlp'}
-                                    onClick={async () => {
-                                        setBusy('ytdlp');
-                                        setError('');
-                                        const r = yt?.installed
-                                            ? await window.electron.ytdlp.update()
-                                            : await window.electron.ytdlp.install();
-                                        setBusy(null);
-                                        if (!r.success) { setError(r.error ?? t('Nu am putut aduce unealta.')); return; }
-                                        window.electron.ytdlp.health().then(setYt).catch(() => { });
-                                        onChanged();
-                                    }}>
-                                    {busy === 'ytdlp'
-                                        ? t('Se aduce…')
-                                        : yt?.installed ? t('Actualizează acum') : t('Instalează acum')}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {deVerificat.length > 0 && (
-                        <div className="review-block">
-                            <div className="review-head">
-                                <strong>{t(deVerificat.length === 1
-                                    ? '{n} imn adus din PowerPoint așteaptă să fie citit'
-                                    : '{n} imnuri aduse din PowerPoint așteaptă să fie citite', { n: deVerificat.length })}</strong>
-                                <p>{t('Conversia din slide-uri greșește des — strofe lipite, titlu luat din alt loc. Deschide fiecare imn, uită-te peste el și salvează; marcajul dispare de la sine.')}</p>
-                            </div>
-                            {deVerificat.map(h => (
-                                <div key={h.id} className="review-row">
-                                    <span className="review-nr">{h.number}</span>
-                                    <div className="review-text">
-                                        <span className="review-title" title={h.title}>{h.title}</span>
-                                        <span className="review-meta">{h.category} · {t(h.sectionCount === 1 ? '{n} secțiune' : '{n} secțiuni', { n: h.sectionCount })}</span>
-                                    </div>
-                                    <button className="btn-action" onClick={() => onReviewHymn(h.id)}>
-                                        {t('Deschide')}
-                                    </button>
-                                    <button className="btn-clear" disabled={busy === `rev${h.id}`}
-                                        onClick={async () => {
-                                            setBusy(`rev${h.id}`);
-                                            await window.electron.db.markReviewed(h.id);
-                                            setBusy(null);
-                                            load();
-                                            onChanged();
-                                        }}>
-                                        {t('E bun așa')}
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {states.map(st => (
-                        <div key={st.key} className="decision-card">
-                            <div className="decision-head">
-                                <strong>{st.category} #{st.number} — {st.titlu}</strong>
-                                <span className={`badge-decision ${st.fel === 'inlocuit' ? 'no' : 'ok'}`}>
-                                    {st.fel === 'inlocuit' ? t('înlocuit') : t('variantă nouă')}
-                                </span>
-                            </div>
-                            {st.fel === 'oficial-nou' ? (
-                                <>
-                                    <p className="decision-text">
-                                        {t('Ai varianta ta la imnul ăsta, iar între timp a apărut una oficială nouă. Nu am schimbat nimic — alegi tu.')}
-                                    </p>
-                                    <div className="row">
-                                        <button className="btn-action" disabled={busy === st.key}
-                                            onClick={() => alegeImn(st.key, 'adopta-oficial')}>
-                                            {t('Trec pe varianta oficială')}
-                                        </button>
-                                        <button className="btn-clear" disabled={busy === st.key}
-                                            onClick={() => alegeImn(st.key, 'pastreaza-al-meu')}>
-                                            {t('Rămân cu a mea')}
-                                        </button>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <p className="decision-text">
-                                        {t('Am înlocuit varianta ta pentru că textul oficial era greșit. Ți-am păstrat-o — o poți pune la loc oricând.')}
-                                    </p>
-                                    <div className="row">
-                                        <button className="btn-clear" disabled={busy === st.key}
-                                            onClick={() => alegeImn(st.key, 'pune-la-loc-al-meu')}>
-                                            {t('Pune la loc varianta mea')}
-                                        </button>
-                                        <button className="btn-action" disabled={busy === st.key}
-                                            onClick={() => alegeImn(st.key, 'pastreaza-al-meu')}>
-                                            {t('E în regulă')}
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    ))}
-
-                    {items.map(d => (
-                        <div key={d.hash} className="decision-card">
-                            <div className="decision-head">
-                                <strong>{d.category} #{d.number} — {d.title}</strong>
-                                <span className={`badge-decision ${d.status === 'accepted' ? 'ok' : 'no'}`}>
-                                    {d.status === 'accepted' ? t('acceptat') : t('nepreluat')}
-                                </span>
-                            </div>
-
-                            {d.autoCleaned && d.publishedAs ? (
-                                <>
-                                    <p className="decision-text">
-                                        {t('Imnul tău a intrat în colecția oficială, la')} <strong>
-                                        {d.publishedAs.category} #{d.publishedAs.number}</strong>, {t('cu exact textul pe care l-ai trimis. Copia din „{cat}" era identică, așa că am șters-o — ca să nu-l ai de două ori.', { cat: d.category })}
-                                    </p>
-                                    <div className="row">
-                                        <button className="btn-action" disabled={busy === d.hash}
-                                            onClick={() => amInteles(d.hash)}>
-                                            {t('Am înțeles')}
-                                        </button>
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <p className="decision-text">
-                                        {d.note || t('Modificarea ta nu a fost preluată în versiunea oficială.')}
-                                    </p>
-                                    <div className="row">
-                                        <button className="btn-action" disabled={busy === d.hash}
-                                            onClick={() => amInteles(d.hash)}>
-                                            {t('Am înțeles')}
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    ))}
-
-                    <p className="text-fg/40 text-xs mt-3">
-                        {t('Nimic nu e definitiv: poți schimba oricând un imn înapoi din editor.')}
-                    </p>
-                </div>
+        <div className="review-block">
+            <div className="review-head">
+                <strong>{yt?.installed
+                    ? t('Unealta de descărcare de pe YouTube e veche')
+                    : t('Unealta de descărcare de pe YouTube lipsește')}</strong>
+                <p>{yt?.installed
+                    ? t('Ai versiunea {v}, veche de {zile} de zile. YouTube schimbă des felul în care servește filmele, iar o unealtă veche se oprește exact când ai nevoie de ea.', { v: yt.version, zile: yt.staleDays })
+                    : t('Fără ea nu se pot descărca filme de pe YouTube. Se ia o singură dată și rămâne.')}</p>
             </div>
-            {allMessagesOpen && <MessagesModal onClose={() => { setAllMessagesOpen(false); load(); onChanged(); }} />}
+            {error && <div className="editor-error">{error}</div>}
+            <div className="row">
+                <button className="btn-action" disabled={busy}
+                    onClick={async () => {
+                        setBusy(true);
+                        setError('');
+                        const r = yt?.installed
+                            ? await window.electron.ytdlp.update()
+                            : await window.electron.ytdlp.install();
+                        setBusy(false);
+                        if (!r.success) { setError(r.error ?? t('Nu am putut aduce unealta.')); return; }
+                        window.electron.ytdlp.health().then(setYt).catch(() => { });
+                    }}>
+                    {busy
+                        ? t('Se aduce…')
+                        : yt?.installed ? t('Actualizează acum') : t('Instalează acum')}
+                </button>
+            </div>
         </div>
     );
 }
@@ -6611,18 +6369,30 @@ function MessageCard({ m, children }: { m: SentMessage; children?: React.ReactNo
 }
 
 type ElementCaseta =
+    | { fel: 'alegere'; st: HymnState }
     | { fel: 'raspuns'; m: SentMessage & { unread: boolean } }
-    | { fel: 'anunt'; a: Announcement };
+    | { fel: 'verdict'; d: PendingDecision }
+    | { fel: 'anunt'; a: Announcement }
+    | { fel: 'powerpoint'; imnuri: HymnToReview[] };
 
 /**
- * Caseta de mesaje de sub colecții (decizia ownerului, 2026-11-07): răspunsurile
- * autorilor la ce a trimis calculatorul ăsta, apoi anunțurile generale. Un singur
+ * Caseta de sub colecții = singurul loc pentru ce e de citit și de hotărât (decizia
+ * ownerului, 2026-11-21; plicul din antet nu mai există). În ordine: imnurile la care
+ * omul are de ales între varianta lui și cea oficială, răspunsurile autorilor la ce a
+ * trimis calculatorul ăsta, ce s-a hotărât cu corecturile lui, anunțurile generale,
+ * la urmă imnurile aduse din PowerPoint încă necitite (un singur card). Un singur
  * mesaj deschis, teanc cu „1/n”. Un anunț important stă pe ecran cel puțin
  * `min_seconds`; numărătoarea curge doar cât e chiar văzut (fereastra în față, fără
  * proiecție pornită) și continuă după repornire. În timpul proiecției caseta se
  * strânge la un rând, ca să nu tragă ochiul tehnicianului de pe strofe.
  */
-function CasetaMesaje({ projecting, rev, onChanged }: { projecting: boolean; rev: number; onChanged: () => void }) {
+function CasetaMesaje({ projecting, rev, onChanged, onReviewHymn }: {
+    projecting: boolean;
+    rev: number;
+    /** Ceva s-a schimbat (alegere, „Am citit”): lista de imnuri și semnele din ea se reîncarcă. */
+    onChanged: () => void;
+    onReviewHymn: (hymnId: number) => void;
+}) {
     const t = useT();
     const [lista, setLista] = useState<ElementCaseta[]>([]);
     const [idx, setIdx] = useState(0);
@@ -6630,23 +6400,44 @@ function CasetaMesaje({ projecting, rev, onChanged }: { projecting: boolean; rev
     const [tot, setTot] = useState(false);
     const [toateMesajele, setToateMesajele] = useState(false);
     const [inPlus, setInPlus] = useState<Record<number, number>>({});
+    const [ocupat, setOcupat] = useState(false);
+    const [eroare, setEroare] = useState('');
     const netrimis = useRef<Record<number, number>>({});
 
     const incarca = useCallback(async () => {
-        const [m, a] = await Promise.all([
+        const [st, m, d, a, pp] = await Promise.all([
+            window.electron.contrib.hymnStates().catch(() => [] as HymnState[]),
             window.electron.feedback.messages().catch(() => [] as (SentMessage & { unread: boolean })[]),
+            window.electron.contrib.decisions().catch(() => [] as PendingDecision[]),
             window.electron.feedback.announcements().catch(() => [] as Announcement[]),
+            window.electron.db.hymnsToReview().catch(() => [] as HymnToReview[]),
         ]);
         const raspunsuri = (m as (SentMessage & { unread: boolean })[]).filter(x => x.unread)
             .sort((x, y) => (x.replied_at ?? '').localeCompare(y.replied_at ?? ''));
         const anunturi = [...a].sort((x, y) => x.created_at.localeCompare(y.created_at));
-        setLista([...raspunsuri.map(m => ({ fel: 'raspuns' as const, m })),
-            ...anunturi.map(a => ({ fel: 'anunt' as const, a }))]);
+        setLista([
+            ...st.map(s => ({ fel: 'alegere' as const, st: s })),
+            ...raspunsuri.map(m => ({ fel: 'raspuns' as const, m })),
+            ...d.map(x => ({ fel: 'verdict' as const, d: x })),
+            ...anunturi.map(a => ({ fel: 'anunt' as const, a })),
+            ...(pp.length ? [{ fel: 'powerpoint' as const, imnuri: pp }] : []),
+        ]);
     }, []);
     useEffect(() => { void incarca(); }, [incarca, rev]);
 
     const curent = lista[Math.min(idx, Math.max(0, lista.length - 1))];
-    useEffect(() => { setIntrebare(false); setTot(false); }, [idx, curent]);
+    useEffect(() => { setIntrebare(false); setTot(false); setEroare(''); }, [idx, curent]);
+
+    // O acțiune pe cardul deschis: după ea lista se reîncarcă și cardul rezolvat pleacă.
+    const actiune = async (f: () => Promise<{ ok: boolean; error?: string } | void>) => {
+        setOcupat(true);
+        setEroare('');
+        const r = await f().catch(err => ({ ok: false, error: String(err) }));
+        setOcupat(false);
+        if (r && !r.ok) { setEroare(r.error ?? t('Nu am putut aplica alegerea.')); return; }
+        await incarca();
+        onChanged();
+    };
 
     // Timpul pe ecran al anunțului important deschis acum.
     const anuntDeNumarat = curent?.fel === 'anunt' && curent.a.important && curent.a.min_seconds > 0 ? curent.a : null;
@@ -6688,24 +6479,46 @@ function CasetaMesaje({ projecting, rev, onChanged }: { projecting: boolean; rev
         : 0;
     const procent = anuntDeNumarat ? 1 - ramase / anuntDeNumarat.min_seconds : 1;
     const data = (iso: string) => new Date(iso).toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
-    const textul = curent.fel === 'raspuns' ? curent.m.reply : curent.a.body;
+    const textul = curent.fel === 'raspuns' ? curent.m.reply
+        : curent.fel === 'anunt' ? curent.a.body
+        : curent.fel === 'alegere'
+            ? (curent.st.fel === 'oficial-nou'
+                ? t('Ai varianta ta la imnul ăsta, iar între timp a apărut una oficială nouă. Nu am schimbat nimic — alegi tu.')
+                : t('Am înlocuit varianta ta pentru că textul oficial era greșit. Ți-am păstrat-o — o poți pune la loc oricând.'))
+        : curent.fel === 'verdict'
+            ? (curent.d.autoCleaned && curent.d.publishedAs
+                ? t('Imnul tău a intrat în colecția oficială, la {unde}, cu exact textul pe care l-ai trimis. Copia din „{cat}” era identică, așa că am șters-o, ca să nu-l ai de două ori.',
+                    { unde: `${curent.d.publishedAs.category} #${curent.d.publishedAs.number}`, cat: curent.d.category })
+                : curent.d.note || (curent.d.status === 'accepted'
+                    ? t('Modificarea ta a fost preluată în versiunea oficială.')
+                    : t('Modificarea ta nu a fost preluată în versiunea oficială.')))
+        : t('Conversia din slide-uri greșește des — strofe lipite, titlu luat din alt loc. Deschide fiecare imn, uită-te peste el și salvează; marcajul dispare de la sine.');
     const lung = textul.length > 260;
 
     const amCitit = async () => {
         if (ramase > 0) return;
         if (curent.fel === 'raspuns') await window.electron.feedback.markRead([curent.m.id]);
-        else await window.electron.feedback.announcementRead(curent.a.id);
+        else if (curent.fel === 'anunt') await window.electron.feedback.announcementRead(curent.a.id);
         await incarca();
         setIdx(i => Math.max(0, Math.min(i, lista.length - 2)));
         onChanged();
     };
+    const alegeImn = (alegere: 'adopta-oficial' | 'pastreaza-al-meu' | 'pune-la-loc-al-meu') => {
+        if (curent.fel === 'alegere') void actiune(() => window.electron.contrib.applyHymnState(curent.st.key, alegere));
+    };
+
+    const eticheta = {
+        alegere: { icon: <AlertCircle className="icon-xs" />, text: t('De ales') },
+        raspuns: { icon: <Mail className="icon-xs" />, text: t('Răspuns AdventShow') },
+        verdict: { icon: <Edit3 className="icon-xs" />, text: t('Corectura ta') },
+        anunt: { icon: <Sparkles className="icon-xs" />, text: t('Noutate') },
+        powerpoint: { icon: <Upload className="icon-xs" />, text: t('De citit') },
+    }[curent.fel];
 
     return (
         <div className={`caseta-mesaje ${curent.fel} ${lista.length > 1 ? 'teanc' : ''}`}>
             <div className="caseta-mesaje-cap">
-                {curent.fel === 'raspuns'
-                    ? <><Mail className="icon-xs" /><span className="caseta-mesaje-eticheta">{t('Răspuns AdventShow')}</span></>
-                    : <><Sparkles className="icon-xs" /><span className="caseta-mesaje-eticheta">{t('Noutate')}</span></>}
+                {eticheta.icon}<span className="caseta-mesaje-eticheta">{eticheta.text}</span>
                 {lista.length > 1 && (
                     <span className="caseta-mesaje-nav">
                         <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0}
@@ -6725,8 +6538,18 @@ function CasetaMesaje({ projecting, rev, onChanged }: { projecting: boolean; rev
                     </span>
                     <span className="caseta-mesaje-sageata">{intrebare ? '▾' : '▸'}</span>
                 </button>
-            ) : (
+            ) : curent.fel === 'anunt' ? (
                 curent.a.title && <div className="caseta-mesaje-titlu">{curent.a.title}</div>
+            ) : curent.fel === 'alegere' ? (
+                <div className="caseta-mesaje-titlu">{curent.st.category} #{curent.st.number} — {curent.st.titlu}</div>
+            ) : curent.fel === 'verdict' ? (
+                <div className="caseta-mesaje-titlu">{curent.d.category} #{curent.d.number} — {curent.d.title}</div>
+            ) : (
+                <div className="caseta-mesaje-titlu">
+                    {t(curent.imnuri.length === 1
+                        ? '{n} imn adus din PowerPoint așteaptă să fie citit'
+                        : '{n} imnuri aduse din PowerPoint așteaptă să fie citite', { n: curent.imnuri.length })}
+                </div>
             )}
             {curent.fel === 'raspuns' && intrebare && curent.m.body && (
                 <p className="caseta-mesaje-original">{curent.m.body}</p>
@@ -6735,13 +6558,50 @@ function CasetaMesaje({ projecting, rev, onChanged }: { projecting: boolean; rev
             {lung && !tot && (
                 <button className="caseta-mesaje-link" onClick={() => setTot(true)}>{t('Citește tot')}</button>
             )}
+            {curent.fel === 'powerpoint' && (
+                <div className="caseta-mesaje-imnuri">
+                    {curent.imnuri.map(h => (
+                        <div key={h.id} className="caseta-mesaje-imn">
+                            <span className="caseta-mesaje-imn-titlu" title={`${h.category} · ${h.title}`}>{h.number}. {h.title}</span>
+                            <button className="caseta-mesaje-link" onClick={() => onReviewHymn(h.id)}>{t('Deschide')}</button>
+                            <button className="caseta-mesaje-link" disabled={ocupat}
+                                onClick={() => void actiune(() => window.electron.db.markReviewed(h.id))}>{t('E bun așa')}</button>
+                        </div>
+                    ))}
+                </div>
+            )}
+            {eroare && <div className="editor-error">{eroare}</div>}
             <div className="caseta-mesaje-jos">
-                <button className="caseta-mesaje-citit" onClick={() => void amCitit()} disabled={ramase > 0}
-                    style={{ ['--progres' as string]: `${Math.round(procent * 360)}deg` }}>
-                    {ramase > 0
-                        ? <><span className="caseta-mesaje-inel" />{t('Poți închide în {t}', { t: `${Math.floor(ramase / 60)}:${String(ramase % 60).padStart(2, '0')}` })}</>
-                        : t('Am citit')}
-                </button>
+                {(curent.fel === 'raspuns' || curent.fel === 'anunt') && (
+                    <button className="caseta-mesaje-citit" onClick={() => void amCitit()} disabled={ramase > 0}
+                        style={{ ['--progres' as string]: `${Math.round(procent * 360)}deg` }}>
+                        {ramase > 0
+                            ? <><span className="caseta-mesaje-inel" />{t('Poți închide în {t}', { t: `${Math.floor(ramase / 60)}:${String(ramase % 60).padStart(2, '0')}` })}</>
+                            : t('Am citit')}
+                    </button>
+                )}
+                {curent.fel === 'alegere' && curent.st.fel === 'oficial-nou' && (<>
+                    <button className="caseta-mesaje-citit" disabled={ocupat} onClick={() => alegeImn('adopta-oficial')}>
+                        {t('Trec pe varianta oficială')}
+                    </button>
+                    <button className="caseta-mesaje-link" disabled={ocupat} onClick={() => alegeImn('pastreaza-al-meu')}>
+                        {t('Rămân cu a mea')}
+                    </button>
+                </>)}
+                {curent.fel === 'alegere' && curent.st.fel === 'inlocuit' && (<>
+                    <button className="caseta-mesaje-citit" disabled={ocupat} onClick={() => alegeImn('pastreaza-al-meu')}>
+                        {t('E în regulă')}
+                    </button>
+                    <button className="caseta-mesaje-link" disabled={ocupat} onClick={() => alegeImn('pune-la-loc-al-meu')}>
+                        {t('Pune la loc varianta mea')}
+                    </button>
+                </>)}
+                {curent.fel === 'verdict' && (
+                    <button className="caseta-mesaje-citit" disabled={ocupat}
+                        onClick={() => { const hash = curent.d.hash; void actiune(() => window.electron.contrib.resolveDecision(hash)); }}>
+                        {t('Am înțeles')}
+                    </button>
+                )}
                 {curent.fel === 'raspuns' && (
                     <button className="caseta-mesaje-link" onClick={() => setToateMesajele(true)}>{t('Toate mesajele')}</button>
                 )}
@@ -6782,13 +6642,11 @@ function MessagesModal({ onClose }: { onClose: () => void }) {
     const t = useT();
     const [list, setList] = useState<SentMessage[] | null>(null);
 
-    // Deschiderea listei înseamnă că omul a văzut răspunsurile din ea.
+    // Doar istoric: deschiderea nu marchează nimic citit (decizia ownerului, 2026-11-21).
+    // Înainte, cine se uita doar prin listă ștergea din casetă răspunsurile pe care
+    // omul care trimisese întrebarea nu le văzuse. Citit = „Am citit” din casetă.
     useEffect(() => {
-        window.electron.feedback.messages().then(m => {
-            setList(m);
-            const necitite = m.filter(i => i.unread).map(i => i.id);
-            if (necitite.length) window.electron.feedback.markRead(necitite).catch(() => { });
-        }).catch(() => setList([]));
+        window.electron.feedback.messages().then(setList).catch(() => setList([]));
     }, []);
 
     return (
@@ -6805,7 +6663,7 @@ function MessagesModal({ onClose }: { onClose: () => void }) {
                         </div>
                     ) : list.map(m => <MessageCard key={m.id} m={m} />)}
                     <p className="text-fg/40 text-xs mt-3">
-                        {t('Aici apar problemele și sugestiile trimise de pe acest calculator. Când autorii răspund, plicul de sus se aprinde.')}
+                        {t('Aici apar problemele și sugestiile trimise de pe acest calculator, cu răspunsurile autorilor. Un răspuns nou apare întâi în caseta din stânga, sub colecții.')}
                     </p>
                 </div>
             </div>
@@ -7189,13 +7047,12 @@ function SetPasswordModal({ oldHash, onSave, onCancel, onForgot }: {
 // Settings Modal
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword, onReviewHymn, onShowHistory, initialTab }: {
+function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangePassword, onForgotPassword, onShowHistory, initialTab }: {
     onClose: () => void;
     onCategoriesChanged: () => void;
     onHymnsChanged: () => void;
     onChangePassword: () => void;
     onForgotPassword: () => void;
-    onReviewHymn: (hymnId: number) => void;
     /** Istoricul versiunilor — se deschide în locul Setărilor. */
     onShowHistory: () => void;
     initialTab?: 'projection' | 'admin' | 'about' | 'help';
@@ -7209,16 +7066,11 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     const [feedbackKind, setFeedbackKind] = useState<'bug' | 'suggestion' | null>(null);
     const [pendingFeedback, setPendingFeedback] = useState(0);
     const [messagesOpen, setMessagesOpen] = useState(false);
-    const [decisionsOpen, setDecisionsOpen] = useState(false);
-    const [pendingDecisions, setPendingDecisions] = useState(0);
 
     useEffect(() => {
         window.electron.settings.get().then(s => setSettings(s));
         window.electron.update.getChannel().then(setUpdateChannelValue).catch(() => { });
         window.electron.feedback.pending().then(setPendingFeedback).catch(() => { });
-        Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates(),
-            window.electron.feedback.unreadReplies()])
-            .then(([d, st, rep]) => setPendingDecisions(d.length + st.length + rep)).catch(() => { });
     }, []);
 
     // Close on Escape
@@ -7231,7 +7083,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
     }, [onClose]);
 
     // Doar tabul atins pleacă spre salvare: cealaltă mărime o poate schimba chiar acum
-    // proiecția (+ − / A±), iar valoarea ținută aici ar fi deja veche.
+    // bara de proiecție („Păstrează” / „Pune 100%”), iar valoarea ținută aici ar fi veche.
     const saveFontSize = async (tab: 'imnuri' | 'biblia', value: number) => {
         setSettings(s => ({ ...s, projectionFontSizeByTab: { ...s.projectionFontSizeByTab, [tab]: value } }));
         await window.electron.settings.set({ projectionFontSizeByTab: { [tab]: value } });
@@ -7278,25 +7130,33 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                         <label>{t('Ecranul folosit')}</label>
                                         <DisplayPicker settings={settings} onSave={saveSettings} />
                                     </div>
-                                    <div className="field">
-                                        <label>{t('Mărimea textului la Imnuri: {pct}%', { pct: (((settings.projectionFontSizeByTab?.imnuri ?? settings.projectionFontSize ?? 1.2)) * 100).toFixed(0) })}</label>
-                                        <input
-                                            type="range" min="0.6" max="3.0" step="0.05"
-                                            value={settings.projectionFontSizeByTab?.imnuri ?? settings.projectionFontSize ?? 1.2}
-                                            onChange={e => saveFontSize('imnuri', parseFloat(e.target.value))}
-                                        />
-                                    </div>
-                                    <div className="field">
-                                        <label>{t('Mărimea textului la Biblie: {pct}%', { pct: (((settings.projectionFontSizeByTab?.biblia ?? settings.projectionFontSize ?? 1.2)) * 100).toFixed(0) })}</label>
-                                        <input
-                                            type="range" min="0.6" max="3.0" step="0.05"
-                                            value={settings.projectionFontSizeByTab?.biblia ?? settings.projectionFontSize ?? 1.2}
-                                            onChange={e => saveFontSize('biblia', parseFloat(e.target.value))}
-                                        />
-                                        <p className="text-fg/40 text-xs mt-1">
-                                            {t('Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu + și − sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.')}
-                                        </p>
-                                    </div>
+                                    {(['imnuri', 'biblia'] as const).map(tab => {
+                                        // 1.2 în setări = mărimea obișnuită, arătată ca 100%
+                                        const v = settings.projectionFontSizeByTab?.[tab] ?? settings.projectionFontSize ?? 1.2;
+                                        const pct = Math.round((v / 1.2) * 100);
+                                        return (
+                                            <div className="field" key={tab}>
+                                                <label>
+                                                    {t(tab === 'imnuri' ? 'Mărimea textului la Imnuri: {pct}%' : 'Mărimea textului la Biblie: {pct}%', { pct })}
+                                                    {pct !== 100 && (
+                                                        <button className="btn-clear ml-2" onClick={() => saveFontSize(tab, 1.2)}>
+                                                            {t('Înapoi la 100%')}
+                                                        </button>
+                                                    )}
+                                                </label>
+                                                <input
+                                                    type="range" min="0.6" max="3.0" step="0.05"
+                                                    value={v}
+                                                    onChange={e => saveFontSize(tab, parseFloat(e.target.value))}
+                                                />
+                                                {tab === 'biblia' && (
+                                                    <p className="text-fg/40 text-xs mt-1">
+                                                        {t('Aici se alege mărimea obișnuită, separat la Imnuri și la Biblie, și rămâne așa. În timpul proiecției, + și − (sau A−/A+) o schimbă doar pentru imnul de pe ecran, iar la Biblie până închizi proiecția. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură.')}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </section>
 
@@ -7553,14 +7413,10 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                             <section className="sgroup">
                                 <div className="sgroup-head">
                                     <h4>{t('Legătura cu autorii')}</h4>
-                                    <p>{t('Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Aici vezi ce s-a hotărât cu ele și ce ți-au răspuns autorii la mesaje.')}</p>
+                                    <p>{t('Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Ce s-a hotărât cu ele și răspunsurile autorilor apar în caseta din stânga, sub colecții; aici e istoricul mesajelor trimise.')}</p>
                                 </div>
                                 <div className="row" style={{ flexWrap: 'wrap' }}>
-                                    <button className="btn-action" onClick={() => setDecisionsOpen(true)}>
-                                        {t('Răspunsuri la ce ai trimis')}
-                                        {pendingDecisions > 0 && <span className="pill-count">{pendingDecisions}</span>}
-                                    </button>
-                                    <button className="btn-clear" onClick={() => setMessagesOpen(true)}>
+                                    <button className="btn-action" onClick={() => setMessagesOpen(true)}>
                                         {t('Mesajele mele')}
                                     </button>
                                     <button className="btn-clear" onClick={() => setFeedbackKind('bug')}>
@@ -7815,8 +7671,8 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                         <span>{t('Strofa următoare.')}</span></div>
                                     <div className="help-row"><kbd>←</kbd><kbd>PgUp</kbd>
                                         <span>{t('Strofa anterioară.')}</span></div>
-                                    <div className="help-row"><kbd>↑</kbd><kbd>↓</kbd>
-                                        <span>{t('Mărește sau micșorează textul de pe ecranul mare. Dacă o strofă lungă nu încape, aplicația o micșorează oricum singură.')}</span></div>
+                                    <div className="help-row"><kbd>+</kbd><kbd>−</kbd>
+                                        <span>{t('Mărește sau micșorează textul de pe ecranul mare, doar pentru imnul de pe ecran (la Biblie, până închizi proiecția). Mărimea obișnuită se alege în Setări. Dacă o strofă lungă nu încape, aplicația o micșorează oricum singură.')}</span></div>
                                     <div className="help-row"><kbd>Enter</kbd>
                                         <span>{t('Trece pe ecran imnul pregătit între timp.')}</span></div>
                                     <div className="help-row"><kbd>Esc</kbd>
@@ -7877,22 +7733,26 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     <div className="help-row"><kbd>·</kbd>
                                         <span><strong>{t('Din fișiere PowerPoint')}</strong> {t('— un fișier sau mai multe. La un singur fișier, imnul se deschide pe loc în editor, ca să-l îndrepți imediat.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>{t('Dintr-un folder întreg')}</strong> {t('— pentru zeci sau sute deodată. Toate rămân marcate cu un punct portocaliu: conversia din slide-uri greșește des. Le găsești adunate în butonul de avertismente din antet și le citești pe rând.')}</span></div>
+                                        <span><strong>{t('Dintr-un folder întreg')}</strong> {t('— pentru zeci sau sute deodată. Toate rămân marcate cu un punct portocaliu: conversia din slide-uri greșește des. Le găsești adunate în caseta din stânga, sub colecții, și le citești pe rând.')}</span></div>
                                 </div>
                             </section>
 
                             <section className="sgroup">
                                 <div className="sgroup-head">
-                                    <h4>{t('Butonul de avertismente din antet')}</h4>
-                                    <p>{t('Apare doar când chiar te așteaptă ceva. Adună trei lucruri:')}</p>
+                                    <h4>{t('Caseta din stânga, sub colecții')}</h4>
+                                    <p>{t('Apare doar când chiar te așteaptă ceva, câte un mesaj pe rând. Adună:')}</p>
                                 </div>
                                 <div className="help-shortcuts">
                                     <div className="help-row"><kbd>·</kbd>
+                                        <span>{t('Imnurile la care alegi între varianta ta și una oficială nouă (au și un punct albastru în listă).')}</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
+                                        <span>{t('Răspunsurile autorilor la problemele și sugestiile trimise de pe acest calculator.')}</span></div>
+                                    <div className="help-row"><kbd>·</kbd>
                                         <span>{t('Ce au hotărât autorii cu imnurile și corecturile pe care le-ai trimis.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span>{t('Imnurile aduse din PowerPoint și încă necitite.')}</span></div>
+                                        <span>{t('Noutățile de la AdventShow.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span>{t('Unealta de descărcare de pe YouTube, dacă lipsește sau a rămas în urmă.')}</span></div>
+                                        <span>{t('Imnurile aduse din PowerPoint și încă necitite.')}</span></div>
                                 </div>
                             </section>
 
@@ -7921,7 +7781,7 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                                     <div className="help-row"><kbd>·</kbd>
                                         <span><strong>{t('Filmul merge fără sunet')}</strong> {t('— Setări → Proiecție → Sunetul videoclipurilor → „Detectează dispozitive" și alege ieșirea pe care e legat ecranul.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
-                                        <span><strong>{t('Nu se descarcă de pe YouTube')}</strong> {t('— vezi butonul de avertismente; unealta e probabil veche.')}</span></div>
+                                        <span><strong>{t('Nu se descarcă de pe YouTube')}</strong> {t('— în tabul Video, la „Link YouTube”, apare un buton de actualizare dacă unealta e veche; o găsești și în Setări → Descărcări de pe YouTube.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
                                         <span><strong>{t('Ai pierdut un imn adăugat')}</strong> {t('— caută-l în „Imnurile mele"; tot ce adaugi ajunge acolo.')}</span></div>
                                     <div className="help-row"><kbd>·</kbd>
@@ -7935,29 +7795,8 @@ function SettingsModal({ onClose, onCategoriesChanged, onHymnsChanged, onChangeP
                 </div>
             </div>
 
-            {decisionsOpen && (
-                <DecisionsModal
-                    onClose={() => setDecisionsOpen(false)}
-                    onChanged={() => {
-                        Promise.all([
-                            window.electron.contrib.decisions(),
-                            window.electron.contrib.hymnStates(),
-                            window.electron.db.countToReview(),
-                            window.electron.feedback.unreadReplies(),
-                        ]).then(([d, st, rev, rep]) => setPendingDecisions(d.length + st.length + rev + rep)).catch(() => { });
-                        onHymnsChanged();
-                    }}
-                    onReviewHymn={id => { onClose(); onReviewHymn(id); }}
-                />
-            )}
-
             {messagesOpen && (
-                <MessagesModal onClose={() => {
-                    setMessagesOpen(false);
-                    Promise.all([window.electron.contrib.decisions(), window.electron.contrib.hymnStates(),
-                        window.electron.db.countToReview(), window.electron.feedback.unreadReplies()])
-                        .then(([d, st, rev, rep]) => setPendingDecisions(d.length + st.length + rev + rep)).catch(() => { });
-                }} />
+                <MessagesModal onClose={() => setMessagesOpen(false)} />
             )}
 
             {feedbackKind && (

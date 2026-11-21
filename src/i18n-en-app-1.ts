@@ -63,8 +63,6 @@ export const EN_APP_1: Record<string, string> = {
     'Scriu eu un imn nou': 'Write a new hymn myself',
     'Din fișiere PowerPoint…': 'From PowerPoint files…',
     'Dintr-un folder întreg…': 'From a whole folder…',
-    'Lucruri care te așteaptă: răspunsuri, imnuri de citit, unelte de actualizat': 'Things waiting for you: replies, hymns to review, tools to update',
-    'de rezolvat': 'to review',
     'Ajutor — scurtături': 'Help — shortcuts',
     'Setări': 'Settings',
     'Actualizare {v} descărcată': 'Update {v} downloaded',

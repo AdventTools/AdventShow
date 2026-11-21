@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+/** Mărimea textului pe proiecție: ajustarea de acum sau baza din Setări (`src/vite-env.d.ts`). */
+type ActiuneMarime = 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'zoom-keep' | 'zoom-default'
+
 contextBridge.exposeInMainWorld('electron', {
   on(...args: Parameters<typeof ipcRenderer.on>) {
     const [channel, listener] = args
@@ -202,7 +205,7 @@ contextBridge.exposeInMainWorld('electron', {
     updateHymn: (sections: unknown[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: string, bibleRef?: string) =>
       ipcRenderer.invoke('projection:update-hymn', sections, hymnTitle, hymnNumber, startIndex, contentType, bibleRef),
     close: () => ipcRenderer.invoke('projection:close'),
-    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') =>
+    sendKeyRequest: (action: 'prev' | 'next' | 'close' | ActiuneMarime) =>
       ipcRenderer.invoke('projection:key-request', action),
     onSlide: (cb: (data: unknown) => void) =>
       ipcRenderer.on('projection:slide', (_e, data) => cb(data)),
@@ -222,12 +225,12 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.on('projection:screen', h)
       return () => { ipcRenderer.removeListener('projection:screen', h) }
     },
-    onZoom: (cb: (action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void) =>
+    onZoom: (cb: (action: ActiuneMarime) => void) =>
       ipcRenderer.on('projection:zoom', (_e, action) => cb(action)),
     offZoom: () => ipcRenderer.removeAllListeners('projection:zoom'),
-    reportZoom: (level: number) => ipcRenderer.invoke('projection:zoom-report', level),
-    onZoomLevel: (cb: (level: number) => void) =>
-      ipcRenderer.on('projection:zoom-level', (_e, level) => cb(level)),
+    reportZoom: (stare: unknown) => ipcRenderer.invoke('projection:zoom-report', stare),
+    onZoomLevel: (cb: (stare: unknown) => void) =>
+      ipcRenderer.on('projection:zoom-level', (_e, stare) => cb(stare)),
     offZoomLevel: () => ipcRenderer.removeAllListeners('projection:zoom-level'),
     signalReady: () => ipcRenderer.send('projection:renderer-ready'),
     // Special full-screen modes (timer/clock/free text)

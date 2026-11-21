@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { keyAction } from './projectionKeys';
 import { zeroMessageSize } from './timerText';
-import { AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, ProjectionTextData } from './vite-env';
+import { ActiuneMarime, AppSettings, HymnSection, ProjectionSlideData, ProjectionTimerData, ProjectionTextData } from './vite-env';
 
 // Mărimea textului pe proiecție (1.2 = 120%). Aceleași limite ca în Setări.
 const MARIME_IMPLICITA = 1.2;
@@ -12,6 +12,10 @@ const MARIME_VERSET_VH = 6;
 
 function marimeaTextului(s: AppSettings, tab: 'imnuri' | 'biblia'): number {
   return s.projectionFontSizeByTab?.[tab] ?? s.projectionFontSize ?? MARIME_IMPLICITA;
+}
+
+function limiteazaMarimea(v: number): number {
+  return Math.round(Math.min(Math.max(v, MARIME_MIN), MARIME_MAX) * 100) / 100;
 }
 
 // Convert a local file path to a proper file:// URL (handles Windows drive letters)
@@ -261,9 +265,11 @@ export function ProjectionPage() {
   const [visible, setVisible] = useState(false);
   const [bg, setBg] = useState<AppSettings>({});
   // Doar pentru Ceas și Anunțuri, pe durata proiecției. La imnuri și Biblie,
-  // + − / A± schimbă mărimea salvată a tabului (vezi `schimbaMarimea`).
+  // + − / A± schimbă ajustarea de mai jos (vezi `schimbaMarimea`).
   const [zoomLevel, setZoomLevel] = useState(1);
-  const schimbaMarimea = useRef<(action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void>(() => { /* până la primul render */ });
+  const [ajustare, setAjustare] = useState<Record<'imnuri' | 'biblia', number>>({ imnuri: 0, biblia: 0 });
+  const [serie, setSerie] = useState<{ semn: number; imnuri: number }>({ semn: 0, imnuri: 0 });
+  const schimbaMarimea = useRef<(action: ActiuneMarime) => void>(() => { /* până la primul render */ });
 
   // ── Video state ──
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -442,10 +448,32 @@ export function ProjectionPage() {
   const isBible = data?.contentType === 'bible';
   const tabKey: 'imnuri' | 'biblia' = isBible ? 'biblia' : 'imnuri';
 
-  // Mărimea textului: cea din Setări, separat pe tab; altfel mărimea generală a
-  // instalărilor vechi. Aceeași valoare o schimbă și + − / A± în timpul proiecției,
-  // deci rămâne și după Esc, și după repornire.
-  const fontSizeMultiplier = marimeaTextului(bg, tabKey);
+  // Mărimea textului are două straturi (decizia ownerului, 2026-11-21):
+  // - baza, din Setări, separat pe tab (altfel mărimea generală a instalărilor vechi),
+  //   permanentă; o schimbă doar Setările și butoanele explicite din bară;
+  // - ajustarea, din + − / A±, nesalvată: la Imnuri ține până la imnul următor, la
+  //   Biblie până se închide proiecția (fereastra se distruge, starea pleacă cu ea).
+  // Înainte, + − scriau direct în Setări: o apăsare greșită rămânea pe veci.
+  const baza = marimeaTextului(bg, tabKey);
+  const fontSizeMultiplier = limiteazaMarimea(baza + ajustare[tabKey]);
+
+  // Imn nou pe ecran = fără ajustare. Seria numără imnurile terminate, la rând,
+  // ajustate în aceeași direcție: la al treilea, bara propune păstrarea ca bază.
+  const cheieImn = data && !isBible ? `${data.hymnNumber}|${data.hymnTitle}` : null;
+  const ajustareRef = useRef(ajustare);
+  ajustareRef.current = ajustare;
+  const ultimulImn = useRef<string | null>(null);
+  useEffect(() => {
+    if (!cheieImn || cheieImn === ultimulImn.current) return;
+    if (ultimulImn.current !== null) {
+      const semn = Math.sign(ajustareRef.current.imnuri);
+      setSerie(s => (semn !== 0 && semn === s.semn ? { semn, imnuri: s.imnuri + 1 } : { semn, imnuri: semn ? 1 : 0 }));
+    }
+    ultimulImn.current = cheieImn;
+    setAjustare(a => (a.imnuri === 0 ? a : { ...a, imnuri: 0 }));
+  }, [cheieImn]);
+  const propune = tabKey === 'imnuri' && ajustare.imnuri !== 0
+    && serie.imnuri >= 2 && Math.sign(ajustare.imnuri) === serie.semn;
 
   schimbaMarimea.current = (action) => {
     if (!data) {
@@ -453,18 +481,29 @@ export function ProjectionPage() {
         : action === 'zoom-out' ? Math.max(z - 0.1, 0.5) : 1);
       return;
     }
-    const pas = action === 'zoom-in' ? 0.1 : -0.1;
-    const noua = action === 'zoom-reset'
-      ? MARIME_IMPLICITA
-      : Math.round(Math.min(Math.max(marimeaTextului(bg, tabKey) + pas, MARIME_MIN), MARIME_MAX) * 100) / 100;
-    setBg(s => ({ ...s, projectionFontSizeByTab: { ...s.projectionFontSizeByTab, [tabKey]: noua } }));
-    void window.electron.settings.set({ projectionFontSizeByTab: { [tabKey]: noua } });
+    const scrieBaza = (noua: number) => {
+      setBg(s => ({ ...s, projectionFontSizeByTab: { ...s.projectionFontSizeByTab, [tabKey]: noua } }));
+      void window.electron.settings.set({ projectionFontSizeByTab: { [tabKey]: noua } });
+    };
+    if (action === 'zoom-keep') {
+      scrieBaza(fontSizeMultiplier);
+      setSerie({ semn: 0, imnuri: 0 });
+    } else if (action === 'zoom-default') {
+      scrieBaza(MARIME_IMPLICITA);
+    }
+    if (action === 'zoom-in' || action === 'zoom-out') {
+      const pas = action === 'zoom-in' ? 0.1 : -0.1;
+      const noua = limiteazaMarimea(baza + ajustare[tabKey] + pas);
+      setAjustare(a => ({ ...a, [tabKey]: Math.round((noua - baza) * 100) / 100 }));
+    } else {
+      setAjustare(a => ({ ...a, [tabKey]: 0 }));
+    }
   };
 
   // Raportează mărimea către fereastra principală (bara de control)
   useEffect(() => {
-    window.electron.projection.reportZoom(fontSizeMultiplier);
-  }, [fontSizeMultiplier]);
+    window.electron.projection.reportZoom({ tab: tabKey, baza, ajustare: ajustare[tabKey], propune });
+  }, [tabKey, baza, ajustare, propune]);
 
   // ── Auto-shrink: guarantees text NEVER overflows the container ──
   const contentRef = useRef<HTMLDivElement>(null);

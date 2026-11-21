@@ -13,6 +13,15 @@
 
 ### Modificări
 - Toate cântările din Amicus, Companioni, Exploratori, Licurici și Tineret au fost citite cu partitura din carte, iar 123 au fost corectate: cuvinte citite greșit, versuri și strofe care lipseau (Exploratori 131, Licurici 85), strofe puse în altă ordine (Exploratori 15), refrenul altui imn (Tineret 12), refrenul de final al lui Amicus 8, strofele lui Licurici 78 („Blu, cip, mu”) și titluri scrise cum sunt în carte. Amicus 36 („La hotar de veșnicii”) are acum textul lui adevărat, nu pe al altui imn.
+- Imnuri Speciale are un imn nou, nr. 20 („Nu este munte prea nalt”), iar Imnuri Creștine 792 și 860 au textul corectat.
+- Tastele + și − (sau A−/A+) măresc sau micșorează textul doar pentru imnul de pe ecran; la imnul următor textul revine la mărimea obișnuită. La Biblie, schimbarea ține până închizi proiecția. Înainte, o apăsare din greșeală rămânea pentru totdeauna, la toate imnurile.
+- Mărimea obișnuită se alege în Setări și se arată acum față de normal (100%). Dacă e alta decât cea normală, bara de jos o spune clar în timpul proiecției, cu butonul „Pune 100%”. După trei imnuri mărite sau micșorate la fel, bara îți propune să păstrezi mărimea pentru toate imnurile.
+- Butonul „de rezolvat” din bara de sus nu mai există: tot ce te așteaptă apare în caseta din stânga, sub colecții, câte un mesaj pe rând — alegerile la imnurile tale, răspunsurile autorilor, ce s-a hotărât cu corecturile tale, noutățile și imnurile aduse din PowerPoint încă necitite. Imnurile la care ai de ales au un punct albastru în listă. Unealta pentru YouTube se actualizează din tabul Video, la „Link YouTube”.
+- Răspunsurile și noutățile de la autori ajung în cel mult o jumătate de oră cât aplicația e deschisă, nu doar la pornire. „Mesajele mele” din Setări arată istoricul fără să marcheze ceva drept citit.
+
+### Reparații
+- O corectură acceptată de autori apărea cu textul „nu a fost preluată”; acum scrie corect că a fost preluată.
+- Ajutorul spunea că săgețile sus/jos schimbă mărimea textului; le schimbă tastele + și −, iar săgețile schimbă strofa.
 
 ---
 

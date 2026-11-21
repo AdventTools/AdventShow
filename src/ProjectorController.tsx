@@ -4,7 +4,7 @@ import {
   accDownloadLabel, accPlayOnlyTitle, accPlayOnlyVisible, accReadyLabel, accStateLabel, accStateText,
   accTitle, accWarnText,
 } from './accompaniment-ui';
-import type { SyncWarning } from './vite-env';
+import type { MarimeProiectie, SyncWarning } from './vite-env';
 import { useT } from './i18n';
 import { keyAction } from './projectionKeys';
 
@@ -74,10 +74,10 @@ interface ProjectorControllerProps {
   /** null când imnul curent n-are acompaniament în manifest. */
   accompaniment?: AccompanimentControl | null;
   /**
-   * Mărimea textului pe proiecție (1.2 = 120%), aceeași cu cea din Setări. O ține
-   * App, nu bara: bara dispare cât e un imn „pregătit" și ar reporni de la zero.
+   * Mărimea textului pe proiecție: baza din Setări și ajustarea de acum. O ține App,
+   * nu bara: bara dispare cât e un imn „pregătit" și ar reporni de la zero.
    */
-  zoomLevel: number | null;
+  marime: MarimeProiectie | null;
   /**
    * Slide-ul de pe ecran (-1 = titlul). Îl ține App: bara apare abia după ce
    * proiecția a pornit, deci una proprie ar începe mereu de la titlu și prima
@@ -91,10 +91,17 @@ function mmss(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment, zoomLevel, currentIndex }: ProjectorControllerProps) {
+/** Mărimea obișnuită (1.2 în Setări) se arată ca 100%: „90%” din „120%” nu spune nimic omului. */
+const MARIME_OBISNUITA = 1.2;
+const procentMarime = (v: number) => Math.round((v / MARIME_OBISNUITA) * 100);
+
+export function ProjectorController({ sections, hymnTitle, hymnNumber, contentType = 'hymn', onClose, onNavigate, videoActive, accompaniment, marime, currentIndex }: ProjectorControllerProps) {
   const t = useT();
 
-  const zoomPercent = zoomLevel === null ? null : Math.round(zoomLevel * 100);
+  const efectiva = marime ? Math.min(Math.max(marime.baza + marime.ajustare, 0.6), 3) : null;
+  const zoomPercent = efectiva === null ? null : procentMarime(efectiva);
+  const ajustata = !!marime && marime.ajustare !== 0;
+  const bazaSchimbata = !!marime && Math.abs(marime.baza - MARIME_OBISNUITA) > 0.001;
   const [zoomToast, setZoomToast] = useState(false);
   const zoomToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const zoomPrevRef = useRef(zoomPercent);
@@ -250,26 +257,31 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
             </>
           )}
 
-          {/* Mărimea textului — A− [nivel] A+ (click pe procent = mărimea implicită) */}
-          <div className="relative flex items-center gap-0.5 rounded-lg bg-fg/5 border border-fg/10 p-0.5 mr-1" title={t('Zoom text proiecție')}>
+          {/* Mărimea textului — A− [nivel] A+. Procentul e față de mărimea obișnuită
+              (100%); portocaliu = ajustat acum, clic = înapoi la mărimea din Setări. */}
+          <div className={`relative flex items-center gap-0.5 rounded-lg border p-0.5 mr-1 ${
+            ajustata ? 'bg-amber-500/15 border-amber-400/40' : 'bg-fg/5 border-fg/10'
+          }`} title={t('Mărimea textului pe proiecție')}>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-out')}
               className="w-7 h-6 flex items-center justify-center rounded-md text-fg/60 hover:text-fg hover:bg-fg/10 transition-all text-xs font-bold"
-              title={t('Micșorează textul (↓)')}
+              title={t('Micșorează textul (−)')}
             >
               A−
             </button>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-reset')}
-              className="min-w-[2.75rem] h-6 px-1 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums text-fg/75 hover:text-fg hover:bg-fg/10 transition-all"
-              title={t('Înapoi la mărimea implicită (120%)')}
+              className={`min-w-[2.75rem] h-6 px-1 flex items-center justify-center rounded-md text-[11px] font-bold tabular-nums hover:bg-fg/10 transition-all ${
+                ajustata ? 'text-amber-300' : 'text-fg/75 hover:text-fg'
+              }`}
+              title={ajustata ? t('Înapoi la mărimea din Setări') : t('Mărimea textului, față de cea obișnuită')}
             >
               {zoomPercent ?? '—'}%
             </button>
             <button
               onClick={() => window.electron.projection.sendKeyRequest('zoom-in')}
               className="w-7 h-6 flex items-center justify-center rounded-md text-fg/60 hover:text-fg hover:bg-fg/10 transition-all text-sm font-bold"
-              title={t('Mărește textul (↑)')}
+              title={t('Mărește textul (+)')}
             >
               A+
             </button>
@@ -312,6 +324,47 @@ export function ProjectorController({ sections, hymnTitle, hymnNumber, contentTy
         <div className="flex items-center gap-3 px-4 py-2.5 bg-sky-500/15 border-b border-sky-400/25">
           <span className="text-sm font-black tracking-widest text-sky-300">{accStateLabel('doar')}</span>
           <span className="text-xs text-sky-100/90">{accStateText('doar')}</span>
+        </div>
+      )}
+      {/* Mărimea textului, când nu e cea obișnuită: ajustarea de acum (portocaliu) și
+          baza schimbată în Setări (albastru), fiecare cu drumul ei înapoi. Fără rândul
+          ăsta, o mărime schimbată din greșeală rămânea nevăzută luni întregi. */}
+      {marime && (ajustata || bazaSchimbata) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 border-b border-fg/5 text-xs">
+          {ajustata && (
+            <span className="flex items-center gap-2 text-amber-200/90">
+              <span className="font-bold text-amber-300 tabular-nums">{t('Text {pct}%', { pct: zoomPercent ?? '—' })}</span>
+              {marime.tab === 'imnuri' ? t('doar pentru acest imn') : t('până la închiderea proiecției')}
+              <button
+                onClick={() => window.electron.projection.sendKeyRequest('zoom-reset')}
+                className="px-2 py-0.5 rounded-md border border-amber-400/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 font-semibold transition-all"
+              >
+                {t('Înapoi la {pct}%', { pct: procentMarime(marime.baza) })}
+              </button>
+              {marime.propune && (
+                <button
+                  onClick={() => window.electron.projection.sendKeyRequest('zoom-keep')}
+                  className="px-2 py-0.5 rounded-md border border-amber-400/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 font-semibold transition-all"
+                  title={t('Ultimele imnuri au fost ajustate la fel. Mărimea devine cea din Setări, pentru toate imnurile.')}
+                >
+                  {t('Păstrează {pct}% pentru toate imnurile', { pct: zoomPercent ?? '—' })}
+                </button>
+              )}
+            </span>
+          )}
+          {bazaSchimbata && (
+            <span className="flex items-center gap-2 text-sky-200/90">
+              {t(marime.tab === 'imnuri' ? 'Mărimea obișnuită la Imnuri e {pct}% (din Setări)' : 'Mărimea obișnuită la Biblie e {pct}% (din Setări)',
+                { pct: procentMarime(marime.baza) })}
+              <button
+                onClick={() => window.electron.projection.sendKeyRequest('zoom-default')}
+                className="px-2 py-0.5 rounded-md border border-sky-400/30 bg-sky-500/10 hover:bg-sky-500/20 text-sky-200 font-semibold transition-all"
+                title={t('Pune mărimea obișnuită înapoi la 100%, pentru totdeauna.')}
+              >
+                {t('Pune 100%')}
+              </button>
+            </span>
+          )}
         </div>
       )}
       {/* Problema înregistrării se vede înainte și în timpul cântării: la un imn

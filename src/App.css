@@ -68,11 +68,6 @@
 }
 
 /* Tema deschisă — culorile scrise direct pentru fundal închis, în varianta lor pe alb */
-:root[data-theme="light"] .header-btn-answers {
-    color: #9a3412;
-    background: rgba(234 88 12 / 0.12);
-    border-color: rgba(194 65 12 / 0.35);
-}
 :root[data-theme="light"] .sec-label.strofa { color: #2563eb; }
 :root[data-theme="light"] .search-scope-badge {
     color: #b45309;
@@ -791,6 +786,7 @@
 
 .caseta-mesaje-jos {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
@@ -840,6 +836,44 @@
     background: none;
     border: none;
     cursor: pointer;
+}
+.caseta-mesaje-link:disabled { opacity: 0.4; cursor: default; }
+
+/* Ce cere o alegere sau o confirmare: chihlimbar, ca să nu semene cu o simplă veste. */
+.caseta-mesaje.alegere,
+.caseta-mesaje.verdict,
+.caseta-mesaje.powerpoint {
+    background: rgba(245, 158, 11, 0.07);
+    border-color: rgba(245, 158, 11, 0.32);
+}
+.caseta-mesaje.alegere .caseta-mesaje-cap,
+.caseta-mesaje.verdict .caseta-mesaje-cap,
+.caseta-mesaje.powerpoint .caseta-mesaje-cap { color: #fcd34d; }
+:root[data-theme="light"] .caseta-mesaje.alegere .caseta-mesaje-cap,
+:root[data-theme="light"] .caseta-mesaje.verdict .caseta-mesaje-cap,
+:root[data-theme="light"] .caseta-mesaje.powerpoint .caseta-mesaje-cap { color: #b45309; }
+.caseta-mesaje.alegere .caseta-mesaje-citit,
+.caseta-mesaje.verdict .caseta-mesaje-citit { background: #fcd34d; color: #422006; }
+
+/* Imnurile din PowerPoint de citit: listă scurtă, cu derulare dacă sunt multe. */
+.caseta-mesaje-imnuri {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+.caseta-mesaje-imn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.caseta-mesaje-imn-titlu {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .update-banner.update-banner-sidebar {
@@ -4265,6 +4299,7 @@ select optgroup {
   background: #b45309;
   vertical-align: middle;
 }
+.needs-review-dot.de-ales { background: #2563eb; }
 
 /* ── Răspunsurile autorilor la ce a trimis utilizatorul ──────────────────────── */
 .decision-card {
@@ -4340,15 +4375,6 @@ select optgroup {
 
 /* Antet: răspunsurile autorilor. Apare doar când chiar așteaptă o alegere, ca să nu
    devină încă o iconiță pe care ochiul o ignoră. */
-.header-btn-answers {
-  width: auto;
-  gap: 6px;
-  padding: 0 12px;
-  background: rgba(180, 83, 9, 0.18);
-  border-color: rgba(251, 146, 60, 0.35);
-  color: #fed7aa;
-}
-.header-btn-answers:hover { background: rgba(180, 83, 9, 0.3); }
 
 /* ── Administrare sincronizare ─────────────────────────────────────────────── */
 .modal-dialog.admin-sync {

@@ -14,8 +14,9 @@ export const EN_APP_3: Record<string, string> = {
     'Ecranul folosit': 'Screen in use',
     'Mărimea textului la Imnuri: {pct}%': 'Text size for Hymns: {pct}%',
     'Mărimea textului la Biblie: {pct}%': 'Text size for Bible: {pct}%',
-    'Fiecare tab își ține propria mărime; o poți schimba și în timpul proiecției, cu + și − sau A−/A+, și rămâne așa. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură, ca să nu fie nevoie de derulare.':
-        'Each tab keeps its own size; you can also change it while projecting, with + and − or A−/A+, and it stays that way. If a long stanza or passage does not fit the screen, the app shrinks the text on its own, so scrolling is never needed.',
+    'Aici se alege mărimea obișnuită, separat la Imnuri și la Biblie, și rămâne așa. În timpul proiecției, + și − (sau A−/A+) o schimbă doar pentru imnul de pe ecran, iar la Biblie până închizi proiecția. Dacă o strofă sau un pasaj lung nu încape pe ecran, aplicația micșorează textul singură.':
+        'The usual size is chosen here, separately for Hymns and the Bible, and it stays that way. While projecting, + and − (or A−/A+) change it only for the hymn on screen, and for the Bible until you close the projection. If a long stanza or passage does not fit the screen, the app shrinks the text on its own.',
+    'Înapoi la 100%': 'Back to 100%',
     'Fundalul proiecției': 'Projection background',
     'Fundalul general: se vede peste tot unde nu alegi altul — la Imnuri și la Biblie, dacă nu le dai mai jos un fundal separat, și la Ceas și Anunțuri. Peste imagine sau video se pune automat un voal întunecat, ca textul să rămână lizibil.':
         'The general background: it shows everywhere you don\'t pick another one — for Hymns and Bible, unless you give them a separate background below, and for Clock and Announcements. A dark overlay is added automatically over images or video, so the text stays readable.',
@@ -40,12 +41,8 @@ export const EN_APP_3: Record<string, string> = {
     'Nu are nicio legătură cu ecranul de proiecție.': 'This has nothing to do with the projection screen.',
     'Mărimea textului și a butoanelor': 'Text and button size',
     'Limba interfeței': 'Interface language',
-    'Imnul tău «{title}» a fost acceptat și s-a mutat în {category}, nr. {number}.':
-        'Your hymn «{title}» was accepted and moved to {category}, no. {number}.',
     'Imnul tău «{title}» a fost acceptat în {category}, nr. {number}.':
         'Your hymn «{title}» was accepted into {category}, no. {number}.',
-    'Corectura ta la {category} {number} «{title}» nu a fost acceptată; varianta ta rămâne doar la tine.':
-        'Your correction to {category} {number} «{title}» was not accepted; your version stays on this computer only.',
     'Depanare': 'Troubleshooting',
     'Pornește jurnalul doar dacă îți cerem noi, când raportezi o problemă. Îl poți opri după aceea.':
         'Only turn the log on if we ask you to, when reporting a problem. You can turn it off afterwards.',
@@ -73,9 +70,8 @@ export const EN_APP_3: Record<string, string> = {
     'Stabil — recomandat': 'Stable — recommended',
     'Beta — versiuni de test': 'Beta — test versions',
     'Legătura cu autorii': 'Contact with the authors',
-    'Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Aici vezi ce s-a hotărât cu ele și ce ți-au răspuns autorii la mesaje.':
-        'Your hymn corrections are sent automatically, two days after the last edit. Here you can see what was decided about them and how the authors replied to your messages.',
-    'Răspunsuri la ce ai trimis': 'Replies to what you sent',
+    'Corecturile tale la imnuri pleacă singure, la două zile după ultima modificare. Ce s-a hotărât cu ele și răspunsurile autorilor apar în caseta din stânga, sub colecții; aici e istoricul mesajelor trimise.':
+        'Your hymn corrections are sent automatically, two days after the last edit. What was decided about them and the authors\' replies appear in the box on the left, under the collections; here is the history of the messages you sent.',
     'Raportează o problemă': 'Report a problem',
     'Sugerează o îmbunătățire': 'Suggest an improvement',
     '{n} mesaj așteaptă să plece — nu era internet când le-ai scris. Se trimit automat.':
@@ -133,8 +129,8 @@ export const EN_APP_3: Record<string, string> = {
     'Merg și din fereastra principală, și din fereastra de control.': 'Work from both the main window and the control bar.',
     'Strofa următoare.': 'Next stanza.',
     'Strofa anterioară.': 'Previous stanza.',
-    'Mărește sau micșorează textul de pe ecranul mare. Dacă o strofă lungă nu încape, aplicația o micșorează oricum singură.':
-        'Enlarges or shrinks the text on the big screen. If a long stanza does not fit, the app shrinks it anyway, on its own.',
+    'Mărește sau micșorează textul de pe ecranul mare, doar pentru imnul de pe ecran (la Biblie, până închizi proiecția). Mărimea obișnuită se alege în Setări. Dacă o strofă lungă nu încape, aplicația o micșorează oricum singură.':
+        'Enlarges or shrinks the text on the big screen, only for the hymn on screen (for the Bible, until you close the projection). The usual size is chosen in Settings. If a long stanza does not fit, the app shrinks it anyway, on its own.',
     'Trece pe ecran imnul pregătit între timp.': 'Sends the hymn prepared in the meantime to the screen.',
     'Stinge ecranul mare.': 'Turns off the big screen.',
     'Taste — la video': 'Keys — for video',
@@ -166,13 +162,16 @@ export const EN_APP_3: Record<string, string> = {
     '— un fișier sau mai multe. La un singur fișier, imnul se deschide pe loc în editor, ca să-l îndrepți imediat.':
         '— one file or several. With a single file, the hymn opens right away in the editor, so you can fix it immediately.',
     'Dintr-un folder întreg': 'From an entire folder',
-    '— pentru zeci sau sute deodată. Toate rămân marcate cu un punct portocaliu: conversia din slide-uri greșește des. Le găsești adunate în butonul de avertismente din antet și le citești pe rând.':
-        '— for dozens or hundreds at once. They all stay marked with an orange dot: conversion from slides often gets things wrong. You will find them gathered in the warning button in the header, and can go through them one by one.',
-    'Butonul de avertismente din antet': 'The warning button in the header',
-    'Apare doar când chiar te așteaptă ceva. Adună trei lucruri:': 'It only appears when something is actually waiting for you. It gathers three things:',
+    '— pentru zeci sau sute deodată. Toate rămân marcate cu un punct portocaliu: conversia din slide-uri greșește des. Le găsești adunate în caseta din stânga, sub colecții, și le citești pe rând.':
+        '— for dozens or hundreds at once. They all stay marked with an orange dot: conversion from slides often gets things wrong. You will find them gathered in the box on the left, under the collections, and can go through them one by one.',
+    'Caseta din stânga, sub colecții': 'The box on the left, under the collections',
+    'Apare doar când chiar te așteaptă ceva, câte un mesaj pe rând. Adună:': 'It only appears when something is actually waiting for you, one message at a time. It gathers:',
+    'Imnurile la care alegi între varianta ta și una oficială nouă (au și un punct albastru în listă).':
+        'Hymns where you choose between your version and a new official one (they also have a blue dot in the list).',
+    'Răspunsurile autorilor la problemele și sugestiile trimise de pe acest calculator.': 'The authors\' replies to problems and suggestions sent from this computer.',
     'Ce au hotărât autorii cu imnurile și corecturile pe care le-ai trimis.': 'What the authors decided about the hymns and corrections you sent.',
+    'Noutățile de la AdventShow.': 'News from AdventShow.',
     'Imnurile aduse din PowerPoint și încă necitite.': 'Hymns brought in from PowerPoint and not yet reviewed.',
-    'Unealta de descărcare de pe YouTube, dacă lipsește sau a rămas în urmă.': 'The YouTube download tool, if it is missing or out of date.',
     'Setări → Administrare.': 'Settings → Administration.',
     'Stabil': 'Stable',
     'e canalul recomandat.': 'is the recommended channel.',
@@ -188,7 +187,8 @@ export const EN_APP_3: Record<string, string> = {
     '— Setări → Proiecție → Sunetul videoclipurilor → „Detectează dispozitive" și alege ieșirea pe care e legat ecranul.':
         '— Settings → Projection → Video sound → "Detect devices" and pick the output the screen is connected to.',
     'Nu se descarcă de pe YouTube': 'Not downloading from YouTube',
-    '— vezi butonul de avertismente; unealta e probabil veche.': '— check the warning button; the tool is probably out of date.',
+    '— în tabul Video, la „Link YouTube”, apare un buton de actualizare dacă unealta e veche; o găsești și în Setări → Descărcări de pe YouTube.':
+        '— in the Video tab, under "YouTube link", an update button appears if the tool is out of date; you can also find it in Settings → YouTube downloads.',
     'Ai pierdut un imn adăugat': 'Lost a hymn you added',
     '— caută-l în „Imnurile mele"; tot ce adaugi ajunge acolo.': '— look for it in "My Hymns"; everything you add ends up there.',
     'Altceva': 'Something else',
@@ -441,10 +441,7 @@ export const EN_APP_3: Record<string, string> = {
     'Vezi numărătoarea': 'Show countdown',
     'Vezi finalul': 'Show the end',
     '(ecran negru)': '(black screen)',
-    'Ai un răspuns la un mesaj trimis de tine': 'You have a reply to a message you sent',
-    'Ai {n} răspunsuri la mesajele trimise de tine': 'You have {n} replies to messages you sent',
     'Am citit': 'Got it',
-    'Toate mesajele mele': 'All my messages',
     'Primit': 'Received',
     'Analizat': 'Reviewed',
     'În lucru': 'In progress',
@@ -458,7 +455,8 @@ export const EN_APP_3: Record<string, string> = {
     'Acompaniament descărcat': 'Accompaniment downloaded',
     'Acompaniament descărcat, sincronizat cu versurile': 'Accompaniment downloaded, synced with the lyrics',
     'N-ai trimis încă nicio problemă sau sugestie de pe acest calculator.': 'You have not sent any problem or suggestion from this computer yet.',
-    'Aici apar problemele și sugestiile trimise de pe acest calculator. Când autorii răspund, plicul de sus se aprinde.': 'Problems and suggestions sent from this computer appear here. When the authors reply, the envelope at the top lights up.',
+    'Aici apar problemele și sugestiile trimise de pe acest calculator, cu răspunsurile autorilor. Un răspuns nou apare întâi în caseta din stânga, sub colecții.':
+        'Problems and suggestions sent from this computer appear here, with the authors\' replies. A new reply shows up first in the box on the left, under the collections.',
     'Mărimea trimiterii de sub verset (ex: IOAN 3:16)': 'Size of the reference under the verse (e.g. JOHN 3:16)',
     'Normală': 'Normal',
     'Font': 'Font',

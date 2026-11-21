@@ -95,6 +95,25 @@ export interface BackupSummary {
   sections: number;
 }
 
+/**
+ * Mărimea textului pe proiecție. `baza` = cea din Setări (1.2 = mărimea obișnuită),
+ * permanentă; `ajustare` = ce s-a apăsat cu + − / A± acum, nesalvată: la Imnuri ține
+ * până la imnul următor, la Biblie până la închiderea proiecției.
+ */
+export interface MarimeProiectie {
+  tab: 'imnuri' | 'biblia';
+  baza: number;
+  ajustare: number;
+  /** Ultimele trei imnuri au fost ajustate la fel: bara propune păstrarea ca bază. */
+  propune: boolean;
+}
+
+/**
+ * zoom-in / zoom-out = ajustarea de acum; zoom-reset = fără ajustare; zoom-keep = mărimea
+ * de acum devine baza din Setări; zoom-default = baza revine la mărimea obișnuită.
+ */
+export type ActiuneMarime = 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'zoom-keep' | 'zoom-default';
+
 export interface ProjectionSlideData {
   sections: HymnSection[];
   currentIndex: number;
@@ -505,7 +524,7 @@ export interface IElectronAPI {
     navigate: (sections: HymnSection[], index: number, hymnTitle: string, hymnNumber: string, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     updateHymn: (sections: HymnSection[], hymnTitle: string, hymnNumber: string, startIndex?: number, contentType?: 'hymn' | 'bible', bibleRef?: string) => Promise<void>;
     close: () => Promise<void>;
-    sendKeyRequest: (action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') => Promise<void>;
+    sendKeyRequest: (action: 'prev' | 'next' | 'close' | ActiuneMarime) => Promise<void>;
     onSlide: (cb: (data: ProjectionSlideData) => void) => void;
     offSlide: () => void;
     onControllerSync: (cb: (data: { currentIndex: number }) => void) => void;
@@ -516,10 +535,10 @@ export interface IElectronAPI {
     onClosed: (cb: () => void) => void;
     offClosed: () => void;
     onScreen: (cb: (data: { conectat: boolean }) => void) => () => void;
-    onZoom: (cb: (action: 'zoom-in' | 'zoom-out' | 'zoom-reset') => void) => void;
+    onZoom: (cb: (action: ActiuneMarime) => void) => void;
     offZoom: () => void;
-    reportZoom: (level: number) => Promise<void>;
-    onZoomLevel: (cb: (level: number) => void) => void;
+    reportZoom: (stare: MarimeProiectie) => Promise<void>;
+    onZoomLevel: (cb: (stare: MarimeProiectie) => void) => void;
     offZoomLevel: () => void;
     signalReady: () => void;
     // Special full-screen modes (timer/clock/free text). Sending any of these

@@ -1899,20 +1899,38 @@ app.whenReady().then(() => {
           // corecturi OTA la fiecare rulare + contribuții și inventar max 1/zi (async,
           // silențioase, timeout scurt; offline = se sar instant — nimic nu blochează
           // pornirea sau proiecția)
+          // Fiecare pas cu eroarea lui: înainte, un singur `.catch` la capăt făcea ca o
+          // corectură care nu se putea scrie să sară peste tot restul, mesaje incluse.
+          const pas = (nume: string, f: () => unknown) => Promise.resolve().then(f)
+            .catch(err => debugLog(`[content] ${nume}:`, String(err)))
           // Rutina de conținut: corecturile de la autori, propunerile utilizatorului,
           // verdictele la ce a trimis deja, plus rapoartele rămase din lipsă de rețea.
-          contentRoutine = () => applyOtaCorrections(deps)
+          contentRoutine = async () => {
+            await pas('corecturi', () => applyOtaCorrections(deps))
             // Propunerile pleacă doar din build-uri împachetate: altfel baza de lucru
             // a unui dezvoltator (mereu decalată față de seed) ar trimite „corecturi"
             // la fiecare `npm run dev`.
-            .then(() => (app.isPackaged ? maybeSendContributions(deps) : undefined))
-            .then(() => (app.isPackaged ? maybeSendInventory(deps) : undefined))
-            .then(() => refreshProposalDecisions(deps))
-            .then(() => flushReportQueue(deps))
-            .then(() => refreshMessages(deps))
-            .then(() => { contentRoutineDone = true; notifyDecisions(deps) })
-            .catch(err => debugLog('[content] eroare:', String(err)))
-          contentRoutine()
+            await pas('propuneri', () => (app.isPackaged ? maybeSendContributions(deps) : undefined))
+            await pas('inventar', () => (app.isPackaged ? maybeSendInventory(deps) : undefined))
+            await pas('verdicte', () => refreshProposalDecisions(deps))
+            await pas('rapoarte', () => flushReportQueue(deps))
+            contentRoutineDone = true
+            notifyDecisions(deps)
+          }
+          // Mesajele (răspunsuri, anunțuri) au ritmul lor, separat de rutina de 6 ore:
+          // o slujbă ține mai puțin, deci altfel veneau practic doar la pornire. La 30
+          // de minute cât aplicația e deschisă și imediat ce revine internetul.
+          const verificaMesajele = () => pas('mesaje', () => refreshMessages(deps))
+            .then(() => notifyDecisions(deps))
+          void contentRoutine()
+          void verificaMesajele()
+          setInterval(() => { void verificaMesajele() }, 30 * 60 * 1000).unref?.()
+          let eraOnline = net.isOnline()
+          setInterval(() => {
+            const acum = net.isOnline()
+            if (acum && !eraOnline) void verificaMesajele()
+            eraOnline = acum
+          }, 60 * 1000).unref?.()
           break
         }
       }
@@ -2582,9 +2600,9 @@ app.whenReady().then(() => {
     if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:timer', data)
   })
 
-  ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset') => {
+  ipcMain.handle('projection:key-request', (_e, action: 'prev' | 'next' | 'close' | 'zoom-in' | 'zoom-out' | 'zoom-reset' | 'zoom-keep' | 'zoom-default') => {
     if (action === 'close') { if (isWinAlive(projectionWin)) projectionWin.close(); return }
-    if (action === 'zoom-in' || action === 'zoom-out' || action === 'zoom-reset') {
+    if (action.startsWith('zoom-')) {
       if (isWinAlive(projectionWin)) projectionWin.webContents.send('projection:zoom', action)
       return
     }
@@ -2605,9 +2623,9 @@ app.whenReady().then(() => {
     if (isWinAlive(win)) win.webContents.send('projection:operator-nav', { currentIndex: newIndex })
   })
 
-  // Fereastra de proiecție raportează nivelul de zoom curent → bara de control
-  ipcMain.handle('projection:zoom-report', (_e, level: number) => {
-    if (isWinAlive(win)) win.webContents.send('projection:zoom-level', level)
+  // Fereastra de proiecție raportează mărimea textului (baza + ajustarea) → bara de control
+  ipcMain.handle('projection:zoom-report', (_e, stare: unknown) => {
+    if (isWinAlive(win)) win.webContents.send('projection:zoom-level', stare)
   })
 
   // Projection renderer signals it has mounted and IPC listeners are registered
